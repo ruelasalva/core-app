@@ -66,6 +66,46 @@ class Controller_Admin_Sales extends Controller_Adminbase
     }
 
     /**
+     * UPDATE STATUS
+     *
+     * ACTUALIZA EL ESTADO DE UNA COTIZACION.
+     *
+     * @access  public
+     * @return  Response
+     */
+    public function post_update_status()
+    {
+        # VALIDAR PERMISO PARA EDITAR
+        $this->require_access('sales.access[edit]');
+
+        try {
+            # SE OBTIENE PAYLOAD
+            $val = (array) \Input::json();
+            $quote = Model_Core_Sales_Quote::find((int) \Arr::get($val, 'id', 0));
+            if (!$quote) {
+                return $this->json_response(['error' => 'Cotizacion no encontrada.'], 404);
+            }
+
+            # SE VALIDA ESTADO PERMITIDO
+            $status = trim((string) \Arr::get($val, 'status', ''));
+            $allowed = ['requested', 'reviewed', 'approved', 'rejected', 'converted'];
+            if (!in_array($status, $allowed, true)) {
+                return $this->json_response(['error' => 'Estado no valido.'], 422);
+            }
+
+            # SE GUARDA CAMBIO
+            $quote->status = $status;
+            $quote->internal_notes = trim((string) \Arr::get($val, 'internal_notes', $quote->internal_notes));
+            $quote->save();
+
+            return $this->json_response(['status' => 'ok', 'quotes' => $this->quotes(), 'stats' => $this->stats()]);
+        } catch (\Exception $e) {
+            \Log::error('Error actualizando cotizacion: '.$e->getMessage());
+            return $this->json_response(['error' => 'No se pudo actualizar la cotizacion.'], 400);
+        }
+    }
+
+    /**
      * QUOTES
      *
      * FORMATEA COTIZACIONES RECIENTES.
@@ -84,6 +124,7 @@ class Controller_Admin_Sales extends Controller_Adminbase
                 array('q.currency_code', 'currency_code'),
                 array('q.total', 'total'),
                 array('q.customer_notes', 'customer_notes'),
+                array('q.internal_notes', 'internal_notes'),
                 array('q.created_at', 'created_at'),
                 array('p.name', 'party_name'),
                 array('p.email', 'party_email')

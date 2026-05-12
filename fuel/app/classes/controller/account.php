@@ -159,6 +159,7 @@ class Controller_Account extends Controller_Template
             'party' => $party,
             'link' => $link,
             'price_list' => $this->price_list_name($party ? (int) $party->price_list_id : 0),
+            'quotes' => $this->customer_quotes($party ? (int) $party->id : 0),
         ]);
     }
 
@@ -478,6 +479,21 @@ class Controller_Account extends Controller_Template
 
         $row = \DB::select('name')->from('core_commerce_price_lists')->where('id', '=', (int) $price_list_id)->execute()->current();
         return $row ? (string) $row['name'] : 'Precio base';
+    }
+
+    protected function customer_quotes($party_id)
+    {
+        if ((int) $party_id < 1 || !\DBUtil::table_exists('core_sales_quotes')) {
+            return [];
+        }
+
+        return \DB::select('folio', 'status', 'currency_code', 'total', 'created_at')
+            ->from('core_sales_quotes')
+            ->where('party_id', '=', (int) $party_id)
+            ->order_by('id', 'desc')
+            ->limit(20)
+            ->execute()
+            ->as_array();
     }
 
     protected function codeify($value)

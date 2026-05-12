@@ -39,6 +39,7 @@
                         <th>Total</th>
                         <th>Fecha</th>
                         <th>Productos</th>
+                        <th class="text-center">Acciones</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -53,9 +54,16 @@
                                 {{ item.quantity }} x {{ item.name }}
                             </div>
                         </td>
+                        <td class="text-center">
+                            <div class="btn-group btn-group-sm">
+                                <button class="btn btn-outline-secondary" @click="setStatus(quote, 'reviewed')">Revisada</button>
+                                <button class="btn btn-outline-success" @click="setStatus(quote, 'approved')">Aprobar</button>
+                                <button class="btn btn-outline-danger" @click="setStatus(quote, 'rejected')">Rechazar</button>
+                            </div>
+                        </td>
                     </tr>
                     <tr v-if="quotes.length === 0">
-                        <td colspan="6" class="text-center text-muted">Todavia no hay cotizaciones.</td>
+                        <td colspan="7" class="text-center text-muted">Todavia no hay cotizaciones.</td>
                     </tr>
                 </tbody>
             </table>
@@ -92,6 +100,21 @@ window.onload = function() {
             },
             money(value) {
                 return Number(value || 0).toFixed(2);
+            },
+            setStatus(quote, status) {
+                fetch('<?php echo Uri::create('admin/sales/update_status'); ?>', window.coreAppFetchOptions({
+                    id: quote.id,
+                    status: status
+                }))
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.error) {
+                            alert(data.error);
+                            return;
+                        }
+                        this.quotes = data.quotes || [];
+                        this.stats = data.stats || this.stats;
+                    });
             }
         }
     });
