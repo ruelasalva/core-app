@@ -261,6 +261,15 @@
         </li>
         <?php endif; ?>
 
+        <?php if ($menu['calendar']): ?>
+        <li class="nav-item">
+            <a href="<?php echo Uri::create('admin/calendar'); ?>" class="nav-link <?php echo (Uri::segment(2) == 'calendar') ? 'active' : ''; ?>">
+                <i class="nav-icon bi bi-calendar3"></i>
+                <p>Calendario</p>
+            </a>
+        </li>
+        <?php endif; ?>
+
         <?php if ($menu['frontend']): ?>
         <li class="nav-item">
             <a href="<?php echo Uri::create('admin/frontend'); ?>" class="nav-link <?php echo (Uri::segment(2) == 'frontend') ? 'active' : ''; ?>">

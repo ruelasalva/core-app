@@ -24,6 +24,7 @@ class Configsetup
             $this->seed_portals();
             $this->seed_documents();
             $this->seed_helpdesk();
+            $this->seed_calendar();
             $this->seed_frontend();
             $this->seed_knowledge();
             $this->sync_groups();
@@ -48,6 +49,7 @@ class Configsetup
             echo " - Portales externos base\n";
             echo " - Documentos y evidencias base\n";
             echo " - Helpdesk base\n";
+            echo " - Calendario y sala de juntas base\n";
             echo " - Frontend administrable base\n";
             echo " - Ayuda y conocimiento base\n";
             echo " - Grupos de acceso recomendados\n";
@@ -172,6 +174,16 @@ class Configsetup
             if (!\DBUtil::table_exists($table)) {
                 throw new \Exception('Primero ejecuta: php oil refine migrate');
             }
+        }
+
+        foreach (['core_calendar_resources', 'core_calendar_events'] as $table) {
+            if (!\DBUtil::table_exists($table)) {
+                throw new \Exception('Primero ejecuta: php oil refine migrate');
+            }
+        }
+
+        if (!\DBUtil::field_exists('core_helpdesk_tickets', ['due_at', 'scheduled_start_at', 'scheduled_end_at'])) {
+            throw new \Exception('Primero ejecuta: php oil refine migrate');
         }
 
         foreach (['core_frontend_pages', 'core_frontend_sections', 'core_frontend_sliders', 'core_frontend_banners', 'core_frontend_menus', 'core_frontend_blocks', 'core_frontend_themes'] as $table) {
@@ -1244,6 +1256,81 @@ class Configsetup
         ]);
     }
 
+    /**
+     * SEED CALENDAR
+     *
+     * PREPARA RECURSOS Y EVENTOS BASE PARA CALENDARIO TRANSVERSAL
+     *
+     * @access  protected
+     * @return  Void
+     */
+    protected function seed_calendar()
+    {
+        # RECURSO INICIAL PARA RESERVAS INTERNAS
+        $this->upsert_seed('core_calendar_resources', 'code', 'sala_juntas', [
+            'code' => 'sala_juntas',
+            'name' => 'Sala de juntas',
+            'resource_type' => 'meeting_room',
+            'location' => '',
+            'capacity' => 8,
+            'color' => '#0d6efd',
+            'active' => 1,
+            'created_at' => time(),
+            'updated_at' => time(),
+        ]);
+
+        # EVENTOS DE NOTIFICACION PARA CALENDARIO
+        $events = [
+            ['calendar.event_created', 'Evento creado', 'Se creo un evento o reserva en calendario.', 'Evento {{title}}', '{{message}}'],
+            ['calendar.event_updated', 'Evento actualizado', 'Se actualizo un evento o reserva en calendario.', 'Evento actualizado {{title}}', '{{message}}'],
+            ['calendar.resource_conflict', 'Conflicto de reserva', 'Se detecto intento de reserva en horario ocupado.', 'Conflicto de reserva', '{{message}}'],
+        ];
+
+        foreach ($events as $event) {
+            $this->upsert_seed('core_notification_events', 'code', $event[0], [
+                'code' => $event[0],
+                'name' => $event[1],
+                'description' => $event[2],
+                'title_template' => $event[3],
+                'message_template' => $event[4],
+                'url_template' => 'admin/calendar',
+                'icon' => 'bi bi-calendar3',
+                'priority' => 2,
+                'notify_internal' => 1,
+                'notify_email' => 0,
+                'email_role' => 'calendar',
+                'email_template_code' => 'calendar_event_notification',
+                'active' => 1,
+                'created_at' => time(),
+                'updated_at' => time(),
+            ]);
+        }
+
+        $this->upsert_seed('core_email_roles', 'code', 'calendar', [
+            'code' => 'calendar',
+            'name' => 'Calendario y sala de juntas',
+            'from_email' => '',
+            'from_name' => 'Core-App Calendario',
+            'reply_to_email' => '',
+            'reply_to_name' => '',
+            'to_emails' => '',
+            'active' => 1,
+            'created_at' => time(),
+            'updated_at' => time(),
+        ]);
+
+        $this->upsert_seed('core_email_templates', 'code', 'calendar_event_notification', [
+            'code' => 'calendar_event_notification',
+            'email_role' => 'calendar',
+            'subject' => '{{title}}',
+            'view_path' => '',
+            'content' => '<p>Hola,</p><p>{{message}}</p><p>Consulta el calendario dentro de Core-App.</p>',
+            'active' => 1,
+            'created_at' => time(),
+            'updated_at' => time(),
+        ]);
+    }
+
     protected function seed_frontend()
     {
         $this->insert_if_missing('core_frontend_themes', 'code', 'core_default', [
@@ -1597,7 +1684,7 @@ class Configsetup
             'title' => 'Estructura actual de Core-App',
             'category' => 'Arquitectura',
             'summary' => 'Mapa operativo de los modulos implementados, su proposito y donde se administran.',
-            'content' => '<h3>Objetivo</h3><p>Este manual resume la estructura actual de Core-App para que cualquier persona del equipo entienda que administra cada modulo y como se conectan.</p><h4>Base administrativa</h4><ul><li><strong>Configuracion</strong>: empresa, departamentos, empleados, backends y parametros generales.</li><li><strong>Usuarios</strong>: cuentas que inician sesion con OrmAuth.</li><li><strong>Grupos y Permisos</strong>: permisos por modulo y accion usando OrmAuth.</li><li><strong>Ayuda</strong>: base de conocimiento operativa del sistema.</li></ul><h4>Base operativa</h4><ul><li><strong>Catalogos</strong>: monedas, bancos, fiscales, logisticos y datos transversales del ERP.</li><li><strong>Comercial</strong>: marcas, categorias, productos, tags y listas de precio.</li><li><strong>Terceros</strong>: clientes, proveedores, socios, revendedores, direcciones y contactos.</li><li><strong>Portales</strong>: perfiles de portal, accesos usuario-tercero-portal y branding externo.</li><li><strong>Documentos</strong>: repositorio transversal de documentos y evidencias.</li><li><strong>Helpdesk</strong>: tickets internos y externos con seguimiento y evidencias.</li><li><strong>Pagos y Bancos</strong>: cobros, pagos, movimientos bancarios y conciliaciones base.</li><li><strong>Facturacion</strong>: borradores, conceptos, importes y preparacion de CFDI.</li></ul><h4>Base publica y cumplimiento</h4><ul><li><strong>Frontend</strong>: paginas, secciones, menus, banners, sliders, footer y apariencia.</li><li><strong>Web</strong>: analytics, pixeles, captcha, scripts y cookies.</li><li><strong>Legal</strong>: documentos legales, consentimientos y preferencias.</li><li><strong>SAT</strong>: configuracion fiscal, credenciales, CFDI y catalogos SAT.</li><li><strong>Comunicaciones</strong>: correos, eventos, plantillas y notificaciones.</li><li><strong>Integraciones</strong>: proveedores externos, pasarelas, webhooks y conexiones.</li><li><strong>Auditoria</strong>: historial funcional de acciones criticas.</li></ul><h4>Regla de crecimiento</h4><p>Cada modulo nuevo debe agregar migracion, modelo, controlador, vista, permiso OrmAuth, entrada de menu si aplica y manual de ayuda. Si el modulo maneja archivos, debe usar Documentos y Evidencias en vez de inventar otra forma de adjuntos.</p>',
+            'content' => '<h3>Objetivo</h3><p>Este manual resume la estructura actual de Core-App para que cualquier persona del equipo entienda que administra cada modulo y como se conectan.</p><h4>Base administrativa</h4><ul><li><strong>Configuracion</strong>: empresa, departamentos, empleados, backends y parametros generales.</li><li><strong>Usuarios</strong>: cuentas que inician sesion con OrmAuth.</li><li><strong>Grupos y Permisos</strong>: permisos por modulo y accion usando OrmAuth.</li><li><strong>Ayuda</strong>: base de conocimiento operativa del sistema.</li></ul><h4>Base operativa</h4><ul><li><strong>Catalogos</strong>: monedas, bancos, fiscales, logisticos y datos transversales del ERP.</li><li><strong>Comercial</strong>: marcas, categorias, productos, tags y listas de precio.</li><li><strong>Terceros</strong>: clientes, proveedores, socios, revendedores, direcciones y contactos.</li><li><strong>Portales</strong>: perfiles de portal, accesos usuario-tercero-portal y branding externo.</li><li><strong>Documentos</strong>: repositorio transversal de documentos y evidencias.</li><li><strong>Helpdesk</strong>: tickets internos y externos con seguimiento y evidencias.</li><li><strong>Calendario</strong>: sala de juntas, recursos reservables, tareas y eventos transversales.</li><li><strong>Pagos y Bancos</strong>: cobros, pagos, movimientos bancarios y conciliaciones base.</li><li><strong>Facturacion</strong>: borradores, conceptos, importes y preparacion de CFDI.</li></ul><h4>Base publica y cumplimiento</h4><ul><li><strong>Frontend</strong>: paginas, secciones, menus, banners, sliders, footer y apariencia.</li><li><strong>Web</strong>: analytics, pixeles, captcha, scripts y cookies.</li><li><strong>Legal</strong>: documentos legales, consentimientos y preferencias.</li><li><strong>SAT</strong>: configuracion fiscal, credenciales, CFDI y catalogos SAT.</li><li><strong>Comunicaciones</strong>: correos, eventos, plantillas y notificaciones.</li><li><strong>Integraciones</strong>: proveedores externos, pasarelas, webhooks y conexiones.</li><li><strong>Auditoria</strong>: historial funcional de acciones criticas.</li></ul><h4>Regla de crecimiento</h4><p>Cada modulo nuevo debe agregar migracion, modelo, controlador, vista, permiso OrmAuth, entrada de menu si aplica y manual de ayuda. Si el modulo maneja archivos, debe usar Documentos y Evidencias en vez de inventar otra forma de adjuntos.</p>',
             'sort_order' => 20,
             'active' => 1,
             'created_at' => time(),
@@ -1609,7 +1696,7 @@ class Configsetup
             'title' => 'Como funcionan permisos y modulos',
             'category' => 'Seguridad',
             'summary' => 'Guia para entender como se conectan modulos, permisos OrmAuth, menu y acciones.',
-            'content' => '<h3>Objetivo</h3><p>Core-App usa OrmAuth para controlar que puede ver o modificar cada grupo. Ningun modulo administrativo debe depender solo de que el menu este visible.</p><h4>Regla tecnica</h4><ul><li>El menu consulta permisos con <code>Auth::has_access(area.access[view])</code>.</li><li>Cada controlador administrativo valida lectura en <code>before()</code> con <code>require_access(area.access[view])</code>.</li><li>Las acciones que guardan datos validan <code>area.access[create]</code> o <code>area.access[edit]</code> segun corresponda.</li><li>Los permisos base se sincronizan desde <strong>configsetup</strong>.</li></ul><h4>Donde asignar permisos</h4><ol><li>Entra a <strong>Admin &gt; Administracion &gt; Grupos y Permisos</strong>.</li><li>Selecciona el grupo.</li><li>Activa las acciones necesarias por modulo.</li><li>Guarda cambios.</li><li>El usuario debe volver a iniciar sesion si tenia permisos cacheados.</li></ol><h4>Modulos actuales</h4><p>Los modulos administrativos actuales son: usuarios, permisos, configuracion, web, legal, comunicaciones, integraciones, pagos, facturacion, auditoria, SAT, catalogos, comercial, terceros, portales, documentos, helpdesk, frontend y ayuda.</p>',
+            'content' => '<h3>Objetivo</h3><p>Core-App usa OrmAuth para controlar que puede ver o modificar cada grupo. Ningun modulo administrativo debe depender solo de que el menu este visible.</p><h4>Regla tecnica</h4><ul><li>El menu consulta permisos con <code>Auth::has_access(area.access[view])</code>.</li><li>Cada controlador administrativo valida lectura en <code>before()</code> con <code>require_access(area.access[view])</code>.</li><li>Las acciones que guardan datos validan <code>area.access[create]</code> o <code>area.access[edit]</code> segun corresponda.</li><li>Los permisos base se sincronizan desde <strong>configsetup</strong>.</li></ul><h4>Donde asignar permisos</h4><ol><li>Entra a <strong>Admin &gt; Administracion &gt; Grupos y Permisos</strong>.</li><li>Selecciona el grupo.</li><li>Activa las acciones necesarias por modulo.</li><li>Guarda cambios.</li><li>El usuario debe volver a iniciar sesion si tenia permisos cacheados.</li></ol><h4>Modulos actuales</h4><p>Los modulos administrativos actuales son: usuarios, permisos, configuracion, web, legal, comunicaciones, integraciones, pagos, facturacion, auditoria, SAT, catalogos, comercial, terceros, portales, documentos, helpdesk, calendario, frontend y ayuda.</p>',
             'sort_order' => 25,
             'active' => 1,
             'created_at' => time(),
@@ -1647,6 +1734,18 @@ class Configsetup
             'summary' => 'Uso del modulo de tickets para soporte interno, portales externos y seguimiento con evidencias.',
             'content' => '<h3>Objetivo</h3><p>Helpdesk centraliza solicitudes de soporte internas y externas para que administradores, clientes, proveedores, socios o revendedores puedan dar seguimiento sin perder historial.</p><h4>Que administra</h4><ul><li>Tickets con folio unico.</li><li>Solicitante, tercero, portal de origen y responsable asignado.</li><li>Categoria, departamento, estado y prioridad.</li><li>Conversacion con respuestas y notas internas.</li><li>Evidencias vinculadas desde el modulo Documentos.</li><li>Notificaciones internas para responsables.</li></ul><h4>Crear un ticket desde admin</h4><ol><li>Entra a <strong>Admin &gt; Helpdesk</strong>.</li><li>Presiona <strong>Nuevo ticket</strong>.</li><li>Captura tercero si aplica, categoria, prioridad, asunto y descripcion.</li><li>Asigna un responsable si ya sabes quien debe atenderlo.</li><li>Guarda el ticket.</li></ol><h4>Crear un ticket desde portal externo</h4><ol><li>El usuario entra a su portal: <code>/clientes</code>, <code>/socios</code>, <code>/proveedores</code> o <code>/revendedores</code>.</li><li>Abre <strong>Helpdesk</strong>.</li><li>Presiona <strong>Nuevo ticket</strong>.</li><li>Captura asunto, categoria, prioridad y descripcion.</li><li>El sistema guarda automaticamente el tercero, usuario solicitante y portal de origen.</li><li>El equipo administrativo recibe notificacion interna.</li></ol><h4>Dar seguimiento</h4><ol><li>Abre el ticket en Helpdesk.</li><li>Usa <strong>Responder</strong> para agregar seguimiento visible.</li><li>Activa <strong>Nota interna</strong> cuando el comentario sea solo para administradores.</li><li>Cambia estado o prioridad desde la accion de editar.</li><li>Cuando el estado sea resuelto o cerrado, el ticket queda marcado como cerrado.</li></ol><h4>Adjuntar evidencias</h4><ol><li>Abre el seguimiento del ticket.</li><li>En <strong>Adjuntos y evidencias</strong> selecciona el archivo.</li><li>Captura un titulo si quieres identificarlo mejor.</li><li>Presiona <strong>Adjuntar</strong>.</li><li>El archivo queda guardado en <strong>Documentos</strong> y vinculado al ticket con <code>entity_type = ticket</code>.</li></ol><h4>Regla de crecimiento</h4><p>Los portales externos deben reutilizar este mismo modulo para crear tickets. No se debe crear un helpdesk separado por portal; el portal solo define origen, tercero y visibilidad. Todo adjunto debe usar <strong>core_documents</strong> y <strong>core_document_links</strong>.</p>',
             'sort_order' => 45,
+            'active' => 1,
+            'created_at' => time(),
+            'updated_at' => time(),
+        ]);
+
+        $this->upsert_seed('core_knowledge_articles', 'code', 'calendario_sala_juntas_tareas', [
+            'code' => 'calendario_sala_juntas_tareas',
+            'title' => 'Calendario, sala de juntas y tareas',
+            'category' => 'Calendario',
+            'summary' => 'Uso del calendario central para reservar salas, registrar eventos internos y preparar fechas de tickets o tareas.',
+            'content' => '<h3>Objetivo</h3><p>Calendario centraliza reservas y eventos para que no exista una agenda distinta por cada modulo. La sala de juntas es el primer recurso reservable, pero la misma base sirve para equipos, espacios, tareas, helpdesk y eventos futuros de portales.</p><h4>Conceptos</h4><ul><li><strong>Evento</strong>: cita, reunion, tarea, recordatorio o actividad relacionada con un modulo.</li><li><strong>Recurso</strong>: sala, equipo, vehiculo o espacio que puede reservarse.</li><li><strong>Asignado</strong>: usuario responsable del evento.</li><li><strong>Relacionado</strong>: modulo o registro de origen, por ejemplo un ticket de helpdesk.</li></ul><h4>Reservar sala de juntas</h4><ol><li>Entra a <strong>Admin &gt; Calendario</strong>.</li><li>Presiona <strong>Evento</strong>.</li><li>Captura titulo, inicio, fin y selecciona <strong>Sala de juntas</strong>.</li><li>Asigna responsable si aplica.</li><li>Guarda. El sistema evita reservas traslapadas sobre el mismo recurso.</li></ol><h4>Crear recursos</h4><ol><li>Presiona <strong>Recurso</strong>.</li><li>Captura nombre, codigo, tipo, ubicacion, capacidad y color.</li><li>Activalo para que aparezca como reservable.</li></ol><h4>Relacion con Helpdesk</h4><p>La migracion ya prepara campos de fecha en tickets para que despues podamos mostrar vencimientos, citas o tareas de soporte en el calendario sin crear otra agenda. Cuando se implemente esa parte, el ticket debe crear o relacionar eventos con <code>related_entity_type = helpdesk_ticket</code>.</p><h4>FullCalendar</h4><p>El modulo expone <code>admin/calendar/events_feed</code> en formato compatible con FullCalendar. La vista actual funciona sin dependencia externa; si se instala la libreria, se puede reemplazar la agenda visual usando el mismo controlador y las mismas tablas.</p><h4>Regla de crecimiento</h4><p>Cualquier modulo que necesite fechas debe integrarse con calendario o crear eventos relacionados. No conviene crear calendarios separados para compras, helpdesk, RRHH o salas.</p>',
+            'sort_order' => 47,
             'active' => 1,
             'created_at' => time(),
             'updated_at' => time(),
@@ -1779,6 +1878,7 @@ class Configsetup
             'portals' => 'Gestion de portales externos, accesos y branding',
             'documents' => 'Gestion transversal de documentos y evidencias',
             'helpdesk' => 'Gestion de tickets, soporte y seguimiento con evidencias',
+            'calendar' => 'Gestion de calendario, sala de juntas, recursos y tareas',
             'frontend' => 'Gestion de paginas, banners, menus y frontend administrable',
             'help' => 'Ayuda, manuales y conocimiento operativo',
         ];

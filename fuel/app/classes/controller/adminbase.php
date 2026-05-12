@@ -69,6 +69,7 @@ class Controller_Adminbase extends Controller_Template
             'portals' => $this->is_super_admin || \Auth::has_access('portals.access[view]'),
             'documents' => $this->is_super_admin || \Auth::has_access('documents.access[view]'),
             'helpdesk' => $this->is_super_admin || \Auth::has_access('helpdesk.access[view]'),
+            'calendar' => $this->is_super_admin || \Auth::has_access('calendar.access[view]'),
             'frontend' => $this->is_super_admin || \Auth::has_access('frontend.access[view]'),
             'help' => $this->is_super_admin || \Auth::has_access('help.access[view]'),
         ];
