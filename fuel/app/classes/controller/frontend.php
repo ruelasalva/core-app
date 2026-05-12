@@ -81,11 +81,16 @@ class Controller_Frontend extends Controller_Template
         # SE INICIALIZA LA PLANTILLA PUBLICA
         $this->prepare_template('Productos', 'Catalogo publico de productos.');
 
+        # SE OBTIENEN FILTROS DEL CATALOGO
+        $filters = $this->catalog_filters();
+
         # SE CARGA EL LISTADO GENERAL
         $this->template->set('content', View::forge('frontend/products', array(
             'title'       => 'Productos',
             'description' => 'Catalogo publico de productos.',
-            'products'    => $this->get_public_products(),
+            'products'    => $this->get_public_products($filters),
+            'filters'     => $filters,
+            'options'     => $this->catalog_filter_options(),
             'scope'       => null,
         ), false), false);
     }
@@ -146,11 +151,16 @@ class Controller_Frontend extends Controller_Template
         # SE INICIALIZA LA PLANTILLA PUBLICA
         $this->prepare_template($category->name, $category->description);
 
+        # SE OBTIENEN FILTROS FIJANDO CATEGORIA ACTUAL
+        $filters = $this->catalog_filters(['category_id' => (int) $category->id]);
+
         # SE CARGA EL LISTADO DE LA CATEGORIA
         $this->template->set('content', View::forge('frontend/products', array(
             'title'       => $category->name,
             'description' => $category->description,
-            'products'    => $this->get_public_products(array('category_id' => $category->id)),
+            'products'    => $this->get_public_products($filters),
+            'filters'     => $filters,
+            'options'     => $this->catalog_filter_options(),
             'scope'       => 'category',
         ), false), false);
     }
@@ -177,11 +187,16 @@ class Controller_Frontend extends Controller_Template
         # SE INICIALIZA LA PLANTILLA PUBLICA
         $this->prepare_template($tag->name, 'Productos relacionados con '.$tag->name.'.');
 
+        # SE OBTIENEN FILTROS FIJANDO TAG ACTUAL
+        $filters = $this->catalog_filters(['tag_id' => (int) $tag->id]);
+
         # SE CARGA EL LISTADO DEL TAG
         $this->template->set('content', View::forge('frontend/products', array(
             'title'       => $tag->name,
             'description' => 'Productos relacionados con '.$tag->name.'.',
-            'products'    => $this->get_public_products(array('tag_id' => $tag->id)),
+            'products'    => $this->get_public_products($filters),
+            'filters'     => $filters,
+            'options'     => $this->catalog_filter_options(),
             'scope'       => 'tag',
         ), false), false);
     }
@@ -441,18 +456,55 @@ class Controller_Frontend extends Controller_Template
                 array('p.currency_code', 'currency_code'),
                 array('p.price', 'price'),
                 array('p.main_image_path', 'main_image_path'),
+                array('p.featured', 'featured'),
+                array('p.show_in_home', 'show_in_home'),
+                array('b.name', 'brand_name'),
+                array('b.slug', 'brand_slug'),
                 array('c.name', 'category_name'),
-                array('c.slug', 'category_slug')
+                array('c.slug', 'category_slug'),
+                array('s.name', 'subcategory_name'),
+                array('s.slug', 'subcategory_slug')
             )
             ->from(array('core_commerce_products', 'p'))
+            ->join(array('core_commerce_brands', 'b'), 'left')
+                ->on('p.brand_id', '=', 'b.id')
             ->join(array('core_commerce_categories', 'c'), 'left')
                 ->on('p.category_id', '=', 'c.id')
+            ->join(array('core_commerce_subcategories', 's'), 'left')
+                ->on('p.subcategory_id', '=', 's.id')
             ->where('p.active', 1)
             ->where('p.published', 1);
+
+        # FILTRO POR BUSQUEDA
+        if (!empty($filters['q'])) {
+            $query->where_open()
+                ->where('p.name', 'like', '%'.$filters['q'].'%')
+                ->or_where('p.sku', 'like', '%'.$filters['q'].'%')
+                ->or_where('p.short_description', 'like', '%'.$filters['q'].'%')
+                ->where_close();
+        }
 
         # FILTRO POR CATEGORIA
         if (!empty($filters['category_id'])) {
             $query->where('p.category_id', (int) $filters['category_id']);
+        }
+
+        # FILTRO POR SUBCATEGORIA
+        if (!empty($filters['subcategory_id'])) {
+            $query->where('p.subcategory_id', (int) $filters['subcategory_id']);
+        }
+
+        # FILTRO POR MARCA
+        if (!empty($filters['brand_id'])) {
+            $query->where('p.brand_id', (int) $filters['brand_id']);
+        }
+
+        # FILTRO POR DESTACADOS
+        if (!empty($filters['featured'])) {
+            $query->where_open()
+                ->where('p.featured', 1)
+                ->or_where('p.show_in_home', 1)
+                ->where_close();
         }
 
         # FILTRO POR TAG
@@ -462,13 +514,156 @@ class Controller_Frontend extends Controller_Template
                 ->where('pt.tag_id', (int) $filters['tag_id']);
         }
 
-        $products = $query
-            ->order_by('p.sort_order', 'asc')
-            ->order_by('p.id', 'desc')
-            ->execute()
-            ->as_array();
+        # ORDENAMIENTO CONTROLADO
+        switch ($filters['sort']) {
+            case 'name_desc':
+                $query->order_by('p.name', 'desc');
+                break;
+            case 'price_asc':
+                $query->order_by('p.price', 'asc');
+                break;
+            case 'price_desc':
+                $query->order_by('p.price', 'desc');
+                break;
+            case 'recent':
+                $query->order_by('p.id', 'desc');
+                break;
+            case 'name_asc':
+                $query->order_by('p.name', 'asc');
+                break;
+            default:
+                $query->order_by('p.sort_order', 'asc')->order_by('p.id', 'desc');
+                break;
+        }
+
+        $products = $query->limit(240)->execute()->as_array();
 
         return $this->apply_customer_prices($products);
+    }
+
+    /**
+     * CATALOG FILTERS
+     *
+     * NORMALIZA FILTROS PUBLICOS DEL CATALOGO
+     *
+     * @access  protected
+     * @return  Array
+     */
+    protected function catalog_filters(array $fixed = array())
+    {
+        # FILTROS CONTROLADOS POR QUERY STRING
+        $filters = [
+            'q' => trim((string) \Input::get('q', '')),
+            'category_id' => (int) \Input::get('category_id', 0),
+            'subcategory_id' => (int) \Input::get('subcategory_id', 0),
+            'brand_id' => (int) \Input::get('brand_id', 0),
+            'featured' => (int) (bool) \Input::get('featured', 0),
+            'tag_id' => 0,
+            'sort' => trim((string) \Input::get('sort', 'relevance')),
+        ];
+
+        # SE LIMITA LONGITUD DE BUSQUEDA
+        $filters['q'] = substr($filters['q'], 0, 80);
+
+        # SE LIMITA ORDEN A OPCIONES SOPORTADAS
+        $allowed_sort = ['relevance', 'name_asc', 'name_desc', 'price_asc', 'price_desc', 'recent'];
+        if (!in_array($filters['sort'], $allowed_sort, true)) {
+            $filters['sort'] = 'relevance';
+        }
+
+        # FILTROS FIJOS DE RUTA TIENEN PRIORIDAD
+        foreach ($fixed as $key => $value) {
+            $filters[$key] = $value;
+        }
+
+        return $filters;
+    }
+
+    /**
+     * CATALOG FILTER OPTIONS
+     *
+     * OBTIENE OPCIONES PARA FILTROS PUBLICOS
+     *
+     * @access  protected
+     * @return  Array
+     */
+    protected function catalog_filter_options()
+    {
+        # OPCIONES VISIBLES EN CATALOGO
+        return [
+            'categories' => $this->catalog_options('core_commerce_categories'),
+            'subcategories' => $this->catalog_subcategory_options(),
+            'brands' => $this->catalog_options('core_commerce_brands'),
+            'sorts' => [
+                ['value' => 'relevance', 'label' => 'Relevancia'],
+                ['value' => 'name_asc', 'label' => 'Nombre A-Z'],
+                ['value' => 'name_desc', 'label' => 'Nombre Z-A'],
+                ['value' => 'price_asc', 'label' => 'Precio menor'],
+                ['value' => 'price_desc', 'label' => 'Precio mayor'],
+                ['value' => 'recent', 'label' => 'Recientes'],
+            ],
+        ];
+    }
+
+    /**
+     * CATALOG OPTIONS
+     *
+     * FORMATEA OPCIONES SIMPLES DEL CATALOGO
+     *
+     * @access  protected
+     * @return  Array
+     */
+    protected function catalog_options($table)
+    {
+        $items = [];
+        $rows = \DB::select('id', 'name')
+            ->from($table)
+            ->where('active', '=', 1)
+            ->order_by('sort_order', 'asc')
+            ->order_by('name', 'asc')
+            ->execute();
+
+        foreach ($rows as $row) {
+            $items[] = ['value' => (int) $row['id'], 'label' => (string) $row['name']];
+        }
+
+        return $items;
+    }
+
+    /**
+     * CATALOG SUBCATEGORY OPTIONS
+     *
+     * FORMATEA SUBCATEGORIAS CON CATEGORIA PADRE
+     *
+     * @access  protected
+     * @return  Array
+     */
+    protected function catalog_subcategory_options()
+    {
+        $items = [];
+        $rows = \DB::select(
+                array('s.id', 'id'),
+                array('s.name', 'name'),
+                array('s.category_id', 'category_id'),
+                array('c.name', 'category_name')
+            )
+            ->from(array('core_commerce_subcategories', 's'))
+            ->join(array('core_commerce_categories', 'c'), 'left')
+                ->on('s.category_id', '=', 'c.id')
+            ->where('s.active', '=', 1)
+            ->order_by('c.name', 'asc')
+            ->order_by('s.name', 'asc')
+            ->execute();
+
+        foreach ($rows as $row) {
+            $items[] = [
+                'value' => (int) $row['id'],
+                'category_id' => (int) $row['category_id'],
+                'label' => trim(($row['category_name'] ? $row['category_name'].' / ' : '').$row['name']),
+            ];
+        }
+
+        return $items;
     }
 
     /**
