@@ -120,6 +120,14 @@ $tag_url = function ($slug) {
         padding: 9px 16px;
         font-weight: 800;
         cursor: pointer;
+        transition: transform .16s ease, opacity .16s ease;
+    }
+    .product-cart-form button.is-loading {
+        opacity: .72;
+        pointer-events: none;
+    }
+    .product-cart-form button.is-added {
+        transform: scale(1.03);
     }
     .product-description {
         padding-top: 22px;
@@ -190,7 +198,7 @@ $tag_url = function ($slug) {
         <div class="product-price">
             <?php echo e($product['currency_code']); ?> <?php echo number_format((float) $product['price'], 2); ?>
         </div>
-        <?php echo Form::open(['action' => 'carrito/agregar', 'method' => 'post', 'class' => 'product-cart-form']); ?>
+        <?php echo Form::open(['action' => 'carrito/agregar', 'method' => 'post', 'class' => 'product-cart-form', 'data-cart-ajax' => '1']); ?>
             <?php echo Form::csrf(); ?>
             <?php echo Form::hidden('product_id', (int) $product['id']); ?>
             <?php echo Form::input('quantity', 1, ['type' => 'number', 'min' => '1', 'step' => '1']); ?>

@@ -107,6 +107,40 @@
             background: var(--core-brand);
             color: #fff;
         }
+        .cart-link.bump {
+            animation: cartBump .35s ease;
+        }
+        .core-toast {
+            position: fixed;
+            right: 20px;
+            bottom: 20px;
+            z-index: 10000;
+            max-width: 340px;
+            border: 1px solid var(--core-line);
+            border-radius: 8px;
+            background: #fff;
+            color: var(--core-ink);
+            box-shadow: 0 18px 42px rgba(15, 23, 42, .16);
+            padding: 14px 16px;
+            transform: translateY(16px);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity .2s ease, transform .2s ease;
+        }
+        .core-toast.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        .core-toast.error {
+            border-color: #fecaca;
+            background: #fff7f7;
+            color: #991b1b;
+        }
+        @keyframes cartBump {
+            0% { transform: scale(1); }
+            45% { transform: scale(1.08); }
+            100% { transform: scale(1); }
+        }
         .site-main { min-height: 62vh; }
         .site-footer {
             margin-top: 54px;
@@ -180,7 +214,7 @@
                 <?php endif; ?>
                 <div class="account-menu">
                     <?php $cart_count = isset($cart_count) ? (int) $cart_count : 0; ?>
-                    <a href="<?php echo Uri::create('carrito'); ?>">Carrito<?php echo $cart_count > 0 ? ' ('.$cart_count.')' : ''; ?></a>
+                    <a class="cart-link" data-cart-link href="<?php echo Uri::create('carrito'); ?>">Carrito<?php echo $cart_count > 0 ? ' ('.$cart_count.')' : ''; ?></a>
                     <?php $frontend_user = !empty($frontend_user) ? $frontend_user : ['logged_in' => false, 'name' => '']; ?>
                     <?php if (!empty($frontend_user['logged_in'])): ?>
                     <a href="<?php echo Uri::create('mi-cuenta'); ?>">Mi cuenta</a>
@@ -216,7 +250,89 @@
         </div>
     </footer>
 
+    <div class="core-toast" data-core-toast></div>
     <?php echo !empty($cookie_banner) ? $cookie_banner : ''; ?>
     <?php echo !empty($frontend_extra_scripts) ? $frontend_extra_scripts : ''; ?>
+    <script>
+    (function() {
+        var toast = document.querySelector('[data-core-toast]');
+        var cartLink = document.querySelector('[data-cart-link]');
+        var toastTimer = null;
+
+        function showToast(message, type) {
+            if (!toast) return;
+            toast.textContent = message || '';
+            toast.classList.toggle('error', type === 'error');
+            toast.classList.add('show');
+            clearTimeout(toastTimer);
+            toastTimer = setTimeout(function() {
+                toast.classList.remove('show');
+            }, 3200);
+        }
+
+        function updateCartCount(count) {
+            if (!cartLink) return;
+            count = parseInt(count || 0, 10);
+            cartLink.textContent = count > 0 ? 'Carrito (' + count + ')' : 'Carrito';
+            cartLink.classList.remove('bump');
+            void cartLink.offsetWidth;
+            cartLink.classList.add('bump');
+        }
+
+        document.querySelectorAll('[data-cart-ajax]').forEach(function(form) {
+            form.addEventListener('submit', function(event) {
+                if (!window.fetch || !window.FormData) return;
+                event.preventDefault();
+
+                var button = form.querySelector('button[type="submit"]');
+                var originalText = button ? button.textContent : '';
+                if (button) {
+                    button.classList.add('is-loading');
+                    button.textContent = 'Agregando...';
+                }
+
+                fetch(form.getAttribute('action'), {
+                    method: 'POST',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json'
+                    },
+                    body: new FormData(form),
+                    credentials: 'same-origin'
+                })
+                    .then(function(response) {
+                        return response.json().then(function(data) {
+                            data.http_ok = response.ok;
+                            return data;
+                        });
+                    })
+                    .then(function(data) {
+                        if (!data.http_ok || data.error) {
+                            showToast(data.error || 'No se pudo agregar el producto.', 'error');
+                            if (data.redirect) {
+                                setTimeout(function() { window.location.href = data.redirect; }, 900);
+                            }
+                            return;
+                        }
+                        updateCartCount(data.cart_count);
+                        showToast(data.message || 'Producto agregado al carrito.', 'success');
+                        if (button) {
+                            button.classList.add('is-added');
+                            setTimeout(function() { button.classList.remove('is-added'); }, 400);
+                        }
+                    })
+                    .catch(function() {
+                        showToast('No se pudo agregar el producto. Intenta nuevamente.', 'error');
+                    })
+                    .finally(function() {
+                        if (button) {
+                            button.classList.remove('is-loading');
+                            button.textContent = originalText;
+                        }
+                    });
+            });
+        });
+    })();
+    </script>
 </body>
 </html>

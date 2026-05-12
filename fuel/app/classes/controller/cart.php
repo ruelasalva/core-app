@@ -68,6 +68,9 @@ class Controller_Cart extends Controller_Template
     {
         # SE REQUIERE CLIENTE PARA NO EXPONER PRECIOS A VISITANTES ANONIMOS
         if (!$this->customer_link()) {
+            if ($this->is_ajax_request()) {
+                return $this->json_response(['error' => 'Inicia sesion para agregar productos al carrito.', 'redirect' => \Uri::create('acceso')], 401);
+            }
             \Session::set_flash('error', 'Inicia sesion para agregar productos al carrito.');
             \Response::redirect('acceso');
         }
@@ -77,9 +80,19 @@ class Controller_Cart extends Controller_Template
             $product_id = (int) \Input::post('product_id', 0);
             $quantity = (float) \Input::post('quantity', 1);
             Helper_Core_Cart::add_product($product_id, $quantity);
+            if ($this->is_ajax_request()) {
+                return $this->json_response([
+                    'status' => 'ok',
+                    'message' => 'Producto agregado al carrito.',
+                    'cart_count' => Helper_Core_Cart::count(),
+                ]);
+            }
             \Session::set_flash('success', 'Producto agregado al carrito.');
         } catch (\Exception $e) {
             \Log::warning('No se pudo agregar producto al carrito: '.$e->getMessage());
+            if ($this->is_ajax_request()) {
+                return $this->json_response(['error' => $e->getMessage()], 422);
+            }
             \Session::set_flash('error', $e->getMessage());
         }
 
@@ -98,6 +111,35 @@ class Controller_Cart extends Controller_Template
     {
         # SE DELEGA AL FLUJO POST
         return $this->post_add();
+    }
+
+    /**
+     * IS AJAX REQUEST
+     *
+     * DETECTA PETICIONES AJAX DEL FRONTEND.
+     *
+     * @access  protected
+     * @return  Bool
+     */
+    protected function is_ajax_request()
+    {
+        # SE REVISA HEADER ESTANDAR O ACCEPT JSON
+        return strtolower((string) \Input::server('HTTP_X_REQUESTED_WITH', '')) === 'xmlhttprequest'
+            || stripos((string) \Input::server('HTTP_ACCEPT', ''), 'application/json') !== false;
+    }
+
+    /**
+     * JSON RESPONSE
+     *
+     * GENERA RESPUESTA JSON PARA AJAX PUBLICO.
+     *
+     * @access  protected
+     * @return  Response
+     */
+    protected function json_response(array $data, $status = 200)
+    {
+        # SE REGRESA JSON CON CONTENT TYPE CORRECTO
+        return \Response::forge(json_encode($data), $status, ['Content-Type' => 'application/json']);
     }
 
     /**
