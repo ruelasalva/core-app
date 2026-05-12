@@ -244,6 +244,72 @@ class Helper_Core_Cart
     }
 
     /**
+     * CHECKOUT QUOTE
+     *
+     * CONVIERTE EL CARRITO ACTUAL EN SOLICITUD DE COTIZACION.
+     *
+     * @access  public
+     * @return  Model_Core_Sales_Quote
+     */
+    public static function checkout_quote($customer_notes = '')
+    {
+        # SE VALIDA CLIENTE Y CARRITO
+        $cart = self::current_cart(false);
+        $party = self::customer_party();
+        if (!$cart || !$party) {
+            throw new \InvalidArgumentException('Inicia sesion como cliente para continuar.');
+        }
+
+        $items = self::items($cart);
+        if (empty($items)) {
+            throw new \InvalidArgumentException('El carrito esta vacio.');
+        }
+
+        # SE CREA ENCABEZADO DE COTIZACION
+        $quote = Model_Core_Sales_Quote::forge([
+            'folio' => self::next_quote_folio(),
+            'source' => 'frontend_cart',
+            'cart_id' => (int) $cart->id,
+            'user_id' => self::current_user_id(),
+            'party_id' => (int) $party->id,
+            'status' => 'requested',
+            'currency_code' => (string) $cart->currency_code,
+            'subtotal' => (float) $cart->subtotal,
+            'discount_total' => 0,
+            'tax_total' => 0,
+            'total' => (float) $cart->total,
+            'customer_notes' => trim((string) $customer_notes),
+            'expires_at' => time() + (60 * 60 * 24 * 15),
+        ]);
+        $quote->save();
+
+        # SE COPIAN RENGLONES
+        $sort = 10;
+        foreach ($items as $item) {
+            Model_Core_Sales_Quote_Item::forge([
+                'quote_id' => (int) $quote->id,
+                'product_id' => (int) $item->product_id,
+                'sku' => (string) $item->sku,
+                'name' => (string) $item->name,
+                'currency_code' => (string) $item->currency_code,
+                'unit_price' => (float) $item->unit_price,
+                'quantity' => (float) $item->quantity,
+                'line_subtotal' => (float) $item->line_total,
+                'line_total' => (float) $item->line_total,
+                'sort_order' => $sort,
+            ])->save();
+            $sort += 10;
+        }
+
+        # SE CIERRA CARRITO PARA EVITAR DUPLICIDAD
+        $cart->status = 'converted';
+        $cart->converted_at = time();
+        $cart->save();
+
+        return $quote;
+    }
+
+    /**
      * COUNT
      *
      * OBTIENE TOTAL DE PIEZAS DEL CARRITO ACTUAL.
@@ -256,6 +322,27 @@ class Helper_Core_Cart
         # SE REGRESA CONTADOR CACHEADO
         $cart = self::current_cart(false);
         return $cart ? (int) $cart->items_count : 0;
+    }
+
+    /**
+     * NEXT QUOTE FOLIO
+     *
+     * GENERA FOLIO CONSECUTIVO PARA COTIZACIONES WEB.
+     *
+     * @access  protected
+     * @return  String
+     */
+    protected static function next_quote_folio()
+    {
+        # SE GENERA FOLIO DIARIO SIMPLE
+        $prefix = 'COT-'.date('Ymd').'-';
+        $row = \DB::select(\DB::expr('COUNT(*) as total'))
+            ->from('core_sales_quotes')
+            ->where('folio', 'like', $prefix.'%')
+            ->execute()
+            ->current();
+
+        return $prefix.str_pad(((int) $row['total']) + 1, 5, '0', STR_PAD_LEFT);
     }
 
     /**

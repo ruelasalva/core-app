@@ -29,6 +29,7 @@
             <?php endif; ?>
 
             <?php echo Form::open(['action' => 'acceso', 'method' => 'post']); ?>
+                <?php echo Form::csrf(); ?>
                 <div class="account-field">
                     <label>Correo</label>
                     <?php echo Form::input('email', Input::post('email', ''), ['type' => 'email', 'autocomplete' => 'email']); ?>

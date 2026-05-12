@@ -17,6 +17,9 @@
     .cart-total-box { min-width: 280px; }
     .cart-total-row { display: flex; justify-content: space-between; gap: 20px; margin-bottom: 8px; color: #334155; }
     .cart-total-row strong { color: #172033; font-size: 1.2rem; }
+    .cart-notes { padding: 0 20px 18px; }
+    .cart-notes label { display: block; margin-bottom: 6px; color: #334155; font-weight: 800; }
+    .cart-notes textarea { width: 100%; min-height: 86px; border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px; font: inherit; }
     .cart-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; padding: 18px 20px; background: #f8fafc; }
     .cart-btn { display: inline-flex; align-items: center; justify-content: center; min-height: 40px; border: 1px solid #0f766e; border-radius: 6px; padding: 9px 14px; color: #0f766e; font-weight: 800; background: #fff; cursor: pointer; }
     .cart-btn.primary { background: #0f766e; color: #fff; }
@@ -49,6 +52,7 @@
         <div class="cart-panel">
             <?php if (!empty($items)): ?>
             <?php echo Form::open(['action' => 'carrito/actualizar', 'method' => 'post']); ?>
+                <?php echo Form::csrf(); ?>
                 <table class="cart-table">
                     <thead>
                         <tr>
@@ -89,10 +93,18 @@
                         <button class="cart-btn" type="submit">Actualizar</button>
                         <a class="cart-btn danger" href="<?php echo e(Uri::create('carrito/vaciar')); ?>">Vaciar</a>
                     </div>
-                    <div>
-                        <a class="cart-btn" href="<?php echo e(Uri::create('productos')); ?>">Seguir comprando</a>
-                        <a class="cart-btn primary" href="<?php echo e(Uri::create('carrito/checkout')); ?>">Continuar</a>
-                    </div>
+                </div>
+            <?php echo Form::close(); ?>
+
+            <?php echo Form::open(['action' => 'carrito/checkout', 'method' => 'post']); ?>
+                <?php echo Form::csrf(); ?>
+                <div class="cart-notes">
+                    <label>Notas para cotizacion</label>
+                    <?php echo Form::textarea('customer_notes', '', ['placeholder' => 'Comentarios, requerimientos de entrega o datos adicionales.']); ?>
+                </div>
+                <div class="cart-actions">
+                    <a class="cart-btn" href="<?php echo e(Uri::create('productos')); ?>">Seguir comprando</a>
+                    <button class="cart-btn primary" type="submit">Solicitar cotizacion</button>
                 </div>
             <?php echo Form::close(); ?>
             <?php else: ?>

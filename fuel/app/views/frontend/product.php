@@ -191,6 +191,7 @@ $tag_url = function ($slug) {
             <?php echo e($product['currency_code']); ?> <?php echo number_format((float) $product['price'], 2); ?>
         </div>
         <?php echo Form::open(['action' => 'carrito/agregar', 'method' => 'post', 'class' => 'product-cart-form']); ?>
+            <?php echo Form::csrf(); ?>
             <?php echo Form::hidden('product_id', (int) $product['id']); ?>
             <?php echo Form::input('quantity', 1, ['type' => 'number', 'min' => '1', 'step' => '1']); ?>
             <button type="submit">Agregar al carrito</button>

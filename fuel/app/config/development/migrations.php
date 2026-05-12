@@ -28,6 +28,7 @@ return array (
         22 => '023_enhance_core_audit_logs',
         23 => '024_create_core_calendar_tables',
         24 => '025_create_core_cart_tables',
+        25 => '026_create_core_sales_quote_tables',
       ),
     ),
     'module' => array(    

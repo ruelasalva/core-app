@@ -175,7 +175,7 @@ class Controller_Cart extends Controller_Template
      * @access  public
      * @return  Void
      */
-    public function action_checkout()
+    public function post_checkout()
     {
         # SI NO HAY CLIENTE, SE ENVIA A LOGIN
         if (!$this->customer_link()) {
@@ -183,7 +183,28 @@ class Controller_Cart extends Controller_Template
             \Response::redirect('acceso');
         }
 
-        \Session::set_flash('error', 'La conversion a pedido o cotizacion sera el siguiente paso del modulo.');
+        # SE CONVIERTE CARRITO EN SOLICITUD DE COTIZACION
+        try {
+            $quote = Helper_Core_Cart::checkout_quote((string) \Input::post('customer_notes', ''));
+            \Session::set_flash('success', 'Solicitud de cotizacion generada: '.$quote->folio.'.');
+        } catch (\Exception $e) {
+            \Session::set_flash('error', $e->getMessage());
+        }
+
+        \Response::redirect('carrito');
+    }
+
+    /**
+     * CHECKOUT
+     *
+     * SOPORTE GET: REDIRIGE AL CARRITO PARA USAR FORMULARIO CON CSRF.
+     *
+     * @access  public
+     * @return  Void
+     */
+    public function action_checkout()
+    {
+        # CHECKOUT DEBE EJECUTARSE POR POST
         \Response::redirect('carrito');
     }
 

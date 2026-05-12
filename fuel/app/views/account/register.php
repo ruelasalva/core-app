@@ -26,6 +26,7 @@
             <?php endif; ?>
 
             <?php echo Form::open(['action' => 'registro', 'method' => 'post']); ?>
+                <?php echo Form::csrf(); ?>
                 <div class="account-grid">
                     <div class="account-field full">
                         <label>Nombre</label>
