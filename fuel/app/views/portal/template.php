@@ -25,6 +25,14 @@
                     <?php echo e($branding && $branding->display_name ? $branding->display_name : $portal_name); ?>
                 </span>
             </a>
+            <ul class="navbar-nav">
+                <li class="nav-item">
+                    <a class="nav-link <?php echo Uri::segment(2) == '' ? 'active' : ''; ?>" href="<?php echo Uri::create($portal_code); ?>">Inicio</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link <?php echo Uri::segment(2) == 'helpdesk' ? 'active' : ''; ?>" href="<?php echo Uri::create($portal_code.'/helpdesk'); ?>">Helpdesk</a>
+                </li>
+            </ul>
             <ul class="navbar-nav ml-auto">
                 <li class="nav-item">
                     <span class="nav-link"><?php echo e($user_name); ?></span>
@@ -47,5 +55,19 @@
 <?php echo Asset::js('jquery.min.js'); ?>
 <?php echo Asset::js('bootstrap.bundle.min.js'); ?>
 <?php echo Asset::js('adminlte.min.js'); ?>
+<?php echo Security::js_fetch_token(); ?>
+<script>
+window.coreAppCsrfKey = <?php echo json_encode(Config::get('security.csrf_token_key', 'fuel_csrf_token')); ?>;
+window.coreAppFetchOptions = function(data) {
+    data = data || {};
+    data[window.coreAppCsrfKey] = fuel_csrf_token();
+
+    return {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    };
+};
+</script>
 </body>
 </html>
