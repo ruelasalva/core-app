@@ -23,6 +23,7 @@ return array (
         17 => '018_create_core_helpdesk_tables',
         18 => '019_create_core_integration_audit_tables',
         19 => '020_create_core_payment_bank_tables',
+        20 => '021_create_core_billing_tables',
       ),
     ),
     'module' => array(    

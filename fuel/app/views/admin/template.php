@@ -124,6 +124,15 @@
         </li>
         <?php endif; ?>
 
+        <?php if ($menu['billing']): ?>
+        <li class="nav-item">
+            <a href="<?php echo Uri::create('admin/billing'); ?>" class="nav-link <?php echo (Uri::segment(2) == 'billing') ? 'active' : ''; ?>">
+                <i class="nav-icon bi bi-receipt-cutoff"></i>
+                <p>Facturacion</p>
+            </a>
+        </li>
+        <?php endif; ?>
+
         <?php if ($menu['audit']): ?>
         <li class="nav-item">
             <a href="<?php echo Uri::create('admin/audit'); ?>" class="nav-link <?php echo (Uri::segment(2) == 'audit') ? 'active' : ''; ?>">

@@ -15,6 +15,7 @@ class Configsetup
             $this->seed_communications();
             $this->seed_integrations();
             $this->seed_payments();
+            $this->seed_billing();
             $this->seed_sat();
             $this->seed_sat_catalogs();
             $this->seed_catalogs();
@@ -38,6 +39,7 @@ class Configsetup
             echo " - Comunicaciones base\n";
             echo " - Integraciones y auditoria base\n";
             echo " - Pagos y bancos base\n";
+            echo " - Facturacion base\n";
             echo " - SAT base\n";
             echo " - Catalogos SAT base\n";
             echo " - Catalogos base del ERP\n";
@@ -93,6 +95,12 @@ class Configsetup
         }
 
         foreach (['core_payments', 'core_payment_allocations', 'core_bank_movements', 'core_bank_reconciliations'] as $table) {
+            if (!\DBUtil::table_exists($table)) {
+                throw new \Exception('Primero ejecuta: php oil refine migrate');
+            }
+        }
+
+        foreach (['core_billing_invoices', 'core_billing_invoice_items', 'core_billing_invoice_events'] as $table) {
             if (!\DBUtil::table_exists($table)) {
                 throw new \Exception('Primero ejecuta: php oil refine migrate');
             }
@@ -420,6 +428,20 @@ class Configsetup
     protected function seed_payments()
     {
         # ESTE MODULO ARRANCA SIN REGISTROS OPERATIVOS; LAS TABLAS Y PERMISOS SON LA BASE
+        return;
+    }
+
+    /**
+     * SEED BILLING
+     *
+     * PREPARA BASE DE FACTURACION SIN TIMBRAR CFDI REALES
+     *
+     * @access  protected
+     * @return  Void
+     */
+    protected function seed_billing()
+    {
+        # ESTE MODULO ARRANCA SIN FACTURAS; EL TIMBRADO SE CONECTARA DESPUES CON SAT/INTEGRACIONES
         return;
     }
 
@@ -1567,7 +1589,7 @@ class Configsetup
             'title' => 'Estructura actual de Core-App',
             'category' => 'Arquitectura',
             'summary' => 'Mapa operativo de los modulos implementados, su proposito y donde se administran.',
-            'content' => '<h3>Objetivo</h3><p>Este manual resume la estructura actual de Core-App para que cualquier persona del equipo entienda que administra cada modulo y como se conectan.</p><h4>Base administrativa</h4><ul><li><strong>Configuracion</strong>: empresa, departamentos, empleados, backends y parametros generales.</li><li><strong>Usuarios</strong>: cuentas que inician sesion con OrmAuth.</li><li><strong>Grupos y Permisos</strong>: permisos por modulo y accion usando OrmAuth.</li><li><strong>Ayuda</strong>: base de conocimiento operativa del sistema.</li></ul><h4>Base operativa</h4><ul><li><strong>Catalogos</strong>: monedas, bancos, fiscales, logisticos y datos transversales del ERP.</li><li><strong>Comercial</strong>: marcas, categorias, productos, tags y listas de precio.</li><li><strong>Terceros</strong>: clientes, proveedores, socios, revendedores, direcciones y contactos.</li><li><strong>Portales</strong>: perfiles de portal, accesos usuario-tercero-portal y branding externo.</li><li><strong>Documentos</strong>: repositorio transversal de documentos y evidencias.</li><li><strong>Helpdesk</strong>: tickets internos y externos con seguimiento y evidencias.</li><li><strong>Pagos y Bancos</strong>: cobros, pagos, movimientos bancarios y conciliaciones base.</li></ul><h4>Base publica y cumplimiento</h4><ul><li><strong>Frontend</strong>: paginas, secciones, menus, banners, sliders, footer y apariencia.</li><li><strong>Web</strong>: analytics, pixeles, captcha, scripts y cookies.</li><li><strong>Legal</strong>: documentos legales, consentimientos y preferencias.</li><li><strong>SAT</strong>: configuracion fiscal, credenciales, CFDI y catalogos SAT.</li><li><strong>Comunicaciones</strong>: correos, eventos, plantillas y notificaciones.</li><li><strong>Integraciones</strong>: proveedores externos, pasarelas, webhooks y conexiones.</li><li><strong>Auditoria</strong>: historial funcional de acciones criticas.</li></ul><h4>Regla de crecimiento</h4><p>Cada modulo nuevo debe agregar migracion, modelo, controlador, vista, permiso OrmAuth, entrada de menu si aplica y manual de ayuda. Si el modulo maneja archivos, debe usar Documentos y Evidencias en vez de inventar otra forma de adjuntos.</p>',
+            'content' => '<h3>Objetivo</h3><p>Este manual resume la estructura actual de Core-App para que cualquier persona del equipo entienda que administra cada modulo y como se conectan.</p><h4>Base administrativa</h4><ul><li><strong>Configuracion</strong>: empresa, departamentos, empleados, backends y parametros generales.</li><li><strong>Usuarios</strong>: cuentas que inician sesion con OrmAuth.</li><li><strong>Grupos y Permisos</strong>: permisos por modulo y accion usando OrmAuth.</li><li><strong>Ayuda</strong>: base de conocimiento operativa del sistema.</li></ul><h4>Base operativa</h4><ul><li><strong>Catalogos</strong>: monedas, bancos, fiscales, logisticos y datos transversales del ERP.</li><li><strong>Comercial</strong>: marcas, categorias, productos, tags y listas de precio.</li><li><strong>Terceros</strong>: clientes, proveedores, socios, revendedores, direcciones y contactos.</li><li><strong>Portales</strong>: perfiles de portal, accesos usuario-tercero-portal y branding externo.</li><li><strong>Documentos</strong>: repositorio transversal de documentos y evidencias.</li><li><strong>Helpdesk</strong>: tickets internos y externos con seguimiento y evidencias.</li><li><strong>Pagos y Bancos</strong>: cobros, pagos, movimientos bancarios y conciliaciones base.</li><li><strong>Facturacion</strong>: borradores, conceptos, importes y preparacion de CFDI.</li></ul><h4>Base publica y cumplimiento</h4><ul><li><strong>Frontend</strong>: paginas, secciones, menus, banners, sliders, footer y apariencia.</li><li><strong>Web</strong>: analytics, pixeles, captcha, scripts y cookies.</li><li><strong>Legal</strong>: documentos legales, consentimientos y preferencias.</li><li><strong>SAT</strong>: configuracion fiscal, credenciales, CFDI y catalogos SAT.</li><li><strong>Comunicaciones</strong>: correos, eventos, plantillas y notificaciones.</li><li><strong>Integraciones</strong>: proveedores externos, pasarelas, webhooks y conexiones.</li><li><strong>Auditoria</strong>: historial funcional de acciones criticas.</li></ul><h4>Regla de crecimiento</h4><p>Cada modulo nuevo debe agregar migracion, modelo, controlador, vista, permiso OrmAuth, entrada de menu si aplica y manual de ayuda. Si el modulo maneja archivos, debe usar Documentos y Evidencias en vez de inventar otra forma de adjuntos.</p>',
             'sort_order' => 20,
             'active' => 1,
             'created_at' => time(),
@@ -1579,7 +1601,7 @@ class Configsetup
             'title' => 'Como funcionan permisos y modulos',
             'category' => 'Seguridad',
             'summary' => 'Guia para entender como se conectan modulos, permisos OrmAuth, menu y acciones.',
-            'content' => '<h3>Objetivo</h3><p>Core-App usa OrmAuth para controlar que puede ver o modificar cada grupo. Ningun modulo administrativo debe depender solo de que el menu este visible.</p><h4>Regla tecnica</h4><ul><li>El menu consulta permisos con <code>Auth::has_access(area.access[view])</code>.</li><li>Cada controlador administrativo valida lectura en <code>before()</code> con <code>require_access(area.access[view])</code>.</li><li>Las acciones que guardan datos validan <code>area.access[create]</code> o <code>area.access[edit]</code> segun corresponda.</li><li>Los permisos base se sincronizan desde <strong>configsetup</strong>.</li></ul><h4>Donde asignar permisos</h4><ol><li>Entra a <strong>Admin &gt; Administracion &gt; Grupos y Permisos</strong>.</li><li>Selecciona el grupo.</li><li>Activa las acciones necesarias por modulo.</li><li>Guarda cambios.</li><li>El usuario debe volver a iniciar sesion si tenia permisos cacheados.</li></ol><h4>Modulos actuales</h4><p>Los modulos administrativos actuales son: usuarios, permisos, configuracion, web, legal, comunicaciones, integraciones, pagos, auditoria, SAT, catalogos, comercial, terceros, portales, documentos, helpdesk, frontend y ayuda.</p>',
+            'content' => '<h3>Objetivo</h3><p>Core-App usa OrmAuth para controlar que puede ver o modificar cada grupo. Ningun modulo administrativo debe depender solo de que el menu este visible.</p><h4>Regla tecnica</h4><ul><li>El menu consulta permisos con <code>Auth::has_access(area.access[view])</code>.</li><li>Cada controlador administrativo valida lectura en <code>before()</code> con <code>require_access(area.access[view])</code>.</li><li>Las acciones que guardan datos validan <code>area.access[create]</code> o <code>area.access[edit]</code> segun corresponda.</li><li>Los permisos base se sincronizan desde <strong>configsetup</strong>.</li></ul><h4>Donde asignar permisos</h4><ol><li>Entra a <strong>Admin &gt; Administracion &gt; Grupos y Permisos</strong>.</li><li>Selecciona el grupo.</li><li>Activa las acciones necesarias por modulo.</li><li>Guarda cambios.</li><li>El usuario debe volver a iniciar sesion si tenia permisos cacheados.</li></ol><h4>Modulos actuales</h4><p>Los modulos administrativos actuales son: usuarios, permisos, configuracion, web, legal, comunicaciones, integraciones, pagos, facturacion, auditoria, SAT, catalogos, comercial, terceros, portales, documentos, helpdesk, frontend y ayuda.</p>',
             'sort_order' => 25,
             'active' => 1,
             'created_at' => time(),
@@ -1641,6 +1663,18 @@ class Configsetup
             'summary' => 'Uso inicial del modulo para registrar cobros, pagos, movimientos bancarios y preparar conciliacion.',
             'content' => '<h3>Objetivo</h3><p>Pagos y Bancos concentra la base financiera operativa antes de CFDI, ventas, compras y reportes. El modulo registra cobros o pagos, permite vincularlos con terceros y prepara movimientos bancarios para conciliacion.</p><h4>Conceptos</h4><ul><li><strong>Pago recibido</strong>: dinero que entra por cliente, socio, revendedor u otra entidad.</li><li><strong>Pago enviado</strong>: dinero que sale hacia proveedor, colaborador u otra entidad.</li><li><strong>Movimiento bancario</strong>: deposito, retiro, cargo, comision, ajuste o transferencia visto desde una cuenta bancaria.</li><li><strong>Asignacion</strong>: relacion futura entre un pago y una factura, orden, cotizacion u otro documento.</li><li><strong>Conciliacion</strong>: validacion de movimientos contra el estado de cuenta.</li></ul><h4>Registrar un pago</h4><ol><li>Entra a <strong>Admin &gt; Pagos y Bancos</strong>.</li><li>Presiona <strong>Nuevo pago</strong>.</li><li>Elige si es recibido o enviado.</li><li>Selecciona tercero, cuenta bancaria, moneda, forma de pago SAT y fecha.</li><li>Captura importe, referencia y notas.</li><li>Guarda. El sistema genera un folio <code>PAY-AAAAMMDD-00001</code> y audita el cambio.</li></ol><h4>Registrar movimiento bancario</h4><ol><li>Abre la pestaña de movimientos.</li><li>Presiona <strong>Nuevo movimiento</strong>.</li><li>Selecciona cuenta bancaria, fecha, tipo de movimiento, moneda e importe.</li><li>Captura referencia y descripcion.</li><li>Guarda el movimiento.</li></ol><h4>Reglas de seguridad y crecimiento</h4><ul><li>No conectar una pasarela real directo desde este modulo; debe pasar por <strong>Integraciones</strong>.</li><li>No guardar claves, tokens ni secretos en pagos o movimientos.</li><li>Todo cambio relevante debe quedar en <strong>Auditoria</strong>.</li><li>CFDI, ventas y compras deberan relacionarse por asignaciones, no duplicando pagos.</li><li>Las cuentas bancarias se administran desde Catalogos financieros.</li></ul>',
             'sort_order' => 52,
+            'active' => 1,
+            'created_at' => time(),
+            'updated_at' => time(),
+        ]);
+
+        $this->upsert_seed('core_knowledge_articles', 'code', 'facturacion_cfdi_base', [
+            'code' => 'facturacion_cfdi_base',
+            'title' => 'Facturacion y preparacion CFDI',
+            'category' => 'Finanzas',
+            'summary' => 'Manual base para crear facturas, capturar conceptos, calcular importes y preparar timbrado futuro.',
+            'content' => '<h3>Objetivo</h3><p>Facturacion administra el documento operativo antes del timbrado. SAT conserva catalogos, credenciales y CFDI fiscales; Facturacion prepara tercero, conceptos, importes, uso CFDI, forma y metodo de pago.</p><h4>Crear una factura</h4><ol><li>Entra a <strong>Admin &gt; Facturacion</strong>.</li><li>Presiona <strong>Nueva factura</strong>.</li><li>Selecciona tipo: venta, compra, nota de credito o complemento de pago.</li><li>Selecciona tercero, fechas, moneda, condicion de pago y datos SAT.</li><li>Guarda la factura. El sistema genera folio interno <code>FAC-AAAAMMDD-00001</code>.</li></ol><h4>Agregar conceptos</h4><ol><li>Selecciona la factura.</li><li>Presiona <strong>Concepto</strong>.</li><li>Selecciona producto o captura concepto manual.</li><li>Captura cantidad, precio, descuento, unidad SAT, clave producto SAT y tasa de impuesto.</li><li>Guarda. El sistema recalcula subtotal, impuestos, retenciones, total y saldo.</li></ol><h4>Relacion con otros modulos</h4><ul><li><strong>Terceros</strong> aporta cliente/proveedor, RFC, regimen fiscal y uso CFDI sugerido.</li><li><strong>Catalogos</strong> aporta monedas, condiciones de pago, unidades e impuestos.</li><li><strong>SAT</strong> aporta catalogos fiscales, CFDI final y credenciales.</li><li><strong>Pagos y Bancos</strong> debera liquidar facturas por asignaciones.</li><li><strong>Documentos</strong> debera almacenar XML/PDF y evidencias relacionadas.</li></ul><h4>Reglas de seguridad</h4><ul><li>No timbrar sin validar credenciales CSD y proveedor PAC.</li><li>No guardar secretos fiscales en facturas.</li><li>Todo cambio de factura o concepto debe quedar auditado.</li><li>El estado <strong>Lista para timbrar</strong> no significa CFDI emitido; solo indica que esta lista para conectar el proceso fiscal.</li></ul>',
+            'sort_order' => 53,
             'active' => 1,
             'created_at' => time(),
             'updated_at' => time(),
@@ -1716,6 +1750,7 @@ class Configsetup
             'communications' => 'Gestion de correos, eventos y notificaciones',
             'integrations' => 'Gestion de proveedores externos, pasarelas, conexiones y webhooks',
             'payments' => 'Gestion de pagos, bancos, movimientos y conciliaciones',
+            'billing' => 'Gestion de facturacion, conceptos y preparacion CFDI',
             'audit' => 'Consulta de auditoria funcional del sistema',
             'sat' => 'Gestion SAT, CFDI y sincronizacion fiscal',
             'catalogs' => 'Gestion de catalogos base del ERP',
