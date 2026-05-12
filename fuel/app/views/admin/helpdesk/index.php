@@ -57,6 +57,7 @@
                             <th>Estado</th>
                             <th>Prioridad</th>
                             <th>Asignado</th>
+                            <th>Vencimiento</th>
                             <th class="text-center">Acciones</th>
                         </tr>
                     </thead>
@@ -72,6 +73,11 @@
                             <td><span :class="'badge badge-' + statusColor(ticket.status_id)">{{ label(options.statuses, ticket.status_id) || '-' }}</span></td>
                             <td><span :class="'badge badge-' + priorityColor(ticket.priority)">{{ priorityLabel(ticket.priority) }}</span></td>
                             <td>{{ label(options.users, ticket.assigned_user_id) || 'Sin asignar' }}</td>
+                            <td>
+                                <span v-if="ticket.due_at_label">{{ ticket.due_at_label }}</span>
+                                <span v-else class="text-muted">Sin fecha</span>
+                                <div v-if="ticket.scheduled_start_at_label" class="text-muted small">{{ ticket.scheduled_start_at_label }} - {{ ticket.scheduled_end_at_label }}</div>
+                            </td>
                             <td class="text-center">
                                 <button class="btn btn-xs btn-outline-primary" @click="openThread(ticket)" title="Ver seguimiento">
                                     <i class="bi bi-chat-dots"></i>
@@ -82,7 +88,7 @@
                             </td>
                         </tr>
                         <tr v-if="tickets.length === 0">
-                            <td colspan="8" class="text-center text-muted">Sin tickets registrados</td>
+                            <td colspan="9" class="text-center text-muted">Sin tickets registrados</td>
                         </tr>
                     </tbody>
                 </table>
@@ -156,6 +162,24 @@
                             <div class="form-group">
                                 <label>Asunto</label>
                                 <input class="form-control" v-model="ticketForm.subject" :disabled="ticketForm.id">
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label>Vencimiento</label>
+                                <input type="datetime-local" class="form-control" v-model="ticketForm.due_at_input">
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label>Inicio programado</label>
+                                <input type="datetime-local" class="form-control" v-model="ticketForm.scheduled_start_at_input">
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label>Fin programado</label>
+                                <input type="datetime-local" class="form-control" v-model="ticketForm.scheduled_end_at_input">
                             </div>
                         </div>
                         <div class="col-md-12" v-if="!ticketForm.id">
@@ -318,7 +342,10 @@ window.onload = function() {
                     status_id: 0,
                     priority: 'normal',
                     subject: '',
-                    description: ''
+                    description: '',
+                    due_at_input: '',
+                    scheduled_start_at_input: '',
+                    scheduled_end_at_input: ''
                 };
                 this.error = '';
             },
@@ -328,6 +355,9 @@ window.onload = function() {
             },
             openEdit(ticket) {
                 this.ticketForm = Object.assign({}, ticket);
+                this.ticketForm.due_at_input = ticket.due_at_input || '';
+                this.ticketForm.scheduled_start_at_input = ticket.scheduled_start_at_input || '';
+                this.ticketForm.scheduled_end_at_input = ticket.scheduled_end_at_input || '';
                 this.error = '';
                 this.showModal('modal-helpdesk-ticket');
             },

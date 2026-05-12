@@ -95,6 +95,7 @@ class Controller_Admin_Helpdesk extends Controller_Adminbase
 
             # SE CREA EL TICKET
             $status = $this->status_by_code('nuevo');
+            $schedule = $this->ticket_schedule_data($val);
             $ticket = Model_Core_Helpdesk_Ticket::forge([
                 'folio' => $this->next_folio(),
                 'source' => 'admin',
@@ -109,6 +110,9 @@ class Controller_Admin_Helpdesk extends Controller_Adminbase
                 'subject' => $subject,
                 'description' => $description,
                 'last_message_at' => time(),
+                'due_at' => $schedule['due_at'],
+                'scheduled_start_at' => $schedule['scheduled_start_at'],
+                'scheduled_end_at' => $schedule['scheduled_end_at'],
                 'active' => 1,
             ]);
             $ticket->save();
@@ -125,6 +129,18 @@ class Controller_Admin_Helpdesk extends Controller_Adminbase
 
             # SE NOTIFICA AL ASIGNADO SI EXISTE
             $this->notify_ticket($ticket, 'helpdesk.ticket_created', 'Nuevo ticket '.$ticket->folio, $subject, [(int) $ticket->assigned_user_id]);
+
+            # SE AUDITA CREACION DEL TICKET
+            Helper_Core_Audit::log([
+                'module' => 'helpdesk',
+                'action' => 'create_ticket',
+                'business_event' => 'helpdesk.create_ticket',
+                'entity_type' => 'helpdesk_ticket',
+                'entity_id' => (int) $ticket->id,
+                'table_name' => 'core_helpdesk_tickets',
+                'summary' => 'Ticket creado '.$ticket->folio,
+                'new_values' => $ticket->to_array(),
+            ]);
 
             # SE REGRESA ESTADO ACTUALIZADO
             return $this->json_response([
@@ -243,6 +259,7 @@ class Controller_Admin_Helpdesk extends Controller_Adminbase
             if (!$ticket) {
                 return $this->json_response(['error' => 'Ticket no encontrado.'], 404);
             }
+            $old = $ticket->to_array();
 
             # SE ACTUALIZAN CAMPOS PERMITIDOS
             $was_closed = false;
@@ -256,6 +273,10 @@ class Controller_Admin_Helpdesk extends Controller_Adminbase
             $ticket->category_id = (int) \Arr::get($val, 'category_id', $ticket->category_id);
             $ticket->status_id = (int) \Arr::get($val, 'status_id', $ticket->status_id);
             $ticket->priority = $this->codeify(\Arr::get($val, 'priority', $ticket->priority));
+            $schedule = $this->ticket_schedule_data($val, $ticket);
+            $ticket->due_at = $schedule['due_at'];
+            $ticket->scheduled_start_at = $schedule['scheduled_start_at'];
+            $ticket->scheduled_end_at = $schedule['scheduled_end_at'];
 
             $status = Model_Core_Helpdesk_Status::find((int) $ticket->status_id);
             if ($status && (int) $status->is_closed === 1 && (int) $ticket->closed_at === 0) {
@@ -266,6 +287,19 @@ class Controller_Admin_Helpdesk extends Controller_Adminbase
             }
 
             $ticket->save();
+
+            # SE AUDITA ACTUALIZACION DEL TICKET
+            Helper_Core_Audit::log([
+                'module' => 'helpdesk',
+                'action' => 'update_ticket',
+                'business_event' => 'helpdesk.update_ticket',
+                'entity_type' => 'helpdesk_ticket',
+                'entity_id' => (int) $ticket->id,
+                'table_name' => 'core_helpdesk_tickets',
+                'summary' => 'Ticket actualizado '.$ticket->folio,
+                'old_values' => $old,
+                'new_values' => $ticket->to_array(),
+            ]);
 
             # SE NOTIFICA CIERRE CUANDO EL TICKET CAMBIA A ESTADO CERRADO
             if (!$was_closed && $status && (int) $status->is_closed === 1) {
@@ -371,9 +405,87 @@ class Controller_Admin_Helpdesk extends Controller_Adminbase
             $row['updated_at'] = $ticket->updated_at ? date('d/m/Y H:i', $ticket->updated_at) : '';
             $row['last_message_at'] = $ticket->last_message_at ? date('d/m/Y H:i', $ticket->last_message_at) : '';
             $row['closed_at'] = $ticket->closed_at ? date('d/m/Y H:i', $ticket->closed_at) : '';
+            $row['due_at_label'] = $ticket->due_at ? date('d/m/Y H:i', $ticket->due_at) : '';
+            $row['scheduled_start_at_label'] = $ticket->scheduled_start_at ? date('d/m/Y H:i', $ticket->scheduled_start_at) : '';
+            $row['scheduled_end_at_label'] = $ticket->scheduled_end_at ? date('d/m/Y H:i', $ticket->scheduled_end_at) : '';
+            $row['due_at_input'] = $ticket->due_at ? date('Y-m-d\TH:i', $ticket->due_at) : '';
+            $row['scheduled_start_at_input'] = $ticket->scheduled_start_at ? date('Y-m-d\TH:i', $ticket->scheduled_start_at) : '';
+            $row['scheduled_end_at_input'] = $ticket->scheduled_end_at ? date('Y-m-d\TH:i', $ticket->scheduled_end_at) : '';
             $tickets[] = $row;
         }
         return $tickets;
+    }
+
+    /**
+     * TICKET SCHEDULE DATA
+     *
+     * NORMALIZA FECHAS DE VENCIMIENTO Y PROGRAMACION DEL TICKET
+     *
+     * @access  protected
+     * @return  Array
+     */
+    protected function ticket_schedule_data(array $val, $ticket = null)
+    {
+        # SE TOMA VALOR EXISTENTE SI EL CAMPO NO VIENE EN EL PAYLOAD
+        $due_at = array_key_exists('due_at_input', $val) || array_key_exists('due_at', $val)
+            ? $this->normalize_datetime(\Arr::get($val, 'due_at_input', \Arr::get($val, 'due_at', '')))
+            : ($ticket ? (int) $ticket->due_at : 0);
+
+        $scheduled_start_at = array_key_exists('scheduled_start_at_input', $val) || array_key_exists('scheduled_start_at', $val)
+            ? $this->normalize_datetime(\Arr::get($val, 'scheduled_start_at_input', \Arr::get($val, 'scheduled_start_at', '')))
+            : ($ticket ? (int) $ticket->scheduled_start_at : 0);
+
+        $scheduled_end_at = array_key_exists('scheduled_end_at_input', $val) || array_key_exists('scheduled_end_at', $val)
+            ? $this->normalize_datetime(\Arr::get($val, 'scheduled_end_at_input', \Arr::get($val, 'scheduled_end_at', '')))
+            : ($ticket ? (int) $ticket->scheduled_end_at : 0);
+
+        # SI SOLO HAY PROGRAMACION, SE USA COMO VENCIMIENTO OPERATIVO
+        if ($due_at < 1 && $scheduled_start_at > 0) {
+            $due_at = $scheduled_start_at;
+        }
+
+        # SI SOLO HAY VENCIMIENTO, SE CREA UNA VENTANA VISUAL DE UNA HORA
+        if ($scheduled_start_at < 1 && $due_at > 0) {
+            $scheduled_start_at = $due_at;
+        }
+
+        if ($scheduled_end_at < 1 && $scheduled_start_at > 0) {
+            $scheduled_end_at = strtotime('+1 hour', $scheduled_start_at);
+        }
+
+        if ($scheduled_start_at > 0 && $scheduled_end_at > 0 && $scheduled_end_at <= $scheduled_start_at) {
+            throw new \InvalidArgumentException('La fecha fin debe ser mayor a la fecha inicio.');
+        }
+
+        return [
+            'due_at' => (int) $due_at,
+            'scheduled_start_at' => (int) $scheduled_start_at,
+            'scheduled_end_at' => (int) $scheduled_end_at,
+        ];
+    }
+
+    /**
+     * NORMALIZE DATETIME
+     *
+     * CONVIERTE FECHA DE FORMULARIO A TIMESTAMP
+     *
+     * @access  protected
+     * @return  Int
+     */
+    protected function normalize_datetime($value)
+    {
+        # SE PERMITE LIMPIAR LA FECHA ENVIANDO CADENA VACIA
+        if (is_numeric($value)) {
+            return (int) $value;
+        }
+
+        $value = trim((string) $value);
+        if ($value === '') {
+            return 0;
+        }
+
+        $time = strtotime($value);
+        return $time ? (int) $time : 0;
     }
 
     protected function get_messages()
