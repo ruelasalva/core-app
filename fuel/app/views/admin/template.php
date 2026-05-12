@@ -115,6 +115,15 @@
         </li>
         <?php endif; ?>
 
+        <?php if ($menu['payments']): ?>
+        <li class="nav-item">
+            <a href="<?php echo Uri::create('admin/payments'); ?>" class="nav-link <?php echo (Uri::segment(2) == 'payments') ? 'active' : ''; ?>">
+                <i class="nav-icon bi bi-bank"></i>
+                <p>Pagos y Bancos</p>
+            </a>
+        </li>
+        <?php endif; ?>
+
         <?php if ($menu['audit']): ?>
         <li class="nav-item">
             <a href="<?php echo Uri::create('admin/audit'); ?>" class="nav-link <?php echo (Uri::segment(2) == 'audit') ? 'active' : ''; ?>">

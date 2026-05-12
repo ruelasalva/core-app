@@ -1,0 +1,318 @@
+<?php
+
+/**
+ * CONTROLADOR ADMIN_PAYMENTS
+ *
+ * Administra pagos, movimientos bancarios y conciliaciones base.
+ *
+ * @package  app
+ * @extends  Controller_Adminbase
+ */
+class Controller_Admin_Payments extends Controller_Adminbase
+{
+    /**
+     * BEFORE
+     *
+     * VALIDA SESION ADMIN Y PERMISO DE LECTURA DE PAGOS
+     *
+     * @return  Void
+     */
+    public function before()
+    {
+        # REQUERIDA PARA EL TEMPLATING Y SESION ADMIN
+        parent::before();
+
+        # VALIDAR PERMISO ORM AUTH
+        $this->require_access('payments.access[view]');
+    }
+
+    /**
+     * INDEX
+     *
+     * MUESTRA PANEL DE PAGOS Y BANCOS
+     *
+     * @access  public
+     * @return  Void
+     */
+    public function action_index()
+    {
+        # SE CARGA LA VISTA PRINCIPAL
+        $this->template->title = 'Pagos y Bancos';
+        $this->template->content = View::forge('admin/payments/index');
+    }
+
+    /**
+     * DATA
+     *
+     * ENTREGA PAGOS, MOVIMIENTOS, CONCILIACIONES Y OPCIONES
+     *
+     * @access  public
+     * @return  Response
+     */
+    public function action_data()
+    {
+        try {
+            # SE VALIDA ESTRUCTURA
+            $this->assert_schema_ready();
+
+            # SE REGRESA INFORMACION PARA VUE
+            return $this->json_response([
+                'payments' => $this->get_payments(),
+                'movements' => $this->get_movements(),
+                'reconciliations' => $this->get_reconciliations(),
+                'options' => $this->get_options(),
+                'stats' => $this->get_stats(),
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error cargando pagos: '.$e->getMessage());
+            return $this->json_response(['error' => 'No se pudo cargar pagos y bancos.'], 500);
+        }
+    }
+
+    /**
+     * SAVE PAYMENT
+     *
+     * CREA O ACTUALIZA UN PAGO
+     *
+     * @access  public
+     * @return  Response
+     */
+    public function action_save_payment()
+    {
+        # VALIDAR PERMISO PARA EDITAR
+        $this->require_access('payments.access[edit]');
+
+        # SE OBTIENE PAYLOAD JSON
+        $val = (array) \Input::json();
+
+        try {
+            # SE VALIDAN CAMPOS
+            if ((float) \Arr::get($val, 'amount', 0) <= 0) {
+                return $this->json_response(['error' => 'El importe debe ser mayor a cero.'], 422);
+            }
+
+            # SE PREPARAN DATOS
+            $data = [
+                'payment_type' => $this->codeify(\Arr::get($val, 'payment_type', 'received')),
+                'party_id' => (int) \Arr::get($val, 'party_id', 0),
+                'bank_account_id' => (int) \Arr::get($val, 'bank_account_id', 0),
+                'integration_connection_id' => (int) \Arr::get($val, 'integration_connection_id', 0),
+                'payment_date' => trim((string) \Arr::get($val, 'payment_date', date('Y-m-d'))),
+                'currency_code' => strtoupper(substr((string) \Arr::get($val, 'currency_code', 'MXN'), 0, 3)),
+                'exchange_rate' => (float) \Arr::get($val, 'exchange_rate', 1),
+                'amount' => (float) \Arr::get($val, 'amount', 0),
+                'sat_payment_form_code' => trim((string) \Arr::get($val, 'sat_payment_form_code', '99')),
+                'reference' => trim((string) \Arr::get($val, 'reference', '')),
+                'external_id' => trim((string) \Arr::get($val, 'external_id', '')),
+                'status' => $this->codeify(\Arr::get($val, 'status', 'pending')),
+                'notes' => trim((string) \Arr::get($val, 'notes', '')),
+                'active' => (int) (bool) \Arr::get($val, 'active', true),
+            ];
+
+            # SE CREA O ACTUALIZA
+            $id = (int) \Arr::get($val, 'id', 0);
+            if ($id > 0) {
+                $payment = Model_Core_Payment::find($id);
+                if (!$payment) {
+                    return $this->json_response(['error' => 'Pago no encontrado.'], 404);
+                }
+                $old = $payment->to_array();
+                $payment->set($data);
+            } else {
+                $old = [];
+                $data['folio'] = $this->next_payment_folio();
+                $data['created_by'] = $this->user_id;
+                $payment = Model_Core_Payment::forge($data);
+            }
+            $payment->save();
+
+            # SE AUDITA CAMBIO
+            Helper_Core_Audit::log([
+                'module' => 'payments',
+                'action' => $id > 0 ? 'update_payment' : 'create_payment',
+                'entity_type' => 'payment',
+                'entity_id' => (int) $payment->id,
+                'summary' => 'Pago '.$payment->folio.' por '.$payment->amount.' '.$payment->currency_code,
+                'old_values' => $old,
+                'new_values' => $payment->to_array(),
+            ]);
+
+            return $this->json_response(['status' => 'ok', 'payments' => $this->get_payments(), 'stats' => $this->get_stats()]);
+        } catch (\Exception $e) {
+            \Log::error('Error guardando pago: '.$e->getMessage());
+            return $this->json_response(['error' => 'No se pudo guardar el pago.'], 400);
+        }
+    }
+
+    /**
+     * SAVE MOVEMENT
+     *
+     * CREA O ACTUALIZA MOVIMIENTO BANCARIO
+     *
+     * @access  public
+     * @return  Response
+     */
+    public function action_save_movement()
+    {
+        # VALIDAR PERMISO PARA EDITAR
+        $this->require_access('payments.access[edit]');
+
+        # SE OBTIENE PAYLOAD JSON
+        $val = (array) \Input::json();
+
+        try {
+            # SE VALIDAN CAMPOS
+            if ((int) \Arr::get($val, 'bank_account_id', 0) < 1 || (float) \Arr::get($val, 'amount', 0) <= 0) {
+                return $this->json_response(['error' => 'Cuenta bancaria e importe son obligatorios.'], 422);
+            }
+
+            # SE PREPARAN DATOS
+            $data = [
+                'bank_account_id' => (int) \Arr::get($val, 'bank_account_id', 0),
+                'movement_date' => trim((string) \Arr::get($val, 'movement_date', date('Y-m-d'))),
+                'movement_type' => $this->codeify(\Arr::get($val, 'movement_type', 'deposit')),
+                'amount' => (float) \Arr::get($val, 'amount', 0),
+                'currency_code' => strtoupper(substr((string) \Arr::get($val, 'currency_code', 'MXN'), 0, 3)),
+                'reference' => trim((string) \Arr::get($val, 'reference', '')),
+                'description' => trim((string) \Arr::get($val, 'description', '')),
+                'source' => $this->codeify(\Arr::get($val, 'source', 'manual')),
+                'payment_id' => (int) \Arr::get($val, 'payment_id', 0),
+                'reconciled' => (int) (bool) \Arr::get($val, 'reconciled', false),
+                'active' => (int) (bool) \Arr::get($val, 'active', true),
+            ];
+
+            # SE CREA O ACTUALIZA
+            $id = (int) \Arr::get($val, 'id', 0);
+            if ($id > 0) {
+                $movement = Model_Core_Bank_Movement::find($id);
+                if (!$movement) {
+                    return $this->json_response(['error' => 'Movimiento no encontrado.'], 404);
+                }
+                $old = $movement->to_array();
+                $movement->set($data);
+            } else {
+                $old = [];
+                $movement = Model_Core_Bank_Movement::forge($data);
+            }
+            $movement->save();
+
+            # SE AUDITA CAMBIO
+            Helper_Core_Audit::log([
+                'module' => 'payments',
+                'action' => $id > 0 ? 'update_bank_movement' : 'create_bank_movement',
+                'entity_type' => 'bank_movement',
+                'entity_id' => (int) $movement->id,
+                'summary' => 'Movimiento bancario '.$movement->movement_type.' por '.$movement->amount,
+                'old_values' => $old,
+                'new_values' => $movement->to_array(),
+            ]);
+
+            return $this->json_response(['status' => 'ok', 'movements' => $this->get_movements(), 'stats' => $this->get_stats()]);
+        } catch (\Exception $e) {
+            \Log::error('Error guardando movimiento bancario: '.$e->getMessage());
+            return $this->json_response(['error' => 'No se pudo guardar el movimiento.'], 400);
+        }
+    }
+
+    /**
+     * GET PAYMENTS
+     *
+     * FORMATEA PAGOS
+     *
+     * @access  protected
+     * @return  Array
+     */
+    protected function get_payments()
+    {
+        $items = [];
+        foreach (Model_Core_Payment::query()->order_by('id', 'desc')->limit(200)->get() as $payment) {
+            $row = $payment->to_array();
+            $row['created_at'] = $payment->created_at ? date('d/m/Y H:i', $payment->created_at) : '';
+            $items[] = $row;
+        }
+        return $items;
+    }
+
+    /**
+     * GET MOVEMENTS
+     *
+     * FORMATEA MOVIMIENTOS BANCARIOS
+     *
+     * @access  protected
+     * @return  Array
+     */
+    protected function get_movements()
+    {
+        $items = [];
+        foreach (Model_Core_Bank_Movement::query()->order_by('id', 'desc')->limit(200)->get() as $movement) {
+            $row = $movement->to_array();
+            $row['created_at'] = $movement->created_at ? date('d/m/Y H:i', $movement->created_at) : '';
+            $items[] = $row;
+        }
+        return $items;
+    }
+
+    protected function get_reconciliations()
+    {
+        $items = [];
+        foreach (Model_Core_Bank_Reconciliation::query()->order_by('id', 'desc')->limit(100)->get() as $reconciliation) {
+            $items[] = $reconciliation->to_array();
+        }
+        return $items;
+    }
+
+    protected function get_options()
+    {
+        return [
+            'parties' => $this->select_options('core_parties', 'id', 'name'),
+            'bank_accounts' => $this->select_options('core_catalog_bank_accounts', 'id', 'name'),
+            'currencies' => $this->select_options('core_catalog_currencies', 'code', 'name'),
+            'sat_payment_forms' => $this->select_options('core_sat_payment_forms', 'code', 'name'),
+            'integrations' => $this->select_options('core_integration_connections', 'id', 'name'),
+        ];
+    }
+
+    protected function get_stats()
+    {
+        return [
+            'payments' => (int) \DB::count_records('core_payments'),
+            'pending' => (int) \DB::select()->from('core_payments')->where('status', '=', 'pending')->execute()->count(),
+            'movements' => (int) \DB::count_records('core_bank_movements'),
+            'unreconciled' => (int) \DB::select()->from('core_bank_movements')->where('reconciled', '=', 0)->execute()->count(),
+        ];
+    }
+
+    protected function select_options($table, $value_field, $label_field)
+    {
+        $rows = \DB::select($value_field, $label_field)->from($table)->where('active', '=', 1)->order_by($label_field, 'asc')->execute();
+        $options = [];
+        foreach ($rows as $row) {
+            $options[] = ['value' => (string) $row[$value_field], 'label' => (string) $row[$label_field]];
+        }
+        return $options;
+    }
+
+    protected function next_payment_folio()
+    {
+        return 'PAY-'.date('Ymd').'-'.str_pad((string) ((int) \DB::count_records('core_payments') + 1), 5, '0', STR_PAD_LEFT);
+    }
+
+    protected function assert_schema_ready()
+    {
+        foreach (['core_payments', 'core_payment_allocations', 'core_bank_movements', 'core_bank_reconciliations'] as $table) {
+            if (!\DBUtil::table_exists($table)) {
+                throw new \RuntimeException('Falta ejecutar migraciones de pagos.');
+            }
+        }
+    }
+
+    protected function codeify($value)
+    {
+        $value = strtolower(trim((string) $value));
+        if (function_exists('iconv')) {
+            $value = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $value);
+        }
+        $value = preg_replace('/[^a-z0-9]+/', '_', $value);
+        return trim($value, '_');
+    }
+}

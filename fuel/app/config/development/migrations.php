@@ -22,6 +22,7 @@ return array (
         16 => '017_create_core_document_tables',
         17 => '018_create_core_helpdesk_tables',
         18 => '019_create_core_integration_audit_tables',
+        19 => '020_create_core_payment_bank_tables',
       ),
     ),
     'module' => array(    
