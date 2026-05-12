@@ -142,6 +142,36 @@
                         <div v-if="ticketMessages.length === 0" class="text-center text-muted">Sin mensajes</div>
                     </div>
 
+                    <div class="border rounded p-3 mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <strong>Adjuntos y evidencias</strong>
+                            <span class="badge badge-light">{{ ticketDocuments.length }}</span>
+                        </div>
+                        <div v-if="ticketDocuments.length === 0" class="text-muted small mb-2">Sin adjuntos</div>
+                        <div v-for="document in ticketDocuments" :key="document.id" class="d-flex justify-content-between align-items-center border-bottom py-2">
+                            <div>
+                                <a :href="assetUrl(document.file_path)" target="_blank">{{ document.original_name || document.title }}</a>
+                                <div class="text-muted small">{{ document.created_at }} · {{ document.file_extension }} · {{ formatSize(document.file_size) }}</div>
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-5">
+                                <input type="text" class="form-control form-control-sm" placeholder="Titulo del adjunto" v-model="uploadForm.title">
+                            </div>
+                            <div class="col-md-4">
+                                <input type="file" class="form-control form-control-sm" @change="setUploadFile">
+                            </div>
+                            <div class="col-md-3">
+                                <button class="btn btn-sm btn-outline-primary btn-block" @click="uploadDocument" :disabled="saving">
+                                    <i class="bi bi-paperclip"></i> Adjuntar
+                                </button>
+                            </div>
+                            <div class="col-md-12">
+                                <small class="text-muted">PDF, XML, imagenes, Office, CSV o TXT. Maximo 15 MB.</small>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="form-group">
                         <label>Respuesta</label>
                         <textarea class="form-control" rows="3" v-model="replyForm.message"></textarea>
@@ -169,16 +199,23 @@ new Vue({
         error: '',
         tickets: [],
         messages: [],
+        documents: [],
         options: { categories: [], statuses: [], priorities: [] },
         stats: {},
         selectedTicket: null,
         ticketForm: {},
-        replyForm: {}
+        replyForm: {},
+        uploadForm: {},
+        uploadFile: null
     },
     computed: {
         ticketMessages() {
             if (!this.selectedTicket) return [];
             return this.messages.filter(message => String(message.ticket_id) === String(this.selectedTicket.id));
+        },
+        ticketDocuments() {
+            if (!this.selectedTicket) return [];
+            return this.documents.filter(document => String(document.ticket_id) === String(this.selectedTicket.id));
         }
     },
     mounted() {
@@ -195,6 +232,7 @@ new Vue({
                     if (data.error) { this.error = data.error; return; }
                     this.tickets = data.tickets || [];
                     this.messages = data.messages || [];
+                    this.documents = data.documents || [];
                     this.options = data.options || this.options;
                     this.stats = data.stats || {};
                 })
@@ -214,6 +252,8 @@ new Vue({
         openThread(ticket) {
             this.selectedTicket = ticket;
             this.replyForm = { ticket_id: ticket.id, message: '' };
+            this.uploadForm = { ticket_id: ticket.id, title: '', description: '' };
+            this.uploadFile = null;
             this.error = '';
             this.showModal('modal-portal-thread');
         },
@@ -250,12 +290,46 @@ new Vue({
                     if (data.error) { this.error = data.error; return; }
                     this.tickets = data.tickets || [];
                     this.messages = data.messages || [];
+                    this.documents = data.documents || [];
                     this.stats = data.stats || {};
                     this.replyForm.message = '';
                 })
                 .catch(() => {
                     this.saving = false;
                     this.error = 'No se pudo guardar la respuesta.';
+                });
+        },
+        setUploadFile(event) {
+            this.uploadFile = event.target.files && event.target.files[0] ? event.target.files[0] : null;
+        },
+        uploadDocument() {
+            if (!this.selectedTicket || !this.uploadFile) {
+                this.error = 'Selecciona un archivo.';
+                return;
+            }
+
+            this.saving = true;
+            this.error = '';
+            const data = new FormData();
+            Object.keys(this.uploadForm).forEach(key => data.append(key, this.uploadForm[key]));
+            data.append('file', this.uploadFile);
+            data.append(window.coreAppCsrfKey, fuel_csrf_token());
+
+            fetch('<?php echo Uri::create($portal_code.'/helpdesk_upload'); ?>', { method: 'POST', body: data })
+                .then(res => res.json())
+                .then(data => {
+                    this.saving = false;
+                    if (data.error) { this.error = data.error; return; }
+                    this.tickets = data.tickets || [];
+                    this.messages = data.messages || [];
+                    this.documents = data.documents || [];
+                    this.stats = data.stats || {};
+                    this.uploadForm = { ticket_id: this.selectedTicket.id, title: '', description: '' };
+                    this.uploadFile = null;
+                })
+                .catch(() => {
+                    this.saving = false;
+                    this.error = 'No se pudo adjuntar el archivo.';
                 });
         },
         label(options, value) {
@@ -277,6 +351,17 @@ new Vue({
         },
         authorLabel(author) {
             return author === 'admin' ? 'Equipo de soporte' : 'Usuario portal';
+        },
+        assetUrl(path) {
+            if (!path) return '';
+            if (/^https?:\/\//.test(path)) return path;
+            return '<?php echo Uri::base(false); ?>' + path.replace(/^\/+/, '');
+        },
+        formatSize(size) {
+            size = parseInt(size || 0, 10);
+            if (size >= 1048576) return (size / 1048576).toFixed(1) + ' MB';
+            if (size >= 1024) return (size / 1024).toFixed(1) + ' KB';
+            return size + ' B';
         },
         showModal(id) {
             const element = document.getElementById(id);

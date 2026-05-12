@@ -124,6 +124,7 @@ class Controller_Portalbase extends Controller_Template
             return $this->json_response([
                 'tickets' => $this->portal_tickets(),
                 'messages' => $this->portal_messages(),
+                'documents' => $this->portal_ticket_documents(),
                 'options' => $this->portal_helpdesk_options(),
                 'stats' => $this->portal_helpdesk_stats(),
             ]);
@@ -191,12 +192,26 @@ class Controller_Portalbase extends Controller_Template
                 'status' => 'ok',
                 'tickets' => $this->portal_tickets(),
                 'messages' => $this->portal_messages(),
+                'documents' => $this->portal_ticket_documents(),
                 'stats' => $this->portal_helpdesk_stats(),
             ]);
         } catch (\Exception $e) {
             \Log::error('Error creando ticket portal '.$this->portal_code.': '.$e->getMessage());
             return $this->json_response(['error' => 'No se pudo crear el ticket.'], 400);
         }
+    }
+
+    /**
+     * ACTION HELPDESK CREATE
+     *
+     * COMPATIBILIDAD DE RUTA PARA FUELPHP CUANDO NO RESUELVE METODOS POST_*
+     *
+     * @access  public
+     * @return  Response
+     */
+    public function action_helpdesk_create()
+    {
+        return $this->post_helpdesk_create();
     }
 
     /**
@@ -246,12 +261,92 @@ class Controller_Portalbase extends Controller_Template
                 'status' => 'ok',
                 'tickets' => $this->portal_tickets(),
                 'messages' => $this->portal_messages(),
+                'documents' => $this->portal_ticket_documents(),
                 'stats' => $this->portal_helpdesk_stats(),
             ]);
         } catch (\Exception $e) {
             \Log::error('Error respondiendo ticket portal '.$this->portal_code.': '.$e->getMessage());
             return $this->json_response(['error' => 'No se pudo responder el ticket.'], 400);
         }
+    }
+
+    /**
+     * ACTION HELPDESK REPLY
+     *
+     * COMPATIBILIDAD DE RUTA PARA FUELPHP CUANDO NO RESUELVE METODOS POST_*
+     *
+     * @access  public
+     * @return  Response
+     */
+    public function action_helpdesk_reply()
+    {
+        return $this->post_helpdesk_reply();
+    }
+
+    /**
+     * HELPDESK UPLOAD
+     *
+     * ADJUNTA DOCUMENTO A UN TICKET DEL PORTAL ACTUAL
+     *
+     * @access  public
+     * @return  Response
+     */
+    public function post_helpdesk_upload()
+    {
+        try {
+            # SE VALIDA QUE EL TICKET PERTENEZCA AL TERCERO Y PORTAL ACTUAL
+            $ticket = $this->portal_ticket_by_id((int) \Input::post('ticket_id', 0));
+            if (!$ticket) {
+                return $this->json_response(['error' => 'Ticket no encontrado.'], 404);
+            }
+
+            # SE GUARDA DOCUMENTO CON VISIBILIDAD DE PORTAL
+            $document = $this->store_portal_ticket_document($ticket);
+
+            # SE REGISTRA MENSAJE VISIBLE PARA EL HISTORIAL
+            Model_Core_Helpdesk_Message::forge([
+                'ticket_id' => (int) $ticket->id,
+                'user_id' => $this->user_id,
+                'author_type' => $this->portal_code,
+                'message' => 'Adjunto agregado: '.$document->original_name,
+                'is_internal' => 0,
+                'active' => 1,
+            ])->save();
+
+            $ticket->last_message_at = time();
+            $ticket->save();
+
+            # SE NOTIFICA A RESPONSABLE O ADMINISTRADORES
+            $user_ids = [(int) $ticket->assigned_user_id];
+            if ((int) $ticket->assigned_user_id < 1) {
+                $user_ids = $this->admin_user_ids();
+            }
+            $this->notify_helpdesk_users($ticket, 'helpdesk.ticket_replied', 'Adjunto en ticket '.$ticket->folio, $document->original_name, $user_ids);
+
+            return $this->json_response([
+                'status' => 'ok',
+                'tickets' => $this->portal_tickets(),
+                'messages' => $this->portal_messages(),
+                'documents' => $this->portal_ticket_documents(),
+                'stats' => $this->portal_helpdesk_stats(),
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error adjuntando documento portal '.$this->portal_code.': '.$e->getMessage());
+            return $this->json_response(['error' => $e->getMessage()], 400);
+        }
+    }
+
+    /**
+     * ACTION HELPDESK UPLOAD
+     *
+     * COMPATIBILIDAD DE RUTA PARA FUELPHP CUANDO NO RESUELVE METODOS POST_*
+     *
+     * @access  public
+     * @return  Response
+     */
+    public function action_helpdesk_upload()
+    {
+        return $this->post_helpdesk_upload();
     }
 
     /**
@@ -319,6 +414,66 @@ class Controller_Portalbase extends Controller_Template
         }
 
         return $messages;
+    }
+
+    /**
+     * PORTAL TICKET DOCUMENTS
+     *
+     * FORMATEA DOCUMENTOS VISIBLES DE TICKETS DEL PORTAL
+     *
+     * @access  protected
+     * @return  Array
+     */
+    protected function portal_ticket_documents()
+    {
+        $tickets = $this->portal_tickets();
+        $ticket_ids = array_map(function ($ticket) {
+            return (int) $ticket['id'];
+        }, $tickets);
+
+        if (empty($ticket_ids)) {
+            return [];
+        }
+
+        $rows = \DB::select(
+                ['d.id', 'id'],
+                ['l.entity_id', 'ticket_id'],
+                ['d.title', 'title'],
+                ['d.original_name', 'original_name'],
+                ['d.file_path', 'file_path'],
+                ['d.file_extension', 'file_extension'],
+                ['d.file_size', 'file_size'],
+                ['d.visibility', 'visibility'],
+                ['d.created_at', 'created_at']
+            )
+            ->from(['core_document_links', 'l'])
+            ->join(['core_documents', 'd'], 'INNER')
+            ->on('d.id', '=', 'l.document_id')
+            ->where('l.entity_type', '=', 'ticket')
+            ->where('l.entity_id', 'in', $ticket_ids)
+            ->where('l.active', '=', 1)
+            ->where('d.active', '=', 1)
+            ->where('d.visibility', 'in', ['portal', 'public'])
+            ->order_by('d.id', 'desc')
+            ->limit(300)
+            ->execute();
+
+        $documents = [];
+        foreach ($rows as $row) {
+            $documents[] = [
+                'id' => (int) $row['id'],
+                'ticket_id' => (int) $row['ticket_id'],
+                'title' => (string) $row['title'],
+                'original_name' => (string) $row['original_name'],
+                'file_path' => (string) $row['file_path'],
+                'file_extension' => (string) $row['file_extension'],
+                'file_size' => (int) $row['file_size'],
+                'visibility' => (string) $row['visibility'],
+                'created_at' => $row['created_at'] ? date('d/m/Y H:i', $row['created_at']) : '',
+            ];
+        }
+
+        return $documents;
     }
 
     /**
@@ -512,6 +667,82 @@ class Controller_Portalbase extends Controller_Template
     }
 
     /**
+     * STORE PORTAL TICKET DOCUMENT
+     *
+     * GUARDA ARCHIVO DEL PORTAL Y LO VINCULA AL TICKET
+     *
+     * @access  protected
+     * @return  Model_Core_Document
+     */
+    protected function store_portal_ticket_document($ticket)
+    {
+        # SE OBTIENE EL ARCHIVO
+        $file = \Input::file('file');
+        if (!$file || (int) \Arr::get($file, 'error', UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+            throw new \RuntimeException('Selecciona un archivo valido.');
+        }
+
+        # SE VALIDAN EXTENSION Y PESO
+        $extension = strtolower(pathinfo((string) \Arr::get($file, 'name', ''), PATHINFO_EXTENSION));
+        $allowed = ['pdf', 'xml', 'jpg', 'jpeg', 'png', 'webp', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'txt'];
+        if (!in_array($extension, $allowed)) {
+            throw new \RuntimeException('Tipo de archivo no permitido.');
+        }
+
+        if ((int) \Arr::get($file, 'size', 0) > 15728640) {
+            throw new \RuntimeException('El archivo no puede superar 15 MB.');
+        }
+
+        # SE PREPARA DESTINO PUBLICO CONTROLADO
+        $relative_dir = 'assets/uploads/documents/ticket/'.date('Y').'/'.date('m');
+        $absolute_dir = DOCROOT.$relative_dir;
+        if (!is_dir($absolute_dir)) {
+            mkdir($absolute_dir, 0755, true);
+        }
+
+        # SE GENERA NOMBRE SEGURO
+        $base_name = pathinfo((string) \Arr::get($file, 'name', 'documento'), PATHINFO_FILENAME);
+        $filename = time().'_'.\Str::random('alnum', 12).'_'.$this->codeify($base_name).'.'.$extension;
+        $target = $absolute_dir.DS.$filename;
+
+        if (!@move_uploaded_file((string) \Arr::get($file, 'tmp_name', ''), $target)) {
+            throw new \RuntimeException('No se pudo guardar el archivo.');
+        }
+
+        # SE CREA DOCUMENTO DE PORTAL
+        $path = str_replace('\\', '/', $relative_dir.'/'.$filename);
+        $document = Model_Core_Document::forge([
+            'document_type' => 'ticket',
+            'title' => trim((string) \Input::post('title', '')) ?: $base_name,
+            'description' => trim((string) \Input::post('description', '')),
+            'file_path' => $path,
+            'original_name' => (string) \Arr::get($file, 'name', ''),
+            'mime_type' => (string) \Arr::get($file, 'type', ''),
+            'file_extension' => $extension,
+            'file_size' => (int) \Arr::get($file, 'size', 0),
+            'checksum' => is_file($target) ? hash_file('sha256', $target) : '',
+            'visibility' => 'portal',
+            'is_evidence' => 1,
+            'uploaded_by' => $this->user_id,
+            'active' => 1,
+        ]);
+        $document->save();
+
+        # SE CREA VINCULO CONTRA TICKET
+        Model_Core_Document_Link::forge([
+            'document_id' => (int) $document->id,
+            'entity_type' => 'ticket',
+            'entity_id' => (int) $ticket->id,
+            'relation_type' => 'attachment',
+            'notes' => trim((string) \Input::post('notes', '')),
+            'created_by' => $this->user_id,
+            'active' => 1,
+        ])->save();
+
+        return $document;
+    }
+
+    /**
      * ADMIN USER IDS
      *
      * OBTIENE USUARIOS ADMINISTRATIVOS PARA NOTIFICACION INICIAL
@@ -544,7 +775,7 @@ class Controller_Portalbase extends Controller_Template
      */
     protected function assert_helpdesk_schema_ready()
     {
-        foreach (['core_helpdesk_categories', 'core_helpdesk_statuses', 'core_helpdesk_tickets', 'core_helpdesk_messages'] as $table) {
+        foreach (['core_helpdesk_categories', 'core_helpdesk_statuses', 'core_helpdesk_tickets', 'core_helpdesk_messages', 'core_documents', 'core_document_links'] as $table) {
             if (!\DBUtil::table_exists($table)) {
                 throw new \RuntimeException('Falta ejecutar migraciones de helpdesk.');
             }

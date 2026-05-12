@@ -59,6 +59,7 @@ class Controller_Admin_Helpdesk extends Controller_Adminbase
             return $this->json_response([
                 'tickets' => $this->get_tickets(),
                 'messages' => $this->get_messages(),
+                'documents' => $this->get_ticket_documents(),
                 'options' => $this->get_options(),
                 'stats' => $this->get_stats(),
             ]);
@@ -130,12 +131,26 @@ class Controller_Admin_Helpdesk extends Controller_Adminbase
                 'status' => 'ok',
                 'tickets' => $this->get_tickets(),
                 'messages' => $this->get_messages(),
+                'documents' => $this->get_ticket_documents(),
                 'stats' => $this->get_stats(),
             ]);
         } catch (\Exception $e) {
             \Log::error('Error creando ticket: '.$e->getMessage());
             return $this->json_response(['error' => 'No se pudo crear el ticket.'], 400);
         }
+    }
+
+    /**
+     * ACTION CREATE TICKET
+     *
+     * COMPATIBILIDAD DE RUTA PARA FUELPHP CUANDO NO RESUELVE METODOS POST_*
+     *
+     * @access  public
+     * @return  Response
+     */
+    public function action_create_ticket()
+    {
+        return $this->post_create_ticket();
     }
 
     /**
@@ -180,11 +195,30 @@ class Controller_Admin_Helpdesk extends Controller_Adminbase
             # SE NOTIFICA AL SOLICITANTE Y ASIGNADO
             $this->notify_ticket($ticket, 'helpdesk.ticket_replied', 'Respuesta en ticket '.$ticket->folio, $message, [(int) $ticket->requester_user_id, (int) $ticket->assigned_user_id]);
 
-            return $this->json_response(['status' => 'ok', 'tickets' => $this->get_tickets(), 'messages' => $this->get_messages(), 'stats' => $this->get_stats()]);
+            return $this->json_response([
+                'status' => 'ok',
+                'tickets' => $this->get_tickets(),
+                'messages' => $this->get_messages(),
+                'documents' => $this->get_ticket_documents(),
+                'stats' => $this->get_stats(),
+            ]);
         } catch (\Exception $e) {
             \Log::error('Error respondiendo ticket: '.$e->getMessage());
             return $this->json_response(['error' => 'No se pudo responder el ticket.'], 400);
         }
+    }
+
+    /**
+     * ACTION REPLY
+     *
+     * COMPATIBILIDAD DE RUTA PARA FUELPHP CUANDO NO RESUELVE METODOS POST_*
+     *
+     * @access  public
+     * @return  Response
+     */
+    public function action_reply()
+    {
+        return $this->post_reply();
     }
 
     /**
@@ -238,11 +272,94 @@ class Controller_Admin_Helpdesk extends Controller_Adminbase
                 $this->notify_ticket($ticket, 'helpdesk.ticket_closed', 'Ticket cerrado '.$ticket->folio, $ticket->subject, [(int) $ticket->requester_user_id, (int) $ticket->assigned_user_id]);
             }
 
-            return $this->json_response(['status' => 'ok', 'tickets' => $this->get_tickets(), 'stats' => $this->get_stats()]);
+            return $this->json_response([
+                'status' => 'ok',
+                'tickets' => $this->get_tickets(),
+                'messages' => $this->get_messages(),
+                'documents' => $this->get_ticket_documents(),
+                'stats' => $this->get_stats(),
+            ]);
         } catch (\Exception $e) {
             \Log::error('Error actualizando ticket: '.$e->getMessage());
             return $this->json_response(['error' => 'No se pudo actualizar el ticket.'], 400);
         }
+    }
+
+    /**
+     * ACTION UPDATE TICKET
+     *
+     * COMPATIBILIDAD DE RUTA PARA FUELPHP CUANDO NO RESUELVE METODOS POST_*
+     *
+     * @access  public
+     * @return  Response
+     */
+    public function action_update_ticket()
+    {
+        return $this->post_update_ticket();
+    }
+
+    /**
+     * UPLOAD DOCUMENT
+     *
+     * ADJUNTA DOCUMENTO O EVIDENCIA A UN TICKET
+     *
+     * @access  public
+     * @return  Response
+     */
+    public function post_upload_document()
+    {
+        # VALIDAR PERMISOS PARA EDITAR TICKET Y CREAR DOCUMENTOS
+        $this->require_access('helpdesk.access[edit]');
+        $this->require_access('documents.access[create]');
+
+        try {
+            # SE VALIDA ESTRUCTURA Y TICKET
+            $this->assert_schema_ready();
+            $ticket = Model_Core_Helpdesk_Ticket::find((int) \Input::post('ticket_id', 0));
+            if (!$ticket) {
+                return $this->json_response(['error' => 'Ticket no encontrado.'], 404);
+            }
+
+            # SE GUARDA DOCUMENTO TRANSVERSAL
+            $document = $this->store_ticket_document($ticket, 'internal');
+
+            # SE REGISTRA MENSAJE DE SISTEMA PARA TRAZABILIDAD
+            Model_Core_Helpdesk_Message::forge([
+                'ticket_id' => (int) $ticket->id,
+                'user_id' => $this->user_id,
+                'author_type' => 'admin',
+                'message' => 'Adjunto agregado: '.$document->original_name,
+                'is_internal' => 0,
+                'active' => 1,
+            ])->save();
+
+            $ticket->last_message_at = time();
+            $ticket->save();
+
+            return $this->json_response([
+                'status' => 'ok',
+                'tickets' => $this->get_tickets(),
+                'messages' => $this->get_messages(),
+                'documents' => $this->get_ticket_documents(),
+                'stats' => $this->get_stats(),
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error adjuntando documento a ticket: '.$e->getMessage());
+            return $this->json_response(['error' => $e->getMessage()], 400);
+        }
+    }
+
+    /**
+     * ACTION UPLOAD DOCUMENT
+     *
+     * COMPATIBILIDAD DE RUTA PARA FUELPHP CUANDO NO RESUELVE METODOS POST_*
+     *
+     * @access  public
+     * @return  Response
+     */
+    public function action_upload_document()
+    {
+        return $this->post_upload_document();
     }
 
     protected function get_tickets()
@@ -269,6 +386,57 @@ class Controller_Admin_Helpdesk extends Controller_Adminbase
             $messages[] = $row;
         }
         return $messages;
+    }
+
+    /**
+     * GET TICKET DOCUMENTS
+     *
+     * FORMATEA DOCUMENTOS VINCULADOS A TICKETS
+     *
+     * @access  protected
+     * @return  Array
+     */
+    protected function get_ticket_documents()
+    {
+        $rows = \DB::select(
+                ['d.id', 'id'],
+                ['l.entity_id', 'ticket_id'],
+                ['d.title', 'title'],
+                ['d.original_name', 'original_name'],
+                ['d.file_path', 'file_path'],
+                ['d.file_extension', 'file_extension'],
+                ['d.file_size', 'file_size'],
+                ['d.visibility', 'visibility'],
+                ['d.is_evidence', 'is_evidence'],
+                ['d.created_at', 'created_at']
+            )
+            ->from(['core_document_links', 'l'])
+            ->join(['core_documents', 'd'], 'INNER')
+            ->on('d.id', '=', 'l.document_id')
+            ->where('l.entity_type', '=', 'ticket')
+            ->where('l.active', '=', 1)
+            ->where('d.active', '=', 1)
+            ->order_by('d.id', 'desc')
+            ->limit(500)
+            ->execute();
+
+        $documents = [];
+        foreach ($rows as $row) {
+            $documents[] = [
+                'id' => (int) $row['id'],
+                'ticket_id' => (int) $row['ticket_id'],
+                'title' => (string) $row['title'],
+                'original_name' => (string) $row['original_name'],
+                'file_path' => (string) $row['file_path'],
+                'file_extension' => (string) $row['file_extension'],
+                'file_size' => (int) $row['file_size'],
+                'visibility' => (string) $row['visibility'],
+                'is_evidence' => (int) $row['is_evidence'],
+                'created_at' => $row['created_at'] ? date('d/m/Y H:i', $row['created_at']) : '',
+            ];
+        }
+
+        return $documents;
     }
 
     protected function get_options()
@@ -375,9 +543,85 @@ class Controller_Admin_Helpdesk extends Controller_Adminbase
         ], $user_ids);
     }
 
+    /**
+     * STORE TICKET DOCUMENT
+     *
+     * GUARDA ARCHIVO Y CREA VINCULO DOCUMENTAL CONTRA EL TICKET
+     *
+     * @access  protected
+     * @return  Model_Core_Document
+     */
+    protected function store_ticket_document($ticket, $visibility)
+    {
+        # SE OBTIENE EL ARCHIVO
+        $file = \Input::file('file');
+        if (!$file || (int) \Arr::get($file, 'error', UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+            throw new \RuntimeException('Selecciona un archivo valido.');
+        }
+
+        # SE VALIDAN EXTENSION Y PESO
+        $extension = strtolower(pathinfo((string) \Arr::get($file, 'name', ''), PATHINFO_EXTENSION));
+        $allowed = ['pdf', 'xml', 'jpg', 'jpeg', 'png', 'webp', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'txt'];
+        if (!in_array($extension, $allowed)) {
+            throw new \RuntimeException('Tipo de archivo no permitido.');
+        }
+
+        if ((int) \Arr::get($file, 'size', 0) > 15728640) {
+            throw new \RuntimeException('El archivo no puede superar 15 MB.');
+        }
+
+        # SE PREPARA DESTINO PUBLICO CONTROLADO
+        $relative_dir = 'assets/uploads/documents/ticket/'.date('Y').'/'.date('m');
+        $absolute_dir = DOCROOT.$relative_dir;
+        if (!is_dir($absolute_dir)) {
+            mkdir($absolute_dir, 0755, true);
+        }
+
+        # SE GENERA NOMBRE SEGURO
+        $base_name = pathinfo((string) \Arr::get($file, 'name', 'documento'), PATHINFO_FILENAME);
+        $filename = time().'_'.\Str::random('alnum', 12).'_'.$this->codeify($base_name).'.'.$extension;
+        $target = $absolute_dir.DS.$filename;
+
+        if (!@move_uploaded_file((string) \Arr::get($file, 'tmp_name', ''), $target)) {
+            throw new \RuntimeException('No se pudo guardar el archivo.');
+        }
+
+        # SE CREA EL DOCUMENTO
+        $path = str_replace('\\', '/', $relative_dir.'/'.$filename);
+        $document = Model_Core_Document::forge([
+            'document_type' => 'ticket',
+            'title' => trim((string) \Input::post('title', '')) ?: $base_name,
+            'description' => trim((string) \Input::post('description', '')),
+            'file_path' => $path,
+            'original_name' => (string) \Arr::get($file, 'name', ''),
+            'mime_type' => (string) \Arr::get($file, 'type', ''),
+            'file_extension' => $extension,
+            'file_size' => (int) \Arr::get($file, 'size', 0),
+            'checksum' => is_file($target) ? hash_file('sha256', $target) : '',
+            'visibility' => $this->codeify($visibility),
+            'is_evidence' => (int) (bool) \Input::post('is_evidence', true),
+            'uploaded_by' => $this->user_id,
+            'active' => 1,
+        ]);
+        $document->save();
+
+        # SE CREA VINCULO CON TICKET
+        Model_Core_Document_Link::forge([
+            'document_id' => (int) $document->id,
+            'entity_type' => 'ticket',
+            'entity_id' => (int) $ticket->id,
+            'relation_type' => 'attachment',
+            'notes' => trim((string) \Input::post('notes', '')),
+            'created_by' => $this->user_id,
+            'active' => 1,
+        ])->save();
+
+        return $document;
+    }
+
     protected function assert_schema_ready()
     {
-        foreach (['core_helpdesk_categories', 'core_helpdesk_statuses', 'core_helpdesk_tickets', 'core_helpdesk_messages'] as $table) {
+        foreach (['core_helpdesk_categories', 'core_helpdesk_statuses', 'core_helpdesk_tickets', 'core_helpdesk_messages', 'core_documents', 'core_document_links'] as $table) {
             if (!\DBUtil::table_exists($table)) {
                 throw new \RuntimeException('Falta ejecutar migraciones de helpdesk.');
             }
