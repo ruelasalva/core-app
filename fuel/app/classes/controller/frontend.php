@@ -221,7 +221,7 @@ class Controller_Frontend extends Controller_Template
             'slider'            => $this->get_slider($location),
             'slider_items'      => array(),
             'banners'           => $this->get_banners($location),
-            'featured_products' => $this->get_featured_products(),
+            'featured_products' => ($location === 'home') ? $this->get_featured_products() : array(),
             'featured_brands'   => $this->get_featured_brands(),
         );
 

@@ -10,6 +10,11 @@ $media_url = function ($path) {
 
     return Uri::base(false).ltrim($path, '/');
 };
+
+$section_settings = function ($json) {
+    $settings = json_decode((string) $json, true);
+    return is_array($settings) ? $settings : array();
+};
 ?>
 
 <style>
@@ -264,7 +269,7 @@ $media_url = function ($path) {
             </div>
         </div>
         <?php elseif ($section->section_type === 'download_cards'): ?>
-        <?php $settings = json_decode((string) $section->settings_json, true); $downloads = !empty($settings['items']) ? $settings['items'] : array(); ?>
+        <?php $settings = $section_settings($section->settings_json); $downloads = !empty($settings['items']) ? $settings['items'] : array(); ?>
         <div class="section-shell">
             <div class="section-copy" style="margin-bottom: 24px;">
                 <h2><?php echo e($section->title); ?></h2>
@@ -292,7 +297,7 @@ $media_url = function ($path) {
                 <div class="content"><?php echo $section->content; ?></div>
                 <?php endif; ?>
                 <?php if ($section->section_type === 'cta'): ?>
-                <?php $cta_settings = json_decode((string) $section->settings_json, true); ?>
+                <?php $cta_settings = $section_settings($section->settings_json); ?>
                 <a class="section-link" href="<?php echo e(\Arr::get($cta_settings, 'button_url', Uri::create('pagina/contacto'))); ?>">
                     <?php echo e(\Arr::get($cta_settings, 'button_text', 'Contactar')); ?> <i class="bi bi-arrow-right"></i>
                 </a>
