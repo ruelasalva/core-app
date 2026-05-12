@@ -330,40 +330,9 @@ class Controller_Admin_Sat extends Controller_Adminbase
             # SE VALIDA QUE LA ESTRUCTURA EXISTA
             $this->assert_schema_ready();
 
-            # SE NORMALIZAN CAMPOS
-            $download_type = trim((string) \Arr::get($val, 'download_type', 'xml')) === 'metadata' ? 'metadata' : 'xml';
-            $direction = trim((string) \Arr::get($val, 'direction', 'received')) === 'issued' ? 'issued' : 'received';
-            $date_from = trim((string) \Arr::get($val, 'date_from', date('Y-m-d')));
-            $date_to = trim((string) \Arr::get($val, 'date_to', date('Y-m-d')));
-
             # SE CREA SOLICITUD LOCAL; EL TASK FUTURO HARA LA LLAMADA REAL AL SAT
-            $request = Model_Core_Sat_Sync_Request::forge([
-                'request_type' => $direction.'_'.$download_type,
-                'download_type' => $download_type,
-                'direction' => $direction,
-                'date_from' => $date_from,
-                'date_to' => $date_to,
-                'status' => 'pending',
-                'sat_request_id' => '',
-                'attempts' => 0,
-                'package_count' => 0,
-                'downloaded_count' => 0,
-                'processed_count' => 0,
-                'missing_count' => 0,
-                'cancelled_count' => 0,
-                'error_message' => '',
-            ]);
-            $request->save();
-
-            # SE AUDITA LA SOLICITUD
-            Helper_Core_Audit::log([
-                'module' => 'sat',
-                'action' => 'create_sync_request',
-                'entity_type' => 'sat_sync_request',
-                'entity_id' => (int) $request->id,
-                'summary' => 'Solicitud SAT '.$request->request_type.' '.$date_from.' a '.$date_to,
-                'new_values' => $request->to_array(),
-            ]);
+            $service = new Service_Core_Sat_Sync();
+            $service->create_request($val);
 
             # SE REGRESA LISTADO ACTUALIZADO
             return $this->json_response([
