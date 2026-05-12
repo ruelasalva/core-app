@@ -1,0 +1,33 @@
+{
+  "name": "core-app",
+  "version": "1.0.0",
+  "description": "* Version: 1.9 [under development] * [Website](https://fuelphp.com/) * [Release Documentation](https://fuelphp.com/docs) * [Release API browser](https://fuelphp.com/api) * [Development branch Documentation](https://fuelphp.com/dev-docs) * [Development branch API browser](https://fuelphp.com/dev-api) * [Support Forum](https://forums.fuelphp.com) for comments, discussion and community support",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "copy-assets": "xcopy /y node_modules\\admin-lte\\dist\\css\\adminlte.min.css public\\assets\\css\\ && xcopy /y node_modules\\admin-lte\\dist\\js\\adminlte.min.js public\\assets\\js\\ && xcopy /y node_modules\\jquery\\dist\\jquery.min.js public\\assets\\js\\ && xcopy /y node_modules\\bootstrap\\dist\\js\\bootstrap.bundle.min.js public\\assets\\js\\ && xcopy /y node_modules\\bootstrap-icons\\font\\* public\\assets\\css\\ && xcopy /y node_modules\\@fortawesome\\fontawesome-free\\css\\all.min.css public\\assets\\css\\ && xcopy /y node_modules\\@fortawesome\\fontawesome-free\\webfonts\\* public\\assets\\webfonts\\ && xcopy /y node_modules\\datatables.net-bs4\\js\\dataTables.bootstrap4.min.js public\\assets\\js\\ && xcopy /y node_modules\\datatables.net-bs4\\css\\dataTables.bootstrap4.min.css public\\assets\\css\\ && xcopy /y node_modules\\chart.js\\dist\\chart.umd.js public\\assets\\js\\ && xcopy /y node_modules\\vue\\dist\\vue.min.js public\\assets\\js\\",
+    "copy-editor-assets": "xcopy /e /i /y node_modules\\@ckeditor\\ckeditor5-build-classic\\build public\\assets\\vendor\\admin\\ckeditor5-build-classic && xcopy /e /i /y node_modules\\codemirror public\\assets\\vendor\\admin\\codemirror && xcopy /y node_modules\\grapesjs\\dist\\grapes.min.js public\\assets\\vendor\\admin\\grapesjs\\js\\ && xcopy /y node_modules\\grapesjs\\dist\\css\\grapes.min.css public\\assets\\vendor\\admin\\grapesjs\\css\\"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@ckeditor/ckeditor5-build-classic": "^41.4.2",
+    "@fortawesome/fontawesome-free": "^7.2.0",
+    "bootstrap": "^5.3.3",
+    "bootstrap-icons": "^1.13.1",
+    "chart.js": "^4.5.1",
+    "codemirror": "^5.65.20",
+    "datatables.net-bs4": "^2.3.8",
+    "grapesjs": "^0.22.14",
+    "grapesjs-blocks-basic": "^1.0.2",
+    "grapesjs-custom-code": "^1.0.2",
+    "grapesjs-navbar": "^1.0.2",
+    "grapesjs-plugin-forms": "^2.0.6",
+    "grapesjs-preset-webpage": "^1.0.3",
+    "grapesjs-tabs": "^1.0.6",
+    "grapesjs-touch": "^0.1.1",
+    "vue": "^2.7.16"
+  }
+}
