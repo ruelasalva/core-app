@@ -179,6 +179,8 @@
                 </div>
                 <?php endif; ?>
                 <div class="account-menu">
+                    <?php $cart_count = isset($cart_count) ? (int) $cart_count : 0; ?>
+                    <a href="<?php echo Uri::create('carrito'); ?>">Carrito<?php echo $cart_count > 0 ? ' ('.$cart_count.')' : ''; ?></a>
                     <?php $frontend_user = !empty($frontend_user) ? $frontend_user : ['logged_in' => false, 'name' => '']; ?>
                     <?php if (!empty($frontend_user['logged_in'])): ?>
                     <a href="<?php echo Uri::create('mi-cuenta'); ?>">Mi cuenta</a>

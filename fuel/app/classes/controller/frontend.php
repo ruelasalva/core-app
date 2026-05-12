@@ -253,6 +253,7 @@ class Controller_Frontend extends Controller_Template
             'logged_in' => (bool) $this->get_customer_party(),
             'name' => \Auth::check() ? \Auth::get_screen_name() : '',
         ];
+        $this->template->cart_count = class_exists('Helper_Core_Cart') ? Helper_Core_Cart::count() : 0;
         $this->template->set('cookie_banner', class_exists('Helper_Core_Legal')
             ? Helper_Core_Legal::render_cookie_banner()
             : '', false);

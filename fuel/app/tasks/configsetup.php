@@ -45,6 +45,7 @@ class Configsetup
             echo " - Catalogos SAT base\n";
             echo " - Catalogos base del ERP\n";
             echo " - Catalogos comerciales base\n";
+            echo " - Carrito frontend base\n";
             echo " - Terceros base\n";
             echo " - Portales externos base\n";
             echo " - Documentos y evidencias base\n";
@@ -147,6 +148,12 @@ class Configsetup
         }
 
         foreach (['core_commerce_price_lists', 'core_commerce_product_prices', 'core_commerce_customer_price_lists'] as $table) {
+            if (!\DBUtil::table_exists($table)) {
+                throw new \Exception('Primero ejecuta: php oil refine migrate');
+            }
+        }
+
+        foreach (['core_cart_carts', 'core_cart_items'] as $table) {
             if (!\DBUtil::table_exists($table)) {
                 throw new \Exception('Primero ejecuta: php oil refine migrate');
             }
@@ -1710,6 +1717,18 @@ class Configsetup
             'summary' => 'Como se cargan analytics, pixeles, tags y captcha desde el modulo Web sin pegarlos manualmente en plantillas.',
             'content' => '<h3>Objetivo</h3><p>El frontend no debe tener codigos de analytics, pixeles, tags o captcha pegados manualmente en las vistas. Todo debe venir del modulo <strong>Web</strong> y cargarse solo cuando la integracion este activa, configurada y permitida por consentimiento.</p><h4>Regla general</h4><ul><li><strong>Analytics</strong> y <strong>Tag Manager</strong> se cargan en el head si estan activos y el visitante acepto la categoria requerida.</li><li><strong>Pixeles</strong> y scripts publicos se cargan al inicio/cierre del body segun corresponda.</li><li><strong>reCAPTCHA</strong> solo aparece en registro si existe integracion activa con llave publica y secreto guardado.</li><li>Si no hay datos capturados o la integracion esta inactiva, el frontend no carga nada.</li></ul><h4>Como configurarlo</h4><ol><li>Entra a <strong>Admin &gt; Web</strong>.</li><li>Abre la integracion correspondiente: Google Analytics, Google Tag Manager, Meta Pixel o Google reCAPTCHA.</li><li>Captura la llave publica o ID en <strong>Llave publica / ID</strong>.</li><li>Para reCAPTCHA captura tambien el secreto en <strong>Valor secreto</strong>.</li><li>Activa <strong>Frontend</strong> y define si requiere consentimiento.</li><li>Guarda y prueba el sitio publico.</li></ol><h4>Privacidad</h4><p>Las integraciones con categorias <code>analytics</code>, <code>marketing</code> o <code>personalization</code> no deben cargarse hasta que el visitante acepte esa categoria en cookies. Las necesarias pueden cargarse sin consentimiento adicional cuando sean indispensables para seguridad, como captcha.</p><h4>Productos y tags</h4><p>Los productos pueden tener tags comerciales para navegacion y filtros. Eso no significa que carguen pixeles por si solos. Si mas adelante se requieren eventos de ecommerce, deben emitirse desde un helper o servicio de tracking que respete consentimiento y configuracion Web.</p>',
             'sort_order' => 14,
+            'active' => 1,
+            'created_at' => time(),
+            'updated_at' => time(),
+        ]);
+
+        $this->upsert_seed('core_knowledge_articles', 'code', 'frontend_carrito_base', [
+            'code' => 'frontend_carrito_base',
+            'title' => 'Carrito base del frontend',
+            'category' => 'Frontend',
+            'summary' => 'Funcionamiento del carrito publico, relacion con cliente, listas de precio y siguiente conversion a cotizacion o pedido.',
+            'content' => '<h3>Objetivo</h3><p>El carrito base permite que un cliente web agregue productos publicados y revise cantidades antes de convertirlos en cotizacion o pedido. Es una capa intermedia: no factura, no cobra y no reserva inventario.</p><h4>Como funciona</h4><ul><li>El carrito se identifica por token anonimo y, cuando el usuario inicia sesion, se vincula al usuario y tercero cliente.</li><li>Los productos se agregan desde la ficha del producto cuando el cliente puede ver precio.</li><li>El precio se toma de la lista de precios del tercero cliente; si no hay precio especifico, usa precio base del producto.</li><li>Las cantidades se pueden actualizar o eliminar desde <code>/carrito</code>.</li></ul><h4>Reglas actuales</h4><ul><li>No convierte todavia a pedido ni cotizacion; eso sera el siguiente paso.</li><li>No descuenta inventario porque aun no existe modulo de stock.</li><li>No procesa pagos; pagos y pasarelas deben conectarse despues desde Integraciones/Pagos.</li><li>No emite eventos ecommerce de analytics hasta que se defina tracking con consentimiento.</li></ul><h4>Siguiente crecimiento</h4><ol><li>Convertir carrito en cotizacion para revendedores o clientes que requieran autorizacion.</li><li>Convertir carrito en pedido para clientes autorizados.</li><li>Agregar direcciones fiscales/envio desde Mi cuenta.</li><li>Relacionar pedido con pagos, facturacion y documentos.</li></ol>',
+            'sort_order' => 15,
             'active' => 1,
             'created_at' => time(),
             'updated_at' => time(),

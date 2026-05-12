@@ -96,6 +96,31 @@ $tag_url = function ($slug) {
         color: #0f766e;
         font-weight: 800;
     }
+    .product-cart-form {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+        margin: -8px 0 24px;
+    }
+    .product-cart-form input {
+        width: 96px;
+        min-height: 42px;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        padding: 8px 10px;
+        font: inherit;
+    }
+    .product-cart-form button {
+        min-height: 42px;
+        border: 1px solid #0f766e;
+        border-radius: 6px;
+        background: #0f766e;
+        color: #fff;
+        padding: 9px 16px;
+        font-weight: 800;
+        cursor: pointer;
+    }
     .product-description {
         padding-top: 22px;
         border-top: 1px solid #dde3ea;
@@ -165,6 +190,11 @@ $tag_url = function ($slug) {
         <div class="product-price">
             <?php echo e($product['currency_code']); ?> <?php echo number_format((float) $product['price'], 2); ?>
         </div>
+        <?php echo Form::open(['action' => 'carrito/agregar', 'method' => 'post', 'class' => 'product-cart-form']); ?>
+            <?php echo Form::hidden('product_id', (int) $product['id']); ?>
+            <?php echo Form::input('quantity', 1, ['type' => 'number', 'min' => '1', 'step' => '1']); ?>
+            <button type="submit">Agregar al carrito</button>
+        <?php echo Form::close(); ?>
         <?php else: ?>
         <div class="product-login-price">
             <a href="<?php echo Uri::create('acceso'); ?>">Inicia sesion</a> o <a href="<?php echo Uri::create('registro'); ?>">crea tu cuenta</a> para consultar precio y comprar.

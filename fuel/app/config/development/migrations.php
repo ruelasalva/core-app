@@ -27,6 +27,7 @@ return array (
         21 => '022_enhance_core_sat_cfdi_validation',
         22 => '023_enhance_core_audit_logs',
         23 => '024_create_core_calendar_tables',
+        24 => '025_create_core_cart_tables',
       ),
     ),
     'module' => array(    
