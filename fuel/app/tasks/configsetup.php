@@ -112,6 +112,10 @@ class Configsetup
             }
         }
 
+        if (!\DBUtil::field_exists('core_sat_cfdi', ['missing_xml', 'last_validated_at', 'sat_status_code'])) {
+            throw new \Exception('Primero ejecuta: php oil refine migrate');
+        }
+
         foreach (['core_sat_payment_forms', 'core_sat_payment_methods', 'core_sat_cfdi_uses', 'core_sat_tax_regimes', 'core_sat_unit_keys', 'core_sat_taxes'] as $table) {
             if (!\DBUtil::table_exists($table)) {
                 throw new \Exception('Primero ejecuta: php oil refine migrate');
@@ -1675,6 +1679,18 @@ class Configsetup
             'summary' => 'Manual base para crear facturas, capturar conceptos, calcular importes y preparar timbrado futuro.',
             'content' => '<h3>Objetivo</h3><p>Facturacion administra el documento operativo antes del timbrado. SAT conserva catalogos, credenciales y CFDI fiscales; Facturacion prepara tercero, conceptos, importes, uso CFDI, forma y metodo de pago.</p><h4>Crear una factura</h4><ol><li>Entra a <strong>Admin &gt; Facturacion</strong>.</li><li>Presiona <strong>Nueva factura</strong>.</li><li>Selecciona tipo: venta, compra, nota de credito o complemento de pago.</li><li>Selecciona tercero, fechas, moneda, condicion de pago y datos SAT.</li><li>Guarda la factura. El sistema genera folio interno <code>FAC-AAAAMMDD-00001</code>.</li></ol><h4>Agregar conceptos</h4><ol><li>Selecciona la factura.</li><li>Presiona <strong>Concepto</strong>.</li><li>Selecciona producto o captura concepto manual.</li><li>Captura cantidad, precio, descuento, unidad SAT, clave producto SAT y tasa de impuesto.</li><li>Guarda. El sistema recalcula subtotal, impuestos, retenciones, total y saldo.</li></ol><h4>Relacion con otros modulos</h4><ul><li><strong>Terceros</strong> aporta cliente/proveedor, RFC, regimen fiscal y uso CFDI sugerido.</li><li><strong>Catalogos</strong> aporta monedas, condiciones de pago, unidades e impuestos.</li><li><strong>SAT</strong> aporta catalogos fiscales, CFDI final y credenciales.</li><li><strong>Pagos y Bancos</strong> debera liquidar facturas por asignaciones.</li><li><strong>Documentos</strong> debera almacenar XML/PDF y evidencias relacionadas.</li></ul><h4>Reglas de seguridad</h4><ul><li>No timbrar sin validar credenciales CSD y proveedor PAC.</li><li>No guardar secretos fiscales en facturas.</li><li>Todo cambio de factura o concepto debe quedar auditado.</li><li>El estado <strong>Lista para timbrar</strong> no significa CFDI emitido; solo indica que esta lista para conectar el proceso fiscal.</li></ul>',
             'sort_order' => 53,
+            'active' => 1,
+            'created_at' => time(),
+            'updated_at' => time(),
+        ]);
+
+        $this->upsert_seed('core_knowledge_articles', 'code', 'sat_cfdi_descarga_validacion', [
+            'code' => 'sat_cfdi_descarga_validacion',
+            'title' => 'SAT CFDI: descarga, metadata y validacion',
+            'category' => 'SAT',
+            'summary' => 'Base conceptual para usar SAT como auditor fiscal: XML descargados, metadata, faltantes, cancelaciones y validacion SOAP.',
+            'content' => '<h3>Objetivo</h3><p>El modulo SAT/CFDI no es donde se captura una factura operativa. Su funcion es comprobar informacion fiscal contra el SAT: descargar XML, procesar metadata, detectar CFDI faltantes, validar vigencia/cancelacion y alimentar alertas.</p><h4>Flujo recomendado</h4><ol><li><strong>Solicitar XML</strong>: crea una solicitud para recibidos o emitidos en un rango de fechas.</li><li><strong>Verificar solicitud</strong>: consulta si el SAT ya preparo paquetes.</li><li><strong>Descargar paquetes</strong>: guarda ZIP/XML en una ruta controlada.</li><li><strong>Importar CFDI</strong>: parsea XML y crea o actualiza <code>core_sat_cfdi</code>.</li><li><strong>Solicitar metadata</strong>: descarga metadatos para comparar contra lo que si tiene XML.</li><li><strong>Comparar</strong>: marca CFDI sin XML con <code>missing_xml = 1</code>.</li><li><strong>Validar SOAP</strong>: consulta estado vigente/cancelado y actualiza <code>sat_status</code>, <code>sat_status_code</code>, <code>last_validated_at</code> y <code>cancelled_at</code>.</li></ol><h4>Reglas importantes</h4><ul><li>Metadata no debe sobrescribir un XML existente; solo complementa o detecta faltantes.</li><li>XML y metadata deben coexistir sin duplicar UUID.</li><li>Las solicitudes SAT deben auditarse.</li><li>No guardar certificados ni llaves en rutas publicas.</li><li>La conexion real con SAT se implementara mediante servicio aislado y cron, no desde la vista.</li></ul><h4>Relacion con Facturacion</h4><p><strong>Facturacion</strong> prepara documentos operativos. <strong>SAT/CFDI</strong> comprueba documentos fiscales reales descargados o validados contra SAT. Cuando exista timbrado/PAC, ambos se relacionaran por UUID o <code>cfdi_id</code>, pero no deben mezclarse.</p>',
+            'sort_order' => 54,
             'active' => 1,
             'created_at' => time(),
             'updated_at' => time(),

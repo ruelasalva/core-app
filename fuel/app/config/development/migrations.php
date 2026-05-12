@@ -24,6 +24,7 @@ return array (
         18 => '019_create_core_integration_audit_tables',
         19 => '020_create_core_payment_bank_tables',
         20 => '021_create_core_billing_tables',
+        21 => '022_enhance_core_sat_cfdi_validation',
       ),
     ),
     'module' => array(    

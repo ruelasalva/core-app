@@ -76,6 +76,7 @@ class Controller_Admin_Sat extends Controller_Adminbase
                 'credentials' => $this->get_credentials(),
                 'stats' => $this->get_stats(),
                 'requests' => $this->get_recent_requests(),
+                'cfdi_alerts' => $this->get_cfdi_alerts(),
             ]);
         } catch (\Exception $e) {
             \Log::error('Error cargando SAT: '.$e->getMessage());
@@ -310,6 +311,73 @@ class Controller_Admin_Sat extends Controller_Adminbase
     }
 
     /**
+     * SAVE REQUEST
+     *
+     * REGISTRA UNA SOLICITUD SAT PENDIENTE PARA XML O METADATA
+     *
+     * @access  public
+     * @return  Response
+     */
+    public function action_save_request()
+    {
+        # VALIDAR PERMISO PARA EDITAR
+        $this->require_access('sat.access[edit]');
+
+        # SE OBTIENE PAYLOAD JSON
+        $val = (array) \Input::json();
+
+        try {
+            # SE VALIDA QUE LA ESTRUCTURA EXISTA
+            $this->assert_schema_ready();
+
+            # SE NORMALIZAN CAMPOS
+            $download_type = trim((string) \Arr::get($val, 'download_type', 'xml')) === 'metadata' ? 'metadata' : 'xml';
+            $direction = trim((string) \Arr::get($val, 'direction', 'received')) === 'issued' ? 'issued' : 'received';
+            $date_from = trim((string) \Arr::get($val, 'date_from', date('Y-m-d')));
+            $date_to = trim((string) \Arr::get($val, 'date_to', date('Y-m-d')));
+
+            # SE CREA SOLICITUD LOCAL; EL TASK FUTURO HARA LA LLAMADA REAL AL SAT
+            $request = Model_Core_Sat_Sync_Request::forge([
+                'request_type' => $direction.'_'.$download_type,
+                'download_type' => $download_type,
+                'direction' => $direction,
+                'date_from' => $date_from,
+                'date_to' => $date_to,
+                'status' => 'pending',
+                'sat_request_id' => '',
+                'attempts' => 0,
+                'package_count' => 0,
+                'downloaded_count' => 0,
+                'processed_count' => 0,
+                'missing_count' => 0,
+                'cancelled_count' => 0,
+                'error_message' => '',
+            ]);
+            $request->save();
+
+            # SE AUDITA LA SOLICITUD
+            Helper_Core_Audit::log([
+                'module' => 'sat',
+                'action' => 'create_sync_request',
+                'entity_type' => 'sat_sync_request',
+                'entity_id' => (int) $request->id,
+                'summary' => 'Solicitud SAT '.$request->request_type.' '.$date_from.' a '.$date_to,
+                'new_values' => $request->to_array(),
+            ]);
+
+            # SE REGRESA LISTADO ACTUALIZADO
+            return $this->json_response([
+                'status' => 'ok',
+                'requests' => $this->get_recent_requests(),
+                'stats' => $this->get_stats(),
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error creando solicitud SAT: '.$e->getMessage());
+            return $this->json_response(['error' => 'No se pudo crear la solicitud SAT.'], 400);
+        }
+    }
+
+    /**
      * GET CONFIG
      *
      * FORMATEA CONFIGURACION SAT PARA LA VISTA
@@ -381,7 +449,47 @@ class Controller_Admin_Sat extends Controller_Adminbase
             'requests' => (int) \DB::count_records('core_sat_sync_requests'),
             'packages' => (int) \DB::count_records('core_sat_packages'),
             'credentials' => (int) \DB::count_records('core_sat_credentials'),
+            'missing_xml' => $this->field_exists('core_sat_cfdi', 'missing_xml') ? (int) \DB::select()->from('core_sat_cfdi')->where('missing_xml', '=', 1)->execute()->count() : 0,
+            'cancelled' => (int) \DB::select()->from('core_sat_cfdi')->where('sat_status', '=', 'cancelado')->execute()->count(),
+            'unvalidated' => $this->field_exists('core_sat_cfdi', 'last_validated_at') ? (int) \DB::select()->from('core_sat_cfdi')->where('last_validated_at', '=', 0)->execute()->count() : 0,
         ];
+    }
+
+    /**
+     * GET CFDI ALERTS
+     *
+     * OBTIENE CFDI QUE REQUIEREN REVISION FISCAL
+     *
+     * @access  protected
+     * @return  Array
+     */
+    protected function get_cfdi_alerts()
+    {
+        # SI AUN NO EXISTE LA MIGRACION NUEVA SE REGRESA VACIO
+        if (!$this->field_exists('core_sat_cfdi', 'missing_xml')) {
+            return [];
+        }
+
+        # SE CONSULTAN ALERTAS PRINCIPALES
+        $rows = \DB::select('id', 'uuid', 'direction', 'emitter_rfc', 'receiver_rfc', 'total', 'sat_status', 'origin', 'xml_path', 'missing_xml', 'last_validated_at')
+            ->from('core_sat_cfdi')
+            ->where_open()
+                ->where('missing_xml', '=', 1)
+                ->or_where('sat_status', '=', 'cancelado')
+                ->or_where('last_validated_at', '=', 0)
+            ->where_close()
+            ->order_by('id', 'desc')
+            ->limit(20)
+            ->execute();
+
+        # SE FORMATEA RESPUESTA
+        $items = [];
+        foreach ($rows as $row) {
+            $row['last_validated_at'] = $row['last_validated_at'] ? date('d/m/Y H:i', $row['last_validated_at']) : 'Sin validar';
+            $items[] = $row;
+        }
+
+        return $items;
     }
 
     /**
@@ -406,10 +514,16 @@ class Controller_Admin_Sat extends Controller_Adminbase
             $items[] = [
                 'id' => (int) $request->id,
                 'request_type' => (string) $request->request_type,
+                'download_type' => isset($request->download_type) ? (string) $request->download_type : 'xml',
+                'direction' => isset($request->direction) ? (string) $request->direction : '',
                 'date_from' => (string) $request->date_from,
                 'date_to' => (string) $request->date_to,
                 'status' => (string) $request->status,
+                'package_count' => isset($request->package_count) ? (int) $request->package_count : 0,
+                'downloaded_count' => isset($request->downloaded_count) ? (int) $request->downloaded_count : 0,
                 'processed_count' => (int) $request->processed_count,
+                'missing_count' => isset($request->missing_count) ? (int) $request->missing_count : 0,
+                'cancelled_count' => isset($request->cancelled_count) ? (int) $request->cancelled_count : 0,
                 'created_at' => $request->created_at ? date('d/m/Y H:i', $request->created_at) : '',
             ];
         }
@@ -566,11 +680,16 @@ class Controller_Admin_Sat extends Controller_Adminbase
     protected function assert_schema_ready()
     {
         # SE VERIFICA CADA TABLA REQUERIDA
-        foreach (['core_sat_config', 'core_sat_credentials', 'core_sat_sync_requests', 'core_sat_cfdi'] as $table) {
+        foreach (['core_sat_config', 'core_sat_credentials', 'core_sat_sync_requests', 'core_sat_packages', 'core_sat_cfdi'] as $table) {
             if (!\DBUtil::table_exists($table)) {
                 throw new \RuntimeException('Falta ejecutar migraciones SAT.');
             }
         }
+    }
+
+    protected function field_exists($table, $field)
+    {
+        return \DBUtil::field_exists($table, [$field]);
     }
 
     /**
