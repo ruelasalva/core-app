@@ -363,6 +363,9 @@
 
 <?php echo Asset::js('adminlte.min.js'); ?>
 <?php echo Asset::js('chart.umd.js'); ?>
+<?php if (in_array((string) Uri::segment(2), ['', 'calendar'])): ?>
+<script src="<?php echo Uri::base(false); ?>assets/vendor/admin/fullcalendar/index.global.min.js"></script>
+<?php endif; ?>
 <?php if (in_array(Uri::segment(2), ['frontend', 'help'])): ?>
 <script src="<?php echo Uri::base(false); ?>assets/vendor/admin/ckeditor5-build-classic/ckeditor.js"></script>
 <script src="<?php echo Uri::base(false); ?>assets/vendor/admin/ckeditor5-build-classic/translations/es.js"></script>

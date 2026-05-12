@@ -6,7 +6,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "copy-assets": "xcopy /y node_modules\\admin-lte\\dist\\css\\adminlte.min.css public\\assets\\css\\ && xcopy /y node_modules\\admin-lte\\dist\\js\\adminlte.min.js public\\assets\\js\\ && xcopy /y node_modules\\jquery\\dist\\jquery.min.js public\\assets\\js\\ && xcopy /y node_modules\\bootstrap\\dist\\js\\bootstrap.bundle.min.js public\\assets\\js\\ && xcopy /y node_modules\\bootstrap-icons\\font\\* public\\assets\\css\\ && xcopy /y node_modules\\@fortawesome\\fontawesome-free\\css\\all.min.css public\\assets\\css\\ && xcopy /y node_modules\\@fortawesome\\fontawesome-free\\webfonts\\* public\\assets\\webfonts\\ && xcopy /y node_modules\\datatables.net-bs4\\js\\dataTables.bootstrap4.min.js public\\assets\\js\\ && xcopy /y node_modules\\datatables.net-bs4\\css\\dataTables.bootstrap4.min.css public\\assets\\css\\ && xcopy /y node_modules\\chart.js\\dist\\chart.umd.js public\\assets\\js\\ && xcopy /y node_modules\\vue\\dist\\vue.min.js public\\assets\\js\\",
-    "copy-editor-assets": "xcopy /e /i /y node_modules\\@ckeditor\\ckeditor5-build-classic\\build public\\assets\\vendor\\admin\\ckeditor5-build-classic && xcopy /e /i /y node_modules\\codemirror public\\assets\\vendor\\admin\\codemirror && xcopy /y node_modules\\grapesjs\\dist\\grapes.min.js public\\assets\\vendor\\admin\\grapesjs\\js\\ && xcopy /y node_modules\\grapesjs\\dist\\css\\grapes.min.css public\\assets\\vendor\\admin\\grapesjs\\css\\"
+    "copy-editor-assets": "xcopy /e /i /y node_modules\\@ckeditor\\ckeditor5-build-classic\\build public\\assets\\vendor\\admin\\ckeditor5-build-classic && xcopy /e /i /y node_modules\\codemirror public\\assets\\vendor\\admin\\codemirror && xcopy /y node_modules\\grapesjs\\dist\\grapes.min.js public\\assets\\vendor\\admin\\grapesjs\\js\\ && xcopy /y node_modules\\grapesjs\\dist\\css\\grapes.min.css public\\assets\\vendor\\admin\\grapesjs\\css\\",
+    "copy-calendar-assets": "xcopy /y node_modules\\fullcalendar\\index.global.min.js public\\assets\\vendor\\admin\\fullcalendar\\"
   },
   "keywords": [],
   "author": "",
@@ -28,6 +29,7 @@
     "grapesjs-preset-webpage": "^1.0.3",
     "grapesjs-tabs": "^1.0.6",
     "grapesjs-touch": "^0.1.1",
+    "fullcalendar": "^6.1.15",
     "vue": "^2.7.16"
   }
 }

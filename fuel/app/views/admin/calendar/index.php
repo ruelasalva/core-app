@@ -46,23 +46,7 @@
                 </div>
 
                 <div class="col-lg-8">
-                    <div class="calendar-grid">
-                        <div v-for="day in agendaDays" :key="day.key" class="calendar-day">
-                            <div class="calendar-day-header">
-                                <strong>{{ day.label }}</strong>
-                                <span class="text-muted">{{ day.short }}</span>
-                            </div>
-                            <div v-for="event in day.events" :key="event.id" class="calendar-event" :style="{ borderLeftColor: event.color }" @click="openEvent(event)">
-                                <div class="d-flex justify-content-between align-items-start">
-                                    <strong>{{ event.title }}</strong>
-                                    <span class="badge badge-light">{{ typeLabel(event.event_type) }}</span>
-                                </div>
-                                <div class="text-muted small">{{ event.start_label }} - {{ event.end_label }}</div>
-                                <div class="small">{{ resourceLabel(event.resource_id) || userLabel(event.assigned_user_id) || 'General' }}</div>
-                            </div>
-                            <div v-if="day.events.length === 0" class="text-muted small py-2">Sin eventos</div>
-                        </div>
-                    </div>
+                    <div id="calendar-full" class="core-fullcalendar"></div>
                 </div>
             </div>
         </div>
@@ -128,12 +112,15 @@
 </div>
 
 <style>
-    .calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(130px, 1fr)); gap: .75rem; }
-    .calendar-day { border: 1px solid #dee2e6; border-radius: .25rem; min-height: 180px; padding: .75rem; background: #fff; }
-    .calendar-day-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #edf0f3; padding-bottom: .35rem; margin-bottom: .5rem; }
-    .calendar-event { border-left: 4px solid #007bff; background: #f8f9fa; padding: .5rem; margin-bottom: .5rem; cursor: pointer; }
-    @media (max-width: 991.98px) { .calendar-grid { grid-template-columns: repeat(2, minmax(140px, 1fr)); } }
-    @media (max-width: 575.98px) { .calendar-grid { grid-template-columns: 1fr; } }
+    .core-fullcalendar { min-height: 620px; }
+    .fc .fc-toolbar-title { font-size: 1.2rem; }
+    .fc .fc-button-primary { background-color: #007bff; border-color: #007bff; }
+    .fc .fc-daygrid-event { cursor: pointer; }
+    .fc .fc-event-title { font-weight: 600; }
+    @media (max-width: 767.98px) {
+        .core-fullcalendar { min-height: 520px; }
+        .fc .fc-toolbar { align-items: flex-start; flex-direction: column; gap: .5rem; }
+    }
 </style>
 
 <script>
@@ -154,25 +141,8 @@ window.onload = function() {
                 assigned_user_id: 0
             },
             eventForm: {},
-            resourceForm: {}
-        },
-        computed: {
-            agendaDays() {
-                const days = [];
-                const start = new Date(this.filters.date_from + 'T00:00:00');
-                for (let i = 0; i < 7; i++) {
-                    const day = new Date(start.getTime());
-                    day.setDate(start.getDate() + i);
-                    const key = day.toISOString().slice(0, 10);
-                    days.push({
-                        key: key,
-                        label: day.toLocaleDateString('es-MX', { weekday: 'short' }),
-                        short: day.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit' }),
-                        events: this.events.filter(event => event.day_key === key)
-                    });
-                }
-                return days;
-            }
+            resourceForm: {},
+            calendar: null
         },
         mounted() { this.loadData(); },
         methods: {
@@ -185,7 +155,46 @@ window.onload = function() {
                     this.resources = data.resources || [];
                     this.options = data.options || this.options;
                     this.stats = data.stats || {};
+                    this.$nextTick(this.renderCalendar);
                 });
+            },
+            renderCalendar() {
+                const element = document.getElementById('calendar-full');
+                if (!element || typeof FullCalendar === 'undefined') { return; }
+                const source = this.events.map(event => ({
+                    id: event.id,
+                    title: event.title,
+                    start: event.start_iso,
+                    end: event.end_iso,
+                    color: event.color,
+                    allDay: event.all_day == 1,
+                    extendedProps: { coreEvent: event }
+                }));
+                if (!this.calendar) {
+                    this.calendar = new FullCalendar.Calendar(element, {
+                        locale: 'es',
+                        initialView: 'dayGridMonth',
+                        height: 'auto',
+                        selectable: true,
+                        nowIndicator: true,
+                        headerToolbar: {
+                            left: 'prev,next today',
+                            center: 'title',
+                            right: 'dayGridMonth,timeGridWeek,timeGridDay,listWeek'
+                        },
+                        buttonText: { today: 'Hoy', month: 'Mes', week: 'Semana', day: 'Dia', list: 'Lista' },
+                        dateClick: (info) => {
+                            const start = info.allDay ? info.dateStr + 'T09:00' : info.dateStr.slice(0, 16);
+                            const endDate = new Date(start);
+                            endDate.setHours(endDate.getHours() + 1);
+                            this.openEvent({ start_input: start, end_input: this.inputDateTime(endDate) });
+                        },
+                        eventClick: (info) => this.openEvent(info.event.extendedProps.coreEvent)
+                    });
+                    this.calendar.render();
+                }
+                this.calendar.removeAllEvents();
+                this.calendar.addEventSource(source);
             },
             openEvent(event) {
                 const now = new Date();
@@ -202,8 +211,8 @@ window.onload = function() {
                     organizer_user_id: 0,
                     related_entity_type: '',
                     related_entity_id: 0,
-                    start_at: now.toISOString().slice(0, 16),
-                    end_at: end.toISOString().slice(0, 16),
+                    start_at: this.inputDateTime(now),
+                    end_at: this.inputDateTime(end),
                     all_day: false,
                     status: 'scheduled',
                     visibility: 'internal',
@@ -224,6 +233,7 @@ window.onload = function() {
                     this.events = data.events || [];
                     this.stats = data.stats || this.stats;
                     this.hideModal('modal-event');
+                    this.$nextTick(this.renderCalendar);
                 });
             },
             saveResource() {
@@ -238,6 +248,10 @@ window.onload = function() {
             label(options, value) {
                 const found = (options || []).find(option => String(option.value) === String(value));
                 return found ? found.label : '';
+            },
+            inputDateTime(date) {
+                const pad = value => String(value).padStart(2, '0');
+                return date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate()) + 'T' + pad(date.getHours()) + ':' + pad(date.getMinutes());
             },
             typeLabel(value) { return this.label(this.options.types, value) || value; },
             statusLabel(value) { return this.label(this.options.statuses, value) || value; },
