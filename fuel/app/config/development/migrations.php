@@ -21,6 +21,7 @@ return array (
         15 => '016_create_core_portal_access_tables',
         16 => '017_create_core_document_tables',
         17 => '018_create_core_helpdesk_tables',
+        18 => '019_create_core_integration_audit_tables',
       ),
     ),
     'module' => array(    

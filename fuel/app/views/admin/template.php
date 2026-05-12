@@ -106,6 +106,24 @@
         </li>
         <?php endif; ?>
 
+        <?php if ($menu['integrations']): ?>
+        <li class="nav-item">
+            <a href="<?php echo Uri::create('admin/integrations'); ?>" class="nav-link <?php echo (Uri::segment(2) == 'integrations') ? 'active' : ''; ?>">
+                <i class="nav-icon bi bi-plug"></i>
+                <p>Integraciones</p>
+            </a>
+        </li>
+        <?php endif; ?>
+
+        <?php if ($menu['audit']): ?>
+        <li class="nav-item">
+            <a href="<?php echo Uri::create('admin/audit'); ?>" class="nav-link <?php echo (Uri::segment(2) == 'audit') ? 'active' : ''; ?>">
+                <i class="nav-icon bi bi-shield-check"></i>
+                <p>Auditoria</p>
+            </a>
+        </li>
+        <?php endif; ?>
+
         <?php if ($menu['sat']): ?>
         <li class="nav-item">
             <a href="<?php echo Uri::create('admin/sat'); ?>" class="nav-link <?php echo (Uri::segment(2) == 'sat') ? 'active' : ''; ?>">

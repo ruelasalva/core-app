@@ -13,6 +13,7 @@ class Configsetup
             $this->seed_web_integrations();
             $this->seed_legal_documents();
             $this->seed_communications();
+            $this->seed_integrations();
             $this->seed_sat();
             $this->seed_sat_catalogs();
             $this->seed_catalogs();
@@ -34,6 +35,7 @@ class Configsetup
             echo " - Integraciones web iniciales\n";
             echo " - Documentos legales base\n";
             echo " - Comunicaciones base\n";
+            echo " - Integraciones y auditoria base\n";
             echo " - SAT base\n";
             echo " - Catalogos SAT base\n";
             echo " - Catalogos base del ERP\n";
@@ -77,6 +79,12 @@ class Configsetup
         }
 
         foreach (['core_notifications', 'core_notification_recipients', 'core_email_roles', 'core_email_templates', 'core_email_queue'] as $table) {
+            if (!\DBUtil::table_exists($table)) {
+                throw new \Exception('Primero ejecuta: php oil refine migrate');
+            }
+        }
+
+        foreach (['core_integration_providers', 'core_integration_connections', 'core_integration_webhooks', 'core_integration_events', 'core_audit_logs'] as $table) {
             if (!\DBUtil::table_exists($table)) {
                 throw new \Exception('Primero ejecuta: php oil refine migrate');
             }
@@ -351,6 +359,46 @@ class Configsetup
             'created_at' => time(),
             'updated_at' => time(),
         ]);
+    }
+
+    /**
+     * SEED INTEGRATIONS
+     *
+     * CREA PROVEEDORES BASE PARA INTEGRACIONES EXTERNAS SIN CREDENCIALES REALES
+     *
+     * @access  protected
+     * @return  Void
+     */
+    protected function seed_integrations()
+    {
+        $providers = [
+            ['mercado_pago', 'Mercado Pago', 'payment_gateway', 'Pasarela de pago. Requiere revisar SDK/API actual del proveedor antes de activar.', 'https://www.mercadopago.com.mx/developers', 'Adapter_Payment_MercadoPago', 1, 10],
+            ['stripe', 'Stripe', 'payment_gateway', 'Pasarela de pago internacional. Requiere SDK/API oficial vigente.', 'https://stripe.com/docs', 'Adapter_Payment_Stripe', 1, 20],
+            ['paypal', 'PayPal', 'payment_gateway', 'Pasarela de pago. Requiere credenciales REST y configuracion de webhooks.', 'https://developer.paypal.com/', 'Adapter_Payment_PayPal', 1, 30],
+            ['openpay', 'Openpay', 'payment_gateway', 'Pasarela de pago usada en Mexico. Requiere validar SDK/API vigente.', 'https://www.openpay.mx/docs/', 'Adapter_Payment_Openpay', 1, 40],
+            ['conekta', 'Conekta', 'payment_gateway', 'Pasarela de pago. Requiere validar SDK/API vigente.', 'https://developers.conekta.com/', 'Adapter_Payment_Conekta', 1, 50],
+            ['bank_transfer', 'Transferencia bancaria', 'payment_manual', 'Metodo manual para pagos por transferencia y conciliacion bancaria.', '', '', 0, 60],
+            ['sat', 'SAT', 'tax_authority', 'Integracion fiscal para CFDI, descargas, validaciones y eventos fiscales.', 'https://www.sat.gob.mx/', 'Adapter_Tax_Sat', 1, 70],
+            ['whatsapp_business', 'WhatsApp Business', 'messaging', 'Mensajeria y notificaciones externas. Requiere proveedor/API autorizado.', 'https://developers.facebook.com/docs/whatsapp', 'Adapter_Messaging_WhatsApp', 1, 80],
+        ];
+
+        foreach ($providers as $provider) {
+            $this->upsert_seed('core_integration_providers', 'code', $provider[0], [
+                'code' => $provider[0],
+                'name' => $provider[1],
+                'category' => $provider[2],
+                'description' => $provider[3],
+                'website_url' => $provider[4],
+                'adapter_class' => $provider[5],
+                'requires_install' => $provider[6],
+                'install_notes' => 'No activar sin revisar documentacion oficial vigente, ambiente sandbox, webhooks y manejo de errores.',
+                'config_schema_json' => '{"environment":"sandbox|production","webhooks":true,"requires_secret":true}',
+                'sort_order' => $provider[7],
+                'active' => 1,
+                'created_at' => time(),
+                'updated_at' => time(),
+            ]);
+        }
     }
 
     protected function seed_sat()
@@ -1552,6 +1600,30 @@ class Configsetup
             'updated_at' => time(),
         ]);
 
+        $this->upsert_seed('core_knowledge_articles', 'code', 'integraciones_pasarelas_seguras', [
+            'code' => 'integraciones_pasarelas_seguras',
+            'title' => 'Integraciones, pasarelas y proveedores externos',
+            'category' => 'Integraciones',
+            'summary' => 'Base para configurar pasarelas de pago, APIs externas, webhooks y proveedores sin amarrar el ERP a un solo servicio.',
+            'content' => '<h3>Objetivo</h3><p>El modulo Integraciones prepara Core-App para conectarse con pasarelas de pago, SAT, mensajeria, paqueterias y APIs externas sin mezclar credenciales ni logica de terceros dentro de los modulos operativos.</p><h4>Conceptos</h4><ul><li><strong>Proveedor</strong>: servicio externo como Mercado Pago, Stripe, PayPal, Openpay, Conekta, SAT o WhatsApp Business.</li><li><strong>Conexion</strong>: credenciales y configuracion por ambiente sandbox o produccion.</li><li><strong>Webhook</strong>: endpoint por donde el proveedor avisa eventos.</li><li><strong>Evento</strong>: payload recibido o enviado a una integracion.</li><li><strong>Adaptador</strong>: clase de codigo que implementa la comunicacion real con el proveedor.</li></ul><h4>Reglas de seguridad</h4><ul><li>No guardar credenciales en templates ni controladores de negocio.</li><li>Usar sandbox antes de produccion.</li><li>Validar firmas de webhooks cuando el proveedor lo permita.</li><li>No activar una pasarela sin revisar documentacion oficial vigente.</li><li>No exponer secretos en vistas, logs ni auditoria.</li></ul><h4>Como configurar</h4><ol><li>Entra a <strong>Admin &gt; Integraciones</strong>.</li><li>Valida que exista el proveedor.</li><li>Crea una conexion por ambiente.</li><li>Captura public key y secretos.</li><li>Configura JSON adicional si el adaptador lo requiere.</li><li>Activa la conexion solo cuando el adaptador este probado.</li></ol><h4>Regla de crecimiento</h4><p>Cada pasarela nueva debe tener proveedor, conexion, webhook/eventos, manual y adaptador aislado. Los modulos de bancos, pagos, CFDI o ventas deben consumir la capa de integraciones, no hablar directo con cada proveedor.</p>',
+            'sort_order' => 50,
+            'active' => 1,
+            'created_at' => time(),
+            'updated_at' => time(),
+        ]);
+
+        $this->upsert_seed('core_knowledge_articles', 'code', 'auditoria_funcional_core_app', [
+            'code' => 'auditoria_funcional_core_app',
+            'title' => 'Auditoria funcional del sistema',
+            'category' => 'Seguridad',
+            'summary' => 'Uso de auditoria para rastrear cambios relevantes antes de crear modulos criticos como bancos, CFDI, pagos y RRHH.',
+            'content' => '<h3>Objetivo</h3><p>Auditoria registra acciones funcionales importantes del ERP: quien hizo que, cuando, desde donde y sobre que entidad. No reemplaza los logs tecnicos; complementa la seguridad operativa.</p><h4>Que debe auditarse</h4><ul><li>Cambios de configuracion.</li><li>Integraciones y credenciales, sin exponer secretos.</li><li>Pagos, bancos y conciliaciones.</li><li>CFDI y eventos fiscales.</li><li>Usuarios, permisos y accesos.</li><li>Cambios de estados en flujos criticos.</li></ul><h4>Como consultar</h4><ol><li>Entra a <strong>Admin &gt; Auditoria</strong>.</li><li>Filtra por modulo o entidad.</li><li>Revisa usuario, accion, resumen, IP y fecha.</li></ol><h4>Regla de implementacion</h4><p>Cada modulo nuevo debe llamar a <code>Helper_Core_Audit::log()</code> cuando cree, edite, cambie estado, active, desactive o procese informacion sensible.</p>',
+            'sort_order' => 55,
+            'active' => 1,
+            'created_at' => time(),
+            'updated_at' => time(),
+        ]);
+
         $this->upsert_seed('core_knowledge_articles', 'code', 'crear_manuales_ayuda', [
             'code' => 'crear_manuales_ayuda',
             'title' => 'Como crear manuales de ayuda',
@@ -1608,6 +1680,8 @@ class Configsetup
             'web' => 'Gestion web, integraciones y privacidad',
             'legal' => 'Gestion legal, consentimientos y cookies',
             'communications' => 'Gestion de correos, eventos y notificaciones',
+            'integrations' => 'Gestion de proveedores externos, pasarelas, conexiones y webhooks',
+            'audit' => 'Consulta de auditoria funcional del sistema',
             'sat' => 'Gestion SAT, CFDI y sincronizacion fiscal',
             'catalogs' => 'Gestion de catalogos base del ERP',
             'commerce' => 'Gestion comercial, marcas, categorias y productos',
