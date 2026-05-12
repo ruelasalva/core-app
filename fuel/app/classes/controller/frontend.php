@@ -234,6 +234,10 @@ class Controller_Frontend extends Controller_Template
         $this->template->menu_items      = $this->get_menu_items('header');
         $this->template->footer_columns  = $this->get_footer_columns();
         $this->template->theme           = $this->get_active_theme();
+        $this->template->frontend_user   = [
+            'logged_in' => (bool) $this->get_customer_party(),
+            'name' => \Auth::check() ? \Auth::get_screen_name() : '',
+        ];
         $this->template->set('cookie_banner', class_exists('Helper_Core_Legal')
             ? Helper_Core_Legal::render_cookie_banner()
             : '', false);
@@ -381,7 +385,7 @@ class Controller_Frontend extends Controller_Template
     protected function get_featured_products()
     {
         # SE BUSCAN LOS PRODUCTOS PUBLICADOS PARA EL INICIO
-        return DB::select('id', 'sku', 'name', 'slug', 'short_description', 'currency_code', 'price', 'main_image_path')
+        $products = DB::select('id', 'sku', 'name', 'slug', 'short_description', 'currency_code', 'price', 'main_image_path')
             ->from('core_commerce_products')
             ->where('active', 1)
             ->where('published', 1)
@@ -394,6 +398,8 @@ class Controller_Frontend extends Controller_Template
             ->limit(8)
             ->execute()
             ->as_array();
+
+        return $this->apply_customer_prices($products);
     }
 
     /**
@@ -456,11 +462,13 @@ class Controller_Frontend extends Controller_Template
                 ->where('pt.tag_id', (int) $filters['tag_id']);
         }
 
-        return $query
+        $products = $query
             ->order_by('p.sort_order', 'asc')
             ->order_by('p.id', 'desc')
             ->execute()
             ->as_array();
+
+        return $this->apply_customer_prices($products);
     }
 
     /**
@@ -502,7 +510,12 @@ class Controller_Frontend extends Controller_Template
             ->execute()
             ->as_array();
 
-        return !empty($result[0]) ? $result[0] : null;
+        if (empty($result[0])) {
+            return null;
+        }
+
+        $priced = $this->apply_customer_prices([$result[0]]);
+        return !empty($priced[0]) ? $priced[0] : $result[0];
     }
 
     /**
@@ -544,5 +557,143 @@ class Controller_Frontend extends Controller_Template
             ->order_by('t.name', 'asc')
             ->execute()
             ->as_array();
+    }
+
+    /**
+     * GET CUSTOMER PARTY
+     *
+     * OBTIENE EL CLIENTE LOGUEADO EN FRONTEND SI EXISTE
+     *
+     * @access  protected
+     * @return  Model_Core_Party|null
+     */
+    protected function get_customer_party()
+    {
+        # SE VALIDA SESION Y VINCULO CON PORTAL CLIENTES
+        if (!\Auth::check()) {
+            return null;
+        }
+
+        $user_id_data = \Auth::get_user_id();
+        $user_id = isset($user_id_data[1]) ? (int) $user_id_data[1] : 0;
+        if ($user_id < 1) {
+            return null;
+        }
+
+        $link = Model_Core_Party_User_Link::query()
+            ->where('user_id', $user_id)
+            ->where('portal_code', 'clientes')
+            ->where('active', 1)
+            ->get_one();
+
+        return $link ? Model_Core_Party::find((int) $link->party_id) : null;
+    }
+
+    /**
+     * APPLY CUSTOMER PRICES
+     *
+     * APLICA LISTA DE PRECIOS DEL CLIENTE Y OCULTA PRECIOS SIN SESION
+     *
+     * @access  protected
+     * @return  Array
+     */
+    protected function apply_customer_prices(array $products)
+    {
+        # SIN CLIENTE NO SE MUESTRA PRECIO
+        $party = $this->get_customer_party();
+        if (!$party) {
+            foreach ($products as &$product) {
+                $product['can_view_price'] = false;
+            }
+            return $products;
+        }
+
+        # SE RESUELVE LISTA DE PRECIOS Y SE APLICA PRECIO ESPECIFICO SI EXISTE
+        $price_list_id = $this->customer_price_list_id($party);
+        foreach ($products as &$product) {
+            $product['can_view_price'] = true;
+            if ($price_list_id > 0) {
+                $price = $this->product_price_for_list((int) $product['id'], $price_list_id);
+                if ($price) {
+                    $product['price'] = $price['price'];
+                    $product['currency_code'] = $price['currency_code'];
+                }
+            }
+        }
+
+        return $products;
+    }
+
+    /**
+     * CUSTOMER PRICE LIST ID
+     *
+     * RESUELVE LISTA DE PRECIO PRINCIPAL PARA EL CLIENTE
+     *
+     * @access  protected
+     * @return  Int
+     */
+    protected function customer_price_list_id(Model_Core_Party $party)
+    {
+        # PRIORIDAD 1: LISTA DIRECTA DEL CLIENTE
+        if ((int) $party->price_list_id > 0) {
+            return (int) $party->price_list_id;
+        }
+
+        # PRIORIDAD 2: RELACION CLIENTE-LISTA
+        $link = \DB::select('price_list_id')
+            ->from('core_commerce_customer_price_lists')
+            ->where('customer_id', '=', (int) $party->id)
+            ->where('active', '=', 1)
+            ->execute()
+            ->current();
+        if ($link) {
+            return (int) $link['price_list_id'];
+        }
+
+        # PRIORIDAD 3: LISTA DEFAULT
+        $default = \DB::select('id')
+            ->from('core_commerce_price_lists')
+            ->where('active', '=', 1)
+            ->where('is_default', '=', 1)
+            ->order_by('priority', 'desc')
+            ->execute()
+            ->current();
+
+        return $default ? (int) $default['id'] : 0;
+    }
+
+    /**
+     * PRODUCT PRICE FOR LIST
+     *
+     * OBTIENE PRECIO VIGENTE PARA PRODUCTO Y LISTA
+     *
+     * @access  protected
+     * @return  Array|null
+     */
+    protected function product_price_for_list($product_id, $price_list_id)
+    {
+        # SE BUSCA PRECIO VIGENTE PARA CANTIDAD BASE
+        $today = date('Y-m-d');
+        $rows = \DB::select('price', 'currency_code', 'valid_from', 'valid_until')
+            ->from('core_commerce_product_prices')
+            ->where('product_id', '=', (int) $product_id)
+            ->where('price_list_id', '=', (int) $price_list_id)
+            ->where('active', '=', 1)
+            ->where('min_quantity', '<=', 1)
+            ->order_by('min_quantity', 'desc')
+            ->execute()
+            ->as_array();
+
+        foreach ($rows as $row) {
+            if (!empty($row['valid_from']) && $row['valid_from'] > $today) {
+                continue;
+            }
+            if (!empty($row['valid_until']) && $row['valid_until'] < $today) {
+                continue;
+            }
+            return $row;
+        }
+
+        return null;
     }
 }

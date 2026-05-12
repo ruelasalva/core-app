@@ -84,6 +84,18 @@ $tag_url = function ($slug) {
         font-size: 1.8rem;
         font-weight: 900;
     }
+    .product-login-price {
+        margin: 24px 0;
+        border: 1px solid #dde3ea;
+        border-radius: 8px;
+        background: #f8fafc;
+        padding: 16px;
+        color: #657084;
+    }
+    .product-login-price a {
+        color: #0f766e;
+        font-weight: 800;
+    }
     .product-description {
         padding-top: 22px;
         border-top: 1px solid #dde3ea;
@@ -149,9 +161,15 @@ $tag_url = function ($slug) {
         <p class="short"><?php echo e($product['short_description']); ?></p>
         <?php endif; ?>
 
+        <?php if (!empty($product['can_view_price'])): ?>
         <div class="product-price">
             <?php echo e($product['currency_code']); ?> <?php echo number_format((float) $product['price'], 2); ?>
         </div>
+        <?php else: ?>
+        <div class="product-login-price">
+            <a href="<?php echo Uri::create('acceso'); ?>">Inicia sesion</a> o <a href="<?php echo Uri::create('registro'); ?>">crea tu cuenta</a> para consultar precio y comprar.
+        </div>
+        <?php endif; ?>
 
         <?php if (!empty($product['description'])): ?>
         <div class="product-description">

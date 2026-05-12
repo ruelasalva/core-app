@@ -1679,6 +1679,18 @@ class Configsetup
             'updated_at' => time(),
         ]);
 
+        $this->upsert_seed('core_knowledge_articles', 'code', 'frontend_clientes_precios_privados', [
+            'code' => 'frontend_clientes_precios_privados',
+            'title' => 'Frontend, clientes y precios privados',
+            'category' => 'Frontend',
+            'summary' => 'Base del registro de clientes web, acceso publico, lista de precios y visibilidad de precios solo con sesion.',
+            'content' => '<h3>Objetivo</h3><p>El frontend publico permite navegar productos sin mostrar precios a visitantes anonimos. Para ver precios, el visitante debe crear una cuenta o iniciar sesion como cliente web.</p><h4>Flujo del cliente</h4><ol><li>El visitante entra a <code>/registro</code>.</li><li>Captura nombre, correo, telefono y contrasena.</li><li>El sistema crea un usuario OrmAuth en grupo <strong>Portal Externo</strong>.</li><li>Tambien crea un tercero tipo <strong>Cliente</strong>.</li><li>Se vincula usuario + cliente + portal <code>clientes</code> con alcance propio.</li><li>El cliente entra por <code>/acceso</code> y consulta precios en productos.</li></ol><h4>Precios</h4><ul><li>Sin sesion de cliente, el sitio muestra aviso para iniciar sesion.</li><li>Con sesion de cliente, se usa la lista de precios del tercero.</li><li>Si el producto tiene precio especifico para esa lista, se muestra ese precio.</li><li>Si no existe precio especifico, se muestra el precio base del producto.</li></ul><h4>Relacion con portales</h4><p>El registro publico no crea un administrador ni un socio. Crea el acceso con menos privilegios: portal <code>clientes</code>, rol <code>customer</code> y scope <code>own</code>. Mas adelante socios y revendedores deberan usar flujos controlados desde administracion.</p><h4>Siguiente crecimiento</h4><ul><li>Agregar carrito ligado a sesion y tercero.</li><li>Crear filtros profesionales por marca, categoria, tag, disponibilidad y atributos.</li><li>Permitir direcciones y datos fiscales desde Mi cuenta.</li><li>Convertir carrito en pedido/cotizacion segun tipo de cliente.</li></ul>',
+            'sort_order' => 12,
+            'active' => 1,
+            'created_at' => time(),
+            'updated_at' => time(),
+        ]);
+
         $this->upsert_seed('core_knowledge_articles', 'code', 'estructura_core_app_modulos', [
             'code' => 'estructura_core_app_modulos',
             'title' => 'Estructura actual de Core-App',

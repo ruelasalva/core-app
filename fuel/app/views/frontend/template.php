@@ -89,6 +89,23 @@
             font-size: .95rem;
         }
         .menu a:hover { color: var(--core-brand); }
+        .account-menu {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: var(--core-muted);
+            font-size: .92rem;
+        }
+        .account-menu a {
+            border: 1px solid var(--core-line);
+            border-radius: 6px;
+            padding: 7px 10px;
+        }
+        .account-menu a.primary {
+            border-color: var(--core-brand);
+            background: var(--core-brand);
+            color: #fff;
+        }
         .site-main { min-height: 62vh; }
         .site-footer {
             margin-top: 54px;
@@ -159,6 +176,16 @@
                     <?php endforeach; ?>
                 </div>
                 <?php endif; ?>
+                <div class="account-menu">
+                    <?php $frontend_user = !empty($frontend_user) ? $frontend_user : ['logged_in' => false, 'name' => '']; ?>
+                    <?php if (!empty($frontend_user['logged_in'])): ?>
+                    <a href="<?php echo Uri::create('mi-cuenta'); ?>">Mi cuenta</a>
+                    <a href="<?php echo Uri::create('salir-cuenta'); ?>">Salir</a>
+                    <?php else: ?>
+                    <a href="<?php echo Uri::create('acceso'); ?>">Entrar</a>
+                    <a class="primary" href="<?php echo Uri::create('registro'); ?>">Registrarse</a>
+                    <?php endif; ?>
+                </div>
             </nav>
         </div>
     </header>

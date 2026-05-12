@@ -93,6 +93,15 @@ $category_url = function ($slug) {
         font-weight: 800;
         color: #172033;
     }
+    .catalog-login-price {
+        margin-top: 14px;
+        color: #657084;
+        font-size: .92rem;
+    }
+    .catalog-login-price a {
+        color: #0f766e;
+        font-weight: 800;
+    }
     .empty-state {
         padding: 34px;
         border: 1px dashed #b8c4d1;
@@ -128,9 +137,15 @@ $category_url = function ($slug) {
                     <?php if (!empty($product['short_description'])): ?>
                     <p><?php echo e($product['short_description']); ?></p>
                     <?php endif; ?>
+                    <?php if (!empty($product['can_view_price'])): ?>
                     <div class="catalog-price">
                         <?php echo e($product['currency_code']); ?> <?php echo number_format((float) $product['price'], 2); ?>
                     </div>
+                    <?php else: ?>
+                    <div class="catalog-login-price">
+                        <a href="<?php echo Uri::create('acceso'); ?>">Inicia sesion</a> para ver precio.
+                    </div>
+                    <?php endif; ?>
                 </div>
             </a>
             <?php endforeach; ?>

@@ -35,6 +35,10 @@ return array(
 	// Ruta para el login (el que creamos anteriormente)
     'login' => 'auth/login',
 	'logout' => 'auth/logout',
+    'acceso' => 'account/login',
+    'registro' => 'account/register',
+    'mi-cuenta' => 'account/index',
+    'salir-cuenta' => 'account/logout',
     'clientes/login' => 'portal/auth/login/clientes',
     'clientes/logout' => 'portal/auth/logout/clientes',
     'clientes/helpdesk' => 'clientes/helpdesk',

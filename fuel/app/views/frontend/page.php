@@ -155,6 +155,15 @@ $media_url = function ($path) {
         color: #0f766e;
         font-weight: 800;
     }
+    .product-login-price {
+        margin-top: 12px;
+        color: #657084;
+        font-size: .92rem;
+    }
+    .product-login-price a {
+        color: #0f766e;
+        font-weight: 800;
+    }
     .feature-item,
     .download-item,
     .brand-item {
@@ -346,9 +355,15 @@ $media_url = function ($path) {
                     <?php if (!empty($product['short_description'])): ?>
                     <p><?php echo e($product['short_description']); ?></p>
                     <?php endif; ?>
+                    <?php if (!empty($product['can_view_price'])): ?>
                     <div class="product-price">
                         <?php echo e($product['currency_code']); ?> <?php echo number_format((float) $product['price'], 2); ?>
                     </div>
+                    <?php else: ?>
+                    <div class="product-login-price">
+                        <a href="<?php echo Uri::create('acceso'); ?>">Inicia sesion</a> para ver precio.
+                    </div>
+                    <?php endif; ?>
                 </div>
             </a>
             <?php endforeach; ?>
