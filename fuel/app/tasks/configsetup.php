@@ -116,6 +116,10 @@ class Configsetup
             throw new \Exception('Primero ejecuta: php oil refine migrate');
         }
 
+        if (!\DBUtil::field_exists('core_audit_logs', ['table_name', 'record_pk', 'business_event', 'changed_fields_json'])) {
+            throw new \Exception('Primero ejecuta: php oil refine migrate');
+        }
+
         foreach (['core_sat_payment_forms', 'core_sat_payment_methods', 'core_sat_cfdi_uses', 'core_sat_tax_regimes', 'core_sat_unit_keys', 'core_sat_taxes'] as $table) {
             if (!\DBUtil::table_exists($table)) {
                 throw new \Exception('Primero ejecuta: php oil refine migrate');
@@ -1701,7 +1705,7 @@ class Configsetup
             'title' => 'Auditoria funcional del sistema',
             'category' => 'Seguridad',
             'summary' => 'Uso de auditoria para rastrear cambios relevantes antes de crear modulos criticos como bancos, CFDI, pagos y RRHH.',
-            'content' => '<h3>Objetivo</h3><p>Auditoria registra acciones funcionales importantes del ERP: quien hizo que, cuando, desde donde y sobre que entidad. No reemplaza los logs tecnicos; complementa la seguridad operativa.</p><h4>Que debe auditarse</h4><ul><li>Cambios de configuracion.</li><li>Integraciones y credenciales, sin exponer secretos.</li><li>Pagos, bancos y conciliaciones.</li><li>CFDI y eventos fiscales.</li><li>Usuarios, permisos y accesos.</li><li>Cambios de estados en flujos criticos.</li></ul><h4>Como consultar</h4><ol><li>Entra a <strong>Admin &gt; Auditoria</strong>.</li><li>Filtra por modulo o entidad.</li><li>Revisa usuario, accion, resumen, IP y fecha.</li></ol><h4>Regla de implementacion</h4><p>Cada modulo nuevo debe llamar a <code>Helper_Core_Audit::log()</code> cuando cree, edite, cambie estado, active, desactive o procese informacion sensible.</p>',
+            'content' => '<h3>Objetivo</h3><p>Auditoria registra acciones funcionales importantes del ERP: quien hizo que, cuando, desde donde, sobre que tabla/registro y que valores cambiaron. No reemplaza los logs tecnicos; complementa la seguridad operativa y prepara la base para reportes, CFDI, bancos, pagos y RRHH.</p><h4>Que debe auditarse</h4><ul><li>Creacion, edicion, eliminacion, activacion y cancelacion de registros.</li><li>Cambios de configuracion.</li><li>Integraciones y credenciales, sin exponer secretos.</li><li>Pagos, bancos y conciliaciones.</li><li>CFDI, metadata, descargas SAT, validaciones y cancelaciones.</li><li>Usuarios, permisos, accesos y portales.</li><li>Cambios de estados en flujos criticos.</li></ul><h4>Campos clave</h4><ul><li><strong>module/action</strong>: modulo y accion tecnica.</li><li><strong>business_event</strong>: evento de negocio, por ejemplo <code>sat.create_sync_request</code>.</li><li><strong>table_name/record_pk</strong>: tabla y registro afectado.</li><li><strong>old_values/new_values</strong>: valores anterior y nuevo.</li><li><strong>changed_fields</strong>: campos modificados calculados automaticamente.</li><li><strong>backend/portal/ip/user_agent</strong>: contexto de acceso.</li></ul><h4>Como consultar</h4><ol><li>Entra a <strong>Admin &gt; Auditoria</strong>.</li><li>Filtra por modulo, tabla, registro, operacion, severidad, portal o fechas.</li><li>Abre el detalle para comparar valores anteriores y nuevos.</li><li>Usa IP, user agent y ruta para investigar origen del cambio.</li></ol><h4>Regla de implementacion</h4><p>Cada modulo nuevo debe llamar a <code>Helper_Core_Audit::log()</code> cuando cree, edite, elimine, cambie estado, active, desactive o procese informacion sensible. El helper redacta campos sensibles como password, secret, token, key o api_key; aun asi, los controladores no deben enviar secretos innecesarios a auditoria.</p>',
             'sort_order' => 55,
             'active' => 1,
             'created_at' => time(),

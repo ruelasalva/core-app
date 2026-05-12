@@ -6,8 +6,10 @@ class Model_Core_Audit_Log extends \Orm\Model
     protected static $_primary_key = ['id'];
 
     protected static $_properties = [
-        'id', 'user_id', 'portal_code', 'backend', 'module', 'action', 'entity_type',
-        'entity_id', 'summary', 'old_values_json', 'new_values_json', 'metadata_json',
+        'id', 'user_id', 'portal_code', 'backend', 'module', 'action', 'event_code',
+        'business_event', 'operation', 'table_name', 'record_pk', 'entity_type',
+        'entity_id', 'summary', 'old_values_json', 'new_values_json', 'changed_fields_json',
+        'metadata_json', 'route', 'http_method', 'request_id', 'session_id', 'severity',
         'ip', 'user_agent', 'created_at',
     ];
 
