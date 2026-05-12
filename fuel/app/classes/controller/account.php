@@ -98,6 +98,9 @@ class Controller_Account extends Controller_Template
         # SE PROCESA FORMULARIO
         if (\Input::method() === 'POST') {
             try {
+                # SE VALIDA CAPTCHA SOLO SI ESTA CONFIGURADO EN WEB
+                $this->verify_public_captcha();
+
                 # SE VALIDA Y CREA CLIENTE
                 $payload = $this->registration_payload();
                 $user_id = $this->create_customer_user($payload);
@@ -130,7 +133,10 @@ class Controller_Account extends Controller_Template
 
         # SE CARGA VISTA
         $this->template->title = 'Registro clientes';
-        $this->template->content = \View::forge('account/register', $data);
+        $this->template->content = \View::forge('account/register', array_merge($data, [
+            'captcha_html' => class_exists('Helper_Core_Web') ? Helper_Core_Web::render_captcha() : '',
+        ]), false);
+        $this->template->set('frontend_extra_scripts', class_exists('Helper_Core_Web') ? Helper_Core_Web::captcha_script() : '', false);
     }
 
     /**
@@ -215,6 +221,28 @@ class Controller_Account extends Controller_Template
             'phone' => $phone,
             'password' => $password,
         ];
+    }
+
+    /**
+     * VERIFY PUBLIC CAPTCHA
+     *
+     * VALIDA RECAPTCHA CUANDO EL MODULO WEB LO TIENE CONFIGURADO.
+     *
+     * @access  protected
+     * @return  Void
+     */
+    protected function verify_public_captcha()
+    {
+        # SI NO EXISTE HELPER O CAPTCHA NO ESTA ACTIVO, NO SE BLOQUEA
+        if (!class_exists('Helper_Core_Web') || !Helper_Core_Web::captcha_enabled()) {
+            return;
+        }
+
+        # SE VALIDA RESPUESTA DEL FORMULARIO
+        $token = (string) \Input::post('g-recaptcha-response', '');
+        if (!Helper_Core_Web::verify_captcha($token)) {
+            throw new \InvalidArgumentException('No se pudo validar el captcha. Intenta nuevamente.');
+        }
     }
 
     /**

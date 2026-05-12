@@ -25,6 +25,7 @@
     <link rel="icon" href="<?php echo e($theme_asset($theme->favicon_path)); ?>">
     <?php endif; ?>
     <?php echo Asset::css('bootstrap-icons.css'); ?>
+    <?php echo class_exists('Helper_Core_Web') ? Helper_Core_Web::frontend_head() : ''; ?>
     <style>
         :root {
             --core-ink: <?php echo e($theme ? $theme->color_text : '#172033'); ?>;
@@ -159,6 +160,7 @@
     ?>
 </head>
 <body>
+    <?php echo class_exists('Helper_Core_Web') ? Helper_Core_Web::frontend_body_end() : ''; ?>
     <header class="site-header">
         <div class="site-shell">
             <nav class="site-nav" aria-label="Menu principal">
@@ -213,5 +215,6 @@
     </footer>
 
     <?php echo !empty($cookie_banner) ? $cookie_banner : ''; ?>
+    <?php echo !empty($frontend_extra_scripts) ? $frontend_extra_scripts : ''; ?>
 </body>
 </html>

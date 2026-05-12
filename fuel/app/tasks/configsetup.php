@@ -1703,6 +1703,18 @@ class Configsetup
             'updated_at' => time(),
         ]);
 
+        $this->upsert_seed('core_knowledge_articles', 'code', 'frontend_integraciones_web', [
+            'code' => 'frontend_integraciones_web',
+            'title' => 'Integraciones web en frontend',
+            'category' => 'Frontend',
+            'summary' => 'Como se cargan analytics, pixeles, tags y captcha desde el modulo Web sin pegarlos manualmente en plantillas.',
+            'content' => '<h3>Objetivo</h3><p>El frontend no debe tener codigos de analytics, pixeles, tags o captcha pegados manualmente en las vistas. Todo debe venir del modulo <strong>Web</strong> y cargarse solo cuando la integracion este activa, configurada y permitida por consentimiento.</p><h4>Regla general</h4><ul><li><strong>Analytics</strong> y <strong>Tag Manager</strong> se cargan en el head si estan activos y el visitante acepto la categoria requerida.</li><li><strong>Pixeles</strong> y scripts publicos se cargan al inicio/cierre del body segun corresponda.</li><li><strong>reCAPTCHA</strong> solo aparece en registro si existe integracion activa con llave publica y secreto guardado.</li><li>Si no hay datos capturados o la integracion esta inactiva, el frontend no carga nada.</li></ul><h4>Como configurarlo</h4><ol><li>Entra a <strong>Admin &gt; Web</strong>.</li><li>Abre la integracion correspondiente: Google Analytics, Google Tag Manager, Meta Pixel o Google reCAPTCHA.</li><li>Captura la llave publica o ID en <strong>Llave publica / ID</strong>.</li><li>Para reCAPTCHA captura tambien el secreto en <strong>Valor secreto</strong>.</li><li>Activa <strong>Frontend</strong> y define si requiere consentimiento.</li><li>Guarda y prueba el sitio publico.</li></ol><h4>Privacidad</h4><p>Las integraciones con categorias <code>analytics</code>, <code>marketing</code> o <code>personalization</code> no deben cargarse hasta que el visitante acepte esa categoria en cookies. Las necesarias pueden cargarse sin consentimiento adicional cuando sean indispensables para seguridad, como captcha.</p><h4>Productos y tags</h4><p>Los productos pueden tener tags comerciales para navegacion y filtros. Eso no significa que carguen pixeles por si solos. Si mas adelante se requieren eventos de ecommerce, deben emitirse desde un helper o servicio de tracking que respete consentimiento y configuracion Web.</p>',
+            'sort_order' => 14,
+            'active' => 1,
+            'created_at' => time(),
+            'updated_at' => time(),
+        ]);
+
         $this->upsert_seed('core_knowledge_articles', 'code', 'estructura_core_app_modulos', [
             'code' => 'estructura_core_app_modulos',
             'title' => 'Estructura actual de Core-App',

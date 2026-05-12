@@ -47,6 +47,11 @@
                         <label>Confirmar contrasena</label>
                         <?php echo Form::password('password_confirm', '', ['autocomplete' => 'new-password']); ?>
                     </div>
+                    <?php if (!empty($captcha_html)): ?>
+                    <div class="account-field full">
+                        <?php echo $captcha_html; ?>
+                    </div>
+                    <?php endif; ?>
                 </div>
                 <div class="account-actions">
                     <button class="account-btn" type="submit">Crear cuenta</button>
