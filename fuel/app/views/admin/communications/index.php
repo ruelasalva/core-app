@@ -93,7 +93,14 @@
                     <div class="row">
                         <div class="col-lg-7">
                             <h5>Notificacion interna manual</h5>
-                            <p class="text-muted">Selecciona destinatarios especificos. La notificacion aparecera en la campana del admin.</p>
+                            <p class="text-muted">Selecciona evento, usuarios o departamentos. La notificacion aparecera en la campana del admin.</p>
+                            <div class="form-group">
+                                <label>Evento</label>
+                                <select class="form-control" v-model="notificationForm.event_code" @change="applyEventDefaults">
+                                    <option value="manual.admin.notification">Notificacion interna manual</option>
+                                    <option v-for="event in events" :key="event.code" :value="event.code">{{ event.name }} ({{ event.code }})</option>
+                                </select>
+                            </div>
                             <div class="form-group">
                                 <label>Titulo</label>
                                 <input class="form-control" v-model="notificationForm.title">
@@ -119,6 +126,14 @@
                             </button>
                         </div>
                         <div class="col-lg-5">
+                            <h5>Departamentos</h5>
+                            <div class="border rounded p-2 mb-3" style="max-height: 180px; overflow:auto;">
+                                <label v-for="department in departments" :key="department.id" class="d-flex align-items-start mb-2">
+                                    <input type="checkbox" class="mt-1 mr-2" :value="department.id" v-model="notificationForm.department_ids">
+                                    <span>{{ department.name }}</span>
+                                </label>
+                                <div v-if="departments.length === 0" class="text-muted">Sin departamentos activos.</div>
+                            </div>
                             <h5>Destinatarios</h5>
                             <div class="border rounded p-2" style="max-height: 360px; overflow:auto;">
                                 <label v-for="user in users" :key="user.id" class="d-flex align-items-start mb-2">
@@ -145,12 +160,15 @@ window.onload = function() {
             loading: true,
             events: [],
             users: [],
+            departments: [],
             notificationForm: {
+                event_code: 'manual.admin.notification',
                 title: '',
                 message: '',
                 url: 'admin',
                 priority: 1,
-                user_ids: []
+                user_ids: [],
+                department_ids: []
             },
             stats: { events: 0, notifications: 0, unread: 0, emails_pending: 0, emails_failed: 0 }
         },
@@ -170,8 +188,15 @@ window.onload = function() {
                         }
                         this.events = data.events || [];
                         this.users = data.users || [];
+                        this.departments = data.departments || [];
                         this.stats = data.stats || this.stats;
                     });
+            },
+            applyEventDefaults() {
+                const found = this.events.find(event => event.code === this.notificationForm.event_code);
+                if (!found) return;
+                if (!this.notificationForm.title) this.notificationForm.title = found.name;
+                if (!this.notificationForm.url) this.notificationForm.url = 'admin';
             },
             sendNotification() {
                 fetch('<?php echo Uri::create('admin/communications/send_notification'); ?>', {
@@ -184,7 +209,7 @@ window.onload = function() {
                         return;
                     }
                     this.stats = data.stats || this.stats;
-                    this.notificationForm = { title: '', message: '', url: 'admin', priority: 1, user_ids: [] };
+                    this.notificationForm = { event_code: 'manual.admin.notification', title: '', message: '', url: 'admin', priority: 1, user_ids: [], department_ids: [] };
                     alert('Notificacion enviada.');
                 });
             }

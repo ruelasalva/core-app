@@ -154,6 +154,12 @@ class Configsetup
             }
         }
 
+        foreach (['core_commerce_product_relations'] as $table) {
+            if (!\DBUtil::table_exists($table)) {
+                throw new \Exception('Primero ejecuta: php oil refine migrate');
+            }
+        }
+
         foreach (['core_cart_carts', 'core_cart_items'] as $table) {
             if (!\DBUtil::table_exists($table)) {
                 throw new \Exception('Primero ejecuta: php oil refine migrate');

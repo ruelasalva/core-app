@@ -138,6 +138,11 @@ class Controller_Admin_Commerce extends Controller_Adminbase
                 $data['sku'] = strtoupper(trim($data['sku']));
             }
 
+            # VALIDAR RELACIONES DE PRODUCTO
+            if ($section === 'product_relations' && (int) $data['product_id'] === (int) $data['related_product_id']) {
+                return $this->json_response(['error' => 'El producto relacionado debe ser distinto al producto principal.'], 422);
+            }
+
             # SE BUSCA EL REGISTRO EXISTENTE O SE CREA UNO NUEVO
             $class = $definition['model'];
             $id = (int) \Arr::get($val, 'id', 0);
@@ -393,6 +398,19 @@ class Controller_Admin_Commerce extends Controller_Adminbase
                     ['name' => 'active', 'label' => 'Activo', 'type' => 'checkbox', 'default' => 1],
                 ],
             ],
+            'product_relations' => [
+                'title' => 'Productos relacionados',
+                'model' => 'Model_Core_Commerce_Product_Relation',
+                'table' => 'core_commerce_product_relations',
+                'required' => ['product_id', 'related_product_id'],
+                'fields' => [
+                    ['name' => 'product_id', 'label' => 'Producto principal', 'type' => 'select', 'options' => 'products', 'default' => 0],
+                    ['name' => 'related_product_id', 'label' => 'Producto relacionado', 'type' => 'select', 'options' => 'products', 'default' => 0],
+                    ['name' => 'relation_type', 'label' => 'Tipo relacion', 'type' => 'select', 'options' => 'relation_types', 'default' => 'manual'],
+                    ['name' => 'sort_order', 'label' => 'Orden', 'type' => 'integer', 'default' => 0],
+                    ['name' => 'active', 'label' => 'Activo', 'type' => 'checkbox', 'default' => 1],
+                ],
+            ],
         ];
     }
 
@@ -443,6 +461,12 @@ class Controller_Admin_Commerce extends Controller_Adminbase
             'currencies' => $this->select_options('core_catalog_currencies', 'code', 'name'),
             'units' => $this->select_options('core_catalog_units', 'code', 'name'),
             'taxes' => $this->select_options('core_catalog_taxes', 'code', 'name'),
+            'relation_types' => [
+                ['value' => 'manual', 'label' => 'Manual'],
+                ['value' => 'complement', 'label' => 'Complemento'],
+                ['value' => 'substitute', 'label' => 'Sustituto'],
+                ['value' => 'upsell', 'label' => 'Venta sugerida'],
+            ],
         ];
     }
 

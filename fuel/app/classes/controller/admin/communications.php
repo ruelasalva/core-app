@@ -59,6 +59,7 @@ class Controller_Admin_Communications extends Controller_Adminbase
             return $this->json_response([
                 'events' => $this->get_events(),
                 'users' => $this->get_users(),
+                'departments' => $this->get_departments(),
                 'stats' => $this->get_stats(),
             ]);
         } catch (\Exception $e) {
@@ -85,28 +86,42 @@ class Controller_Admin_Communications extends Controller_Adminbase
         $title = trim((string) \Arr::get($val, 'title', ''));
         $message = trim((string) \Arr::get($val, 'message', ''));
         $url = trim((string) \Arr::get($val, 'url', 'admin'));
+        $event_code = trim((string) \Arr::get($val, 'event_code', 'manual.admin.notification'));
         $user_ids = (array) \Arr::get($val, 'user_ids', []);
+        $department_ids = (array) \Arr::get($val, 'department_ids', []);
+
+        # SE COMPLEMENTA CON DATOS DEL EVENTO SI FUE SELECCIONADO
+        $event = Model_Core_Notification_Event::active_by_code($event_code);
+        if ($event) {
+            if ($title === '') {
+                $title = (string) $event->name;
+            }
+            if ($url === '') {
+                $url = (string) $event->url_template;
+            }
+        }
 
         # VALIDACIONES MINIMAS
         if ($title === '' || $message === '') {
             return $this->json_response(['error' => 'Titulo y mensaje son obligatorios.'], 422);
         }
 
-        if (empty($user_ids)) {
+        $recipients = $this->resolve_recipients($user_ids, $department_ids);
+        if (empty($recipients)) {
             return $this->json_response(['error' => 'Selecciona al menos un destinatario.'], 422);
         }
 
         # SE CREA LA NOTIFICACION
         $notification = Helper_Core_Notification::create([
-            'event_code' => 'manual.admin.notification',
+            'event_code' => $event_code,
             'notification_type' => 'manual',
             'title' => $title,
             'message' => $message,
             'url' => $url,
-            'icon' => 'bi bi-megaphone',
-            'priority' => (int) \Arr::get($val, 'priority', 1),
+            'icon' => $event ? (string) $event->icon : 'bi bi-megaphone',
+            'priority' => (int) \Arr::get($val, 'priority', $event ? (int) $event->priority : 1),
             'created_by' => $this->user_id,
-        ], $user_ids);
+        ], $recipients);
 
         if (!$notification) {
             return $this->json_response(['error' => 'No se pudo crear la notificacion.'], 400);
@@ -199,6 +214,68 @@ class Controller_Admin_Communications extends Controller_Adminbase
         }
 
         return $users;
+    }
+
+    /**
+     * GET DEPARTMENTS
+     *
+     * OBTIENE DEPARTAMENTOS ACTIVOS PARA DESTINATARIOS.
+     *
+     * @access  protected
+     * @return  Array
+     */
+    protected function get_departments()
+    {
+        # SE CONSULTAN DEPARTAMENTOS ACTIVOS
+        if (!\DBUtil::table_exists('core_departments')) {
+            return [];
+        }
+
+        $rows = \DB::select('id', 'name')
+            ->from('core_departments')
+            ->where('active', '=', 1)
+            ->order_by('name', 'asc')
+            ->execute()
+            ->as_array();
+
+        $items = [];
+        foreach ($rows as $row) {
+            $items[] = ['id' => (int) $row['id'], 'name' => (string) $row['name']];
+        }
+
+        return $items;
+    }
+
+    /**
+     * RESOLVE RECIPIENTS
+     *
+     * UNE USUARIOS DIRECTOS Y USUARIOS ASIGNADOS A DEPARTAMENTOS.
+     *
+     * @access  protected
+     * @return  Array
+     */
+    protected function resolve_recipients(array $user_ids, array $department_ids)
+    {
+        # SE NORMALIZAN USUARIOS DIRECTOS
+        $recipients = array_filter(array_map('intval', $user_ids));
+
+        # SE AGREGAN USUARIOS VINCULADOS A EMPLEADOS POR DEPARTAMENTO
+        $department_ids = array_filter(array_map('intval', $department_ids));
+        if (!empty($department_ids) && \DBUtil::table_exists('core_employees')) {
+            $rows = \DB::select('user_id')
+                ->from('core_employees')
+                ->where('department_id', 'in', $department_ids)
+                ->where('user_id', '>', 0)
+                ->where('active', '=', 1)
+                ->execute()
+                ->as_array();
+
+            foreach ($rows as $row) {
+                $recipients[] = (int) $row['user_id'];
+            }
+        }
+
+        return array_values(array_unique(array_filter($recipients)));
     }
 
     /**

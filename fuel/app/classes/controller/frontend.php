@@ -126,6 +126,7 @@ class Controller_Frontend extends Controller_Template
             'product' => $product,
             'images'  => $this->get_product_images($product['id']),
             'tags'    => $this->get_product_tags($product['id']),
+            'related_products' => $this->get_related_products($product),
         ), false), false);
     }
 
@@ -831,6 +832,9 @@ class Controller_Frontend extends Controller_Template
                 array('p.slug', 'slug'),
                 array('p.short_description', 'short_description'),
                 array('p.description', 'description'),
+                array('p.brand_id', 'brand_id'),
+                array('p.category_id', 'category_id'),
+                array('p.subcategory_id', 'subcategory_id'),
                 array('p.currency_code', 'currency_code'),
                 array('p.price', 'price'),
                 array('p.main_image_path', 'main_image_path'),
@@ -900,6 +904,108 @@ class Controller_Frontend extends Controller_Template
             ->order_by('t.name', 'asc')
             ->execute()
             ->as_array();
+    }
+
+    /**
+     * GET RELATED PRODUCTS
+     *
+     * OBTIENE PRODUCTOS RELACIONADOS MANUALES Y COMPLEMENTA POR FAMILIA/MARCA.
+     *
+     * @access  protected
+     * @return  Array
+     */
+    protected function get_related_products(array $product)
+    {
+        # SE INICIALIZA CONTROL DE DUPLICADOS
+        $product_id = (int) $product['id'];
+        $seen = [$product_id => true];
+        $rows = [];
+
+        # PRIORIDAD 1: RELACIONES MANUALES CONFIGURADAS EN ADMIN
+        if (\DBUtil::table_exists('core_commerce_product_relations')) {
+            $manual = \DB::select(
+                    ['p.id', 'id'],
+                    ['p.sku', 'sku'],
+                    ['p.name', 'name'],
+                    ['p.slug', 'slug'],
+                    ['p.short_description', 'short_description'],
+                    ['p.currency_code', 'currency_code'],
+                    ['p.price', 'price'],
+                    ['p.main_image_path', 'main_image_path'],
+                    ['b.name', 'brand_name'],
+                    ['c.name', 'category_name']
+                )
+                ->from(['core_commerce_product_relations', 'r'])
+                ->join(['core_commerce_products', 'p'], 'inner')
+                    ->on('r.related_product_id', '=', 'p.id')
+                ->join(['core_commerce_brands', 'b'], 'left')
+                    ->on('p.brand_id', '=', 'b.id')
+                ->join(['core_commerce_categories', 'c'], 'left')
+                    ->on('p.category_id', '=', 'c.id')
+                ->where('r.product_id', '=', $product_id)
+                ->where('r.active', '=', 1)
+                ->where('p.active', '=', 1)
+                ->where('p.published', '=', 1)
+                ->order_by('r.sort_order', 'asc')
+                ->order_by('r.id', 'asc')
+                ->limit(8)
+                ->execute()
+                ->as_array();
+
+            foreach ($manual as $row) {
+                $seen[(int) $row['id']] = true;
+                $rows[] = $row;
+            }
+        }
+
+        # PRIORIDAD 2: MISMA SUBCATEGORIA, CATEGORIA O MARCA COMO SUGERENCIA AUTOMATICA
+        if (count($rows) < 8 && (!empty($product['subcategory_id']) || !empty($product['category_id']) || !empty($product['brand_id']))) {
+            $query = \DB::select(
+                    ['p.id', 'id'],
+                    ['p.sku', 'sku'],
+                    ['p.name', 'name'],
+                    ['p.slug', 'slug'],
+                    ['p.short_description', 'short_description'],
+                    ['p.currency_code', 'currency_code'],
+                    ['p.price', 'price'],
+                    ['p.main_image_path', 'main_image_path'],
+                    ['b.name', 'brand_name'],
+                    ['c.name', 'category_name']
+                )
+                ->from(['core_commerce_products', 'p'])
+                ->join(['core_commerce_brands', 'b'], 'left')
+                    ->on('p.brand_id', '=', 'b.id')
+                ->join(['core_commerce_categories', 'c'], 'left')
+                    ->on('p.category_id', '=', 'c.id')
+                ->where('p.active', '=', 1)
+                ->where('p.published', '=', 1)
+                ->where('p.id', 'not in', array_keys($seen))
+                ->where_open();
+
+            if (!empty($product['subcategory_id'])) {
+                $query->or_where('p.subcategory_id', '=', (int) $product['subcategory_id']);
+            }
+            if (!empty($product['category_id'])) {
+                $query->or_where('p.category_id', '=', (int) $product['category_id']);
+            }
+            if (!empty($product['brand_id'])) {
+                $query->or_where('p.brand_id', '=', (int) $product['brand_id']);
+            }
+
+            $auto = $query->where_close()
+                ->order_by('p.featured', 'desc')
+                ->order_by('p.sort_order', 'asc')
+                ->order_by('p.id', 'desc')
+                ->limit(8 - count($rows))
+                ->execute()
+                ->as_array();
+
+            foreach ($auto as $row) {
+                $rows[] = $row;
+            }
+        }
+
+        return $this->apply_customer_prices($rows);
     }
 
     /**

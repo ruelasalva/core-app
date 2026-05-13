@@ -30,6 +30,7 @@ return array (
         24 => '025_create_core_cart_tables',
         25 => '026_create_core_sales_quote_tables',
         26 => '027_add_frontend_theme_seo_fields',
+        27 => '028_create_core_commerce_product_relations',
       ),
     ),
     'module' => array(    

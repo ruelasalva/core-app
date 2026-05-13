@@ -43,6 +43,12 @@ class Helper_Core_Legal
      */
     public static function get_cookie_preferences($user_id = null)
     {
+        # SI NO SE RECIBE USUARIO, SE RESUELVE LA SESION ACTUAL
+        if ($user_id === null && \Auth::check()) {
+            $user_id_data = \Auth::get_user_id();
+            $user_id = isset($user_id_data[1]) ? (int) $user_id_data[1] : null;
+        }
+
         # SI HAY USUARIO, SE BUSCA POR USER_ID
         if ($user_id) {
             return Model_Core_Web_Cookie_Preference::query()
@@ -66,6 +72,12 @@ class Helper_Core_Legal
      */
     public static function save_cookie_preferences(array $prefs, $user_id = null)
     {
+        # SI NO SE RECIBE USUARIO, SE RESUELVE LA SESION ACTUAL
+        if ($user_id === null && \Auth::check()) {
+            $user_id_data = \Auth::get_user_id();
+            $user_id = isset($user_id_data[1]) ? (int) $user_id_data[1] : null;
+        }
+
         # SE NORMALIZAN LOS VALORES RECIBIDOS
         $prefs = self::normalize_cookie_preferences($prefs);
 
@@ -164,6 +176,12 @@ class Helper_Core_Legal
      */
     public static function has_cookie_category($category, $user_id = null)
     {
+        # SI NO SE RECIBE USUARIO, SE RESUELVE LA SESION ACTUAL
+        if ($user_id === null && \Auth::check()) {
+            $user_id_data = \Auth::get_user_id();
+            $user_id = isset($user_id_data[1]) ? (int) $user_id_data[1] : null;
+        }
+
         # LAS NECESARIAS SIEMPRE ESTAN PERMITIDAS
         if ($category === 'necessary') {
             return true;

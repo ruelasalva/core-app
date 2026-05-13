@@ -154,6 +154,49 @@ $tag_url = function ($slug) {
         border-color: #0f766e;
         color: #0f766e;
     }
+    .related-section {
+        padding: 10px 0 58px;
+    }
+    .related-section h2 {
+        margin: 0 0 20px;
+        font-size: clamp(1.5rem, 3vw, 2.25rem);
+        line-height: 1.05;
+    }
+    .related-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 18px;
+    }
+    .related-card {
+        border: 1px solid #dde3ea;
+        border-radius: 8px;
+        background: #fff;
+        overflow: hidden;
+        transition: transform .18s ease, box-shadow .18s ease;
+    }
+    .related-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 14px 34px rgba(15, 23, 42, .08);
+    }
+    .related-card img {
+        width: 100%;
+        aspect-ratio: 4 / 3;
+        object-fit: cover;
+        background: #eef3f7;
+    }
+    .related-card .body {
+        padding: 14px;
+    }
+    .related-card h3 {
+        margin: 0 0 8px;
+        font-size: 1rem;
+        line-height: 1.2;
+    }
+    .related-card p {
+        margin: 0;
+        color: #657084;
+        font-size: .92rem;
+    }
     @media (max-width: 860px) {
         .product-detail {
             grid-template-columns: 1fr;
@@ -224,3 +267,27 @@ $tag_url = function ($slug) {
         <?php endif; ?>
     </div>
 </section>
+
+<?php if (!empty($related_products)): ?>
+<section class="product-shell related-section">
+    <h2>Productos relacionados</h2>
+    <div class="related-grid">
+        <?php foreach ($related_products as $related): ?>
+        <a class="related-card" href="<?php echo e(Uri::create('producto/'.$related['slug'])); ?>">
+            <img src="<?php echo e(!empty($related['main_image_path']) ? $media_url($related['main_image_path']) : $no_image_svg); ?>" alt="<?php echo e($related['name']); ?>">
+            <div class="body">
+                <h3><?php echo e($related['name']); ?></h3>
+                <?php if (!empty($related['short_description'])): ?>
+                <p><?php echo e($related['short_description']); ?></p>
+                <?php endif; ?>
+                <?php if (!empty($related['can_view_price'])): ?>
+                <div class="product-price" style="font-size: 1.05rem; margin: 12px 0 0;">
+                    <?php echo e($related['currency_code']); ?> <?php echo number_format((float) $related['price'], 2); ?>
+                </div>
+                <?php endif; ?>
+            </div>
+        </a>
+        <?php endforeach; ?>
+    </div>
+</section>
+<?php endif; ?>
