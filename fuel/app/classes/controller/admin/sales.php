@@ -98,6 +98,21 @@ class Controller_Admin_Sales extends Controller_Adminbase
             $quote->internal_notes = trim((string) \Arr::get($val, 'internal_notes', $quote->internal_notes));
             $quote->save();
 
+            # SE AUDITA CAMBIO DE ESTADO COMERCIAL
+            if (class_exists('Helper_Core_Audit')) {
+                Helper_Core_Audit::log([
+                    'module' => 'sales',
+                    'action' => 'update_status',
+                    'business_event' => 'sales.quote_status_updated',
+                    'entity_type' => 'sales_quote',
+                    'entity_id' => (int) $quote->id,
+                    'table_name' => 'core_sales_quotes',
+                    'record_pk' => (string) $quote->id,
+                    'summary' => 'Cotizacion '.$quote->folio.' actualizada a '.$status,
+                    'new_values' => $quote->to_array(),
+                ]);
+            }
+
             return $this->json_response(['status' => 'ok', 'quotes' => $this->quotes(), 'stats' => $this->stats()]);
         } catch (\Exception $e) {
             \Log::error('Error actualizando cotizacion: '.$e->getMessage());
@@ -122,12 +137,18 @@ class Controller_Admin_Sales extends Controller_Adminbase
                 array('q.source', 'source'),
                 array('q.status', 'status'),
                 array('q.currency_code', 'currency_code'),
+                array('q.subtotal', 'subtotal'),
+                array('q.discount_total', 'discount_total'),
+                array('q.tax_total', 'tax_total'),
                 array('q.total', 'total'),
                 array('q.customer_notes', 'customer_notes'),
                 array('q.internal_notes', 'internal_notes'),
+                array('q.expires_at', 'expires_at'),
                 array('q.created_at', 'created_at'),
                 array('p.name', 'party_name'),
-                array('p.email', 'party_email')
+                array('p.email', 'party_email'),
+                array('p.phone', 'party_phone'),
+                array('p.rfc', 'party_rfc')
             )
             ->from(array('core_sales_quotes', 'q'))
             ->join(array('core_parties', 'p'), 'left')
@@ -140,6 +161,7 @@ class Controller_Admin_Sales extends Controller_Adminbase
         foreach ($rows as &$row) {
             $row['items'] = $this->quote_items((int) $row['id']);
             $row['created_label'] = !empty($row['created_at']) ? date('Y-m-d H:i', (int) $row['created_at']) : '';
+            $row['expires_label'] = !empty($row['expires_at']) ? date('Y-m-d', (int) $row['expires_at']) : '';
         }
 
         return $rows;
@@ -179,6 +201,9 @@ class Controller_Admin_Sales extends Controller_Adminbase
         return [
             'quotes' => (int) \DB::count_records('core_sales_quotes'),
             'requested' => (int) \DB::select()->from('core_sales_quotes')->where('status', '=', 'requested')->execute()->count(),
+            'reviewed' => (int) \DB::select()->from('core_sales_quotes')->where('status', '=', 'reviewed')->execute()->count(),
+            'approved' => (int) \DB::select()->from('core_sales_quotes')->where('status', '=', 'approved')->execute()->count(),
+            'rejected' => (int) \DB::select()->from('core_sales_quotes')->where('status', '=', 'rejected')->execute()->count(),
         ];
     }
 
