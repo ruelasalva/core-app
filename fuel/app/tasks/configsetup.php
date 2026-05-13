@@ -1389,7 +1389,7 @@ class Configsetup
             ]);
         }
 
-        $this->seed_default_integration_connection('sat', 'sat_descarga_masiva', 'SAT descarga masiva', 'production', '{"module":"sat","use":"download","library":"phpcfdi/sat-ws-descarga-masiva"}');
+        $this->seed_default_integration_connection('sat', 'sat_descarga_masiva', 'SAT descarga masiva', 'production', '{"module":"sat","use":"download","auth":"fiel","credentials":"core_sat_credentials","requires_secret":false,"library":"phpcfdi/sat-ws-descarga-masiva"}');
         $this->seed_default_integration_connection('factura_com', 'factura_com_pac', 'Factura.com PAC', 'sandbox', '{"module":"billing","use":"pac","docs":"https://factura.com/apidocs/"}');
     }
 

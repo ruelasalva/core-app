@@ -92,6 +92,7 @@
                             <div class="alert" :class="integrations.sat_download && integrations.sat_download.enabled ? 'alert-success' : 'alert-warning'">
                                 <strong>Descarga SAT:</strong>
                                 {{ integrations.sat_download && integrations.sat_download.enabled ? 'habilitada desde Integraciones' : 'sin conexion habilitada en Integraciones' }}.
+                                La descarga directa usa FIEL: .cer, .key y password; no requiere secret key.
                                 <a href="<?php echo Uri::create('admin/integrations'); ?>" class="alert-link">Configurar integracion</a>
                             </div>
                             <div class="alert" :class="integrations.pac_billing && integrations.pac_billing.enabled ? 'alert-success' : 'alert-info'">
