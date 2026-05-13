@@ -88,6 +88,18 @@
                     </div>
 
                     <div class="row">
+                        <div class="col-md-12 mb-3">
+                            <div class="alert" :class="integrations.sat_download && integrations.sat_download.enabled ? 'alert-success' : 'alert-warning'">
+                                <strong>Descarga SAT:</strong>
+                                {{ integrations.sat_download && integrations.sat_download.enabled ? 'habilitada desde Integraciones' : 'sin conexion habilitada en Integraciones' }}.
+                                <a href="<?php echo Uri::create('admin/integrations'); ?>" class="alert-link">Configurar integracion</a>
+                            </div>
+                            <div class="alert" :class="integrations.pac_billing && integrations.pac_billing.enabled ? 'alert-success' : 'alert-info'">
+                                <strong>PAC facturacion:</strong>
+                                {{ integrations.pac_billing && integrations.pac_billing.enabled ? 'Factura.com habilitado' : 'pendiente de conexion PAC en Integraciones' }}.
+                                <a href="<?php echo Uri::create('admin/integrations'); ?>" class="alert-link">Configurar PAC</a>
+                            </div>
+                        </div>
                         <div class="col-md-4">
                             <div class="form-group">
                                 <label>Modo</label>
@@ -134,6 +146,7 @@
                                 <th>.CER</th>
                                 <th>.KEY</th>
                                 <th>Vigencia</th>
+                                <th>Dias</th>
                                 <th>Estado</th>
                                 <th class="text-center">Acciones</th>
                             </tr>
@@ -142,9 +155,14 @@
                             <tr v-for="credential in credentials" :key="credential.id">
                                 <td>{{ credential.credential_type }}</td>
                                 <td>{{ credential.rfc }}</td>
-                                <td>{{ credential.cer_path || '-' }}</td>
-                                <td>{{ credential.key_path || '-' }}</td>
+                                <td>{{ credential.cer_original_name || credential.cer_path || '-' }}</td>
+                                <td>{{ credential.key_original_name || credential.key_path || '-' }}</td>
                                 <td>{{ credential.valid_from || '-' }} / {{ credential.valid_until || '-' }}</td>
+                                <td>
+                                    <span class="badge" :class="validityBadge(credential.validity_status)">
+                                        {{ credential.days_remaining === null ? 'Sin fecha' : credential.days_remaining + ' dias' }}
+                                    </span>
+                                </td>
                                 <td>
                                     <span class="badge" :class="credential.active == 1 ? 'badge-success' : 'badge-secondary'">
                                         {{ credential.active == 1 ? 'Activa' : 'Inactiva' }}
@@ -270,25 +288,49 @@
                         <div class="col-md-3">
                             <div class="form-group">
                                 <label>Vigente desde</label>
-                                <input class="form-control" type="date" v-model="credentialForm.valid_from">
+                                <input class="form-control" type="date" v-model="credentialForm.valid_from" readonly>
                             </div>
                         </div>
                         <div class="col-md-3">
                             <div class="form-group">
                                 <label>Vigente hasta</label>
-                                <input class="form-control" type="date" v-model="credentialForm.valid_until">
+                                <input class="form-control" type="date" v-model="credentialForm.valid_until" readonly>
                             </div>
                         </div>
                         <div class="col-md-6">
                             <div class="form-group">
-                                <label>Ruta .CER</label>
-                                <input class="form-control" v-model="credentialForm.cer_path">
+                                <label>Archivo .CER</label>
+                                <div class="input-group">
+                                    <input class="form-control" :value="credentialForm.cer_original_name || credentialForm.cer_path" readonly>
+                                    <div class="input-group-append">
+                                        <label class="btn btn-outline-primary mb-0">
+                                            <i class="bi bi-upload"></i>
+                                            <input type="file" accept=".cer" class="d-none" @change="uploadCredentialFile($event, 'cer')">
+                                        </label>
+                                    </div>
+                                </div>
+                                <small class="text-muted">La vigencia se toma del certificado.</small>
                             </div>
                         </div>
                         <div class="col-md-6">
                             <div class="form-group">
-                                <label>Ruta .KEY</label>
-                                <input class="form-control" v-model="credentialForm.key_path">
+                                <label>Archivo .KEY</label>
+                                <div class="input-group">
+                                    <input class="form-control" :value="credentialForm.key_original_name || credentialForm.key_path" readonly>
+                                    <div class="input-group-append">
+                                        <label class="btn btn-outline-primary mb-0">
+                                            <i class="bi bi-upload"></i>
+                                            <input type="file" accept=".key" class="d-none" @change="uploadCredentialFile($event, 'key')">
+                                        </label>
+                                    </div>
+                                </div>
+                                <small class="text-muted">Guarda la credencial antes de cargar archivos.</small>
+                            </div>
+                        </div>
+                        <div class="col-md-12" v-if="credentialForm.certificate_serial">
+                            <div class="alert alert-light border">
+                                <strong>Serie:</strong> {{ credentialForm.certificate_serial }}
+                                <span class="ml-3"><strong>Vence:</strong> {{ credentialForm.days_remaining }} dias</span>
                             </div>
                         </div>
                         <div class="col-md-6">
@@ -385,6 +427,7 @@ window.onload = function() {
             requests: [],
             cfdiAlerts: [],
             stats: { cfdi: 0, requests: 0, packages: 0, credentials: 0, missing_xml: 0, cancelled: 0, unvalidated: 0 },
+            integrations: {},
             credentialForm: {},
             requestForm: {}
         },
@@ -419,6 +462,7 @@ window.onload = function() {
                         }
                         this.config = data.config || this.config;
                         this.config.enabled = this.config.enabled == 1;
+                        this.integrations = data.integrations || {};
                         this.credentials = data.credentials || [];
                         this.requests = data.requests || [];
                         this.cfdiAlerts = data.cfdi_alerts || [];
@@ -461,8 +505,41 @@ window.onload = function() {
                         return;
                     }
                     this.credentials = data.credentials || [];
+                    const updated = this.credentials.find(item => String(item.id) === String(this.credentialForm.id));
+                    if (updated) this.credentialForm = Object.assign(this.emptyCredential(), updated, { active: updated.active == 1, password: '' });
                     this.hideModal('modal-credential');
                 });
+            },
+            uploadCredentialFile(event, fileType) {
+                const file = event.target.files[0];
+                event.target.value = '';
+                if (!file) return;
+                if (!this.credentialForm.id) {
+                    alert('Guarda primero la credencial y despues carga el archivo.');
+                    return;
+                }
+                const form = new FormData();
+                form.append('credential_id', this.credentialForm.id);
+                form.append('file_type', fileType);
+                form.append('file', file);
+                form.append(window.coreAppCsrfKey, fuel_csrf_token());
+                fetch('<?php echo Uri::create('admin/sat/upload_credential_file'); ?>', { method: 'POST', body: form })
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.error) {
+                            alert(data.error);
+                            return;
+                        }
+                        this.credentials = data.credentials || [];
+                        const updated = this.credentials.find(item => String(item.id) === String(this.credentialForm.id));
+                        if (updated) this.credentialForm = Object.assign(this.emptyCredential(), updated, { active: updated.active == 1, password: '' });
+                    });
+            },
+            validityBadge(status) {
+                if (status === 'expired') return 'badge-danger';
+                if (status === 'warning') return 'badge-warning';
+                if (status === 'valid') return 'badge-success';
+                return 'badge-secondary';
             },
             newRequest() {
                 const today = new Date().toISOString().slice(0, 10);

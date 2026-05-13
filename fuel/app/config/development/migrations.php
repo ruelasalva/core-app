@@ -34,6 +34,7 @@ return array (
         28 => '029_create_core_purchase_tables',
         29 => '030_extend_core_sat_cfdi_audit_tables',
         30 => '031_add_cfdi_party_scope_controls',
+        31 => '032_enhance_sat_credentials_cert_files',
       ),
     ),
     'module' => array(    

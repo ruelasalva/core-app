@@ -32,12 +32,12 @@
             </li>
         </ul>
         <ul class="navbar-nav ml-auto">
-            <li class="nav-item dropdown" id="app-notifications">
-                <a class="nav-link" data-toggle="dropdown" href="#" role="button" @click="load">
+            <li class="nav-item dropdown" id="app-notifications" :class="{ show: open }">
+                <a class="nav-link" href="#" role="button" @click.prevent="toggle">
                     <i class="bi bi-bell"></i>
                     <span v-if="count > 0" class="badge badge-danger navbar-badge">{{ count }}</span>
                 </a>
-                <div class="dropdown-menu dropdown-menu-lg dropdown-menu-right">
+                <div class="dropdown-menu dropdown-menu-lg dropdown-menu-right" :class="{ show: open }">
                     <span class="dropdown-header">{{ count }} notificaciones</span>
                     <div class="dropdown-divider"></div>
                     <a v-for="item in items" :key="item.recipient_id" href="#" class="dropdown-item" @click.prevent="openNotification(item)">
@@ -419,13 +419,24 @@ new Vue({
     el: '#app-notifications',
     data: {
         count: 0,
-        items: []
+        items: [],
+        open: false
     },
     mounted: function() {
         this.load();
         setInterval(this.load, 60000);
+        document.addEventListener('click', this.closeFromOutside);
     },
     methods: {
+        toggle: function() {
+            this.open = !this.open;
+            this.load();
+        },
+        closeFromOutside: function(event) {
+            if (!this.$el.contains(event.target)) {
+                this.open = false;
+            }
+        },
         load: function() {
             fetch('<?php echo Uri::create('admin/notifications/data'); ?>')
                 .then(function(res) { return res.json(); })
@@ -439,6 +450,7 @@ new Vue({
             fetch('<?php echo Uri::create('admin/notifications/mark_read'); ?>', {
                 ...window.coreAppFetchOptions({ recipient_id: item.recipient_id })
             }).then(() => {
+                this.open = false;
                 this.load();
                 if (item.url) {
                     window.location.href = item.url;

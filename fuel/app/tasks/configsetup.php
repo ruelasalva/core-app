@@ -121,6 +121,10 @@ class Configsetup
             }
         }
 
+        if (!\DBUtil::field_exists('core_sat_credentials', ['cer_original_name', 'key_original_name', 'certificate_serial'])) {
+            throw new \Exception('Primero ejecuta: php oil refine migrate');
+        }
+
         if (!\DBUtil::field_exists('core_sat_cfdi', ['missing_xml', 'last_validated_at', 'sat_status_code'])) {
             throw new \Exception('Primero ejecuta: php oil refine migrate');
         }
@@ -505,7 +509,8 @@ class Configsetup
             ['conekta', 'Conekta', 'payment_gateway', 'Pasarela de pago. Requiere validar SDK/API vigente.', 'https://developers.conekta.com/', 'Adapter_Payment_Conekta', 1, 50],
             ['bank_transfer', 'Transferencia bancaria', 'payment_manual', 'Metodo manual para pagos por transferencia y conciliacion bancaria.', '', '', 0, 60],
             ['sat', 'SAT', 'tax_authority', 'Integracion fiscal para CFDI, descargas, validaciones y eventos fiscales.', 'https://www.sat.gob.mx/', 'Adapter_Tax_Sat', 1, 70],
-            ['whatsapp_business', 'WhatsApp Business', 'messaging', 'Mensajeria y notificaciones externas. Requiere proveedor/API autorizado.', 'https://developers.facebook.com/docs/whatsapp', 'Adapter_Messaging_WhatsApp', 1, 80],
+            ['factura_com', 'Factura.com', 'pac_cfdi', 'PAC para timbrado, cancelacion, descarga y envio de CFDI. Las credenciales viven en conexiones, no en Facturacion.', 'https://factura.com/apidocs/', 'Adapter_Pac_FacturaCom', 1, 80],
+            ['whatsapp_business', 'WhatsApp Business', 'messaging', 'Mensajeria y notificaciones externas. Requiere proveedor/API autorizado.', 'https://developers.facebook.com/docs/whatsapp', 'Adapter_Messaging_WhatsApp', 1, 90],
         ];
 
         foreach ($providers as $provider) {
@@ -1383,6 +1388,31 @@ class Configsetup
                 'updated_at' => time(),
             ]);
         }
+
+        $this->seed_default_integration_connection('sat', 'sat_descarga_masiva', 'SAT descarga masiva', 'production', '{"module":"sat","use":"download","library":"phpcfdi/sat-ws-descarga-masiva"}');
+        $this->seed_default_integration_connection('factura_com', 'factura_com_pac', 'Factura.com PAC', 'sandbox', '{"module":"billing","use":"pac","docs":"https://factura.com/apidocs/"}');
+    }
+
+    protected function seed_default_integration_connection($provider_code, $code, $name, $environment, $config_json)
+    {
+        $provider = \DB::select('id')->from('core_integration_providers')->where('code', '=', $provider_code)->execute()->current();
+        if (!$provider) {
+            return;
+        }
+
+        $this->upsert_seed('core_integration_connections', 'code', $code, [
+            'provider_id' => (int) $provider['id'],
+            'code' => $code,
+            'name' => $name,
+            'environment' => $environment,
+            'public_key' => '',
+            'public_value' => '',
+            'config_json' => $config_json,
+            'enabled' => 0,
+            'active' => 1,
+            'created_at' => time(),
+            'updated_at' => time(),
+        ]);
     }
 
     /**

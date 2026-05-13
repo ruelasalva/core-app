@@ -74,6 +74,7 @@ class Controller_Admin_Sat extends Controller_Adminbase
             return $this->json_response([
                 'config' => $this->get_config(),
                 'credentials' => $this->get_credentials(),
+                'integrations' => $this->get_integration_status(),
                 'stats' => $this->get_stats(),
                 'requests' => $this->get_recent_requests(),
                 'cfdi_alerts' => $this->get_cfdi_alerts(),
@@ -310,6 +311,84 @@ class Controller_Admin_Sat extends Controller_Adminbase
         }
     }
 
+    public function post_upload_credential_file()
+    {
+        $this->require_access('sat.access[edit]');
+
+        try {
+            $this->assert_schema_ready();
+            $id = (int) \Input::post('credential_id', 0);
+            $file_type = trim((string) \Input::post('file_type', ''));
+            if (!in_array($file_type, ['cer', 'key'], true)) {
+                return $this->json_response(['error' => 'Tipo de archivo invalido.'], 422);
+            }
+
+            $credential = Model_Core_Sat_Credential::find($id);
+            if (!$credential) {
+                return $this->json_response(['error' => 'Guarda primero la credencial.'], 404);
+            }
+
+            $file = \Input::file('file');
+            if (!$file || (int) \Arr::get($file, 'error', UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+                return $this->json_response(['error' => 'Selecciona un archivo valido.'], 422);
+            }
+
+            $extension = strtolower(pathinfo((string) \Arr::get($file, 'name', ''), PATHINFO_EXTENSION));
+            if ($extension !== $file_type) {
+                return $this->json_response(['error' => 'El archivo debe ser .'.$file_type.'.'], 422);
+            }
+            if ((int) \Arr::get($file, 'size', 0) > 2097152) {
+                return $this->json_response(['error' => 'El archivo no puede superar 2 MB.'], 422);
+            }
+
+            $relative_dir = 'storage/sat/credentials/'.strtolower($credential->rfc).'/'.$credential->credential_type;
+            $absolute_dir = APPPATH.$relative_dir;
+            if (!is_dir($absolute_dir)) {
+                mkdir($absolute_dir, 0750, true);
+            }
+
+            $filename = $file_type.'_'.date('Ymd_His').'_'.\Str::random('alnum', 8).'.'.$extension;
+            $target = $absolute_dir.DS.$filename;
+            if (!@move_uploaded_file((string) \Arr::get($file, 'tmp_name', ''), $target)) {
+                return $this->json_response(['error' => 'No se pudo guardar el archivo.'], 400);
+            }
+
+            if ($file_type === 'cer') {
+                $credential->cer_path = str_replace('\\', '/', 'fuel/app/'.$relative_dir.'/'.$filename);
+                $credential->cer_original_name = (string) \Arr::get($file, 'name', '');
+                $this->apply_certificate_metadata($credential, $target);
+            } else {
+                $credential->key_path = str_replace('\\', '/', 'fuel/app/'.$relative_dir.'/'.$filename);
+                $credential->key_original_name = (string) \Arr::get($file, 'name', '');
+            }
+            $credential->save();
+
+            Helper_Core_Audit::log([
+                'module' => 'sat',
+                'action' => 'upload_credential_file',
+                'entity_type' => 'sat_credential',
+                'entity_id' => (int) $credential->id,
+                'summary' => 'Archivo '.$file_type.' cargado para '.$credential->credential_type.' '.$credential->rfc,
+                'new_values' => [
+                    'credential_type' => $credential->credential_type,
+                    'rfc' => $credential->rfc,
+                    'file_type' => $file_type,
+                    'original_name' => (string) \Arr::get($file, 'name', ''),
+                ],
+            ]);
+
+            return $this->json_response(['status' => 'ok', 'credentials' => $this->get_credentials()]);
+        } catch (\Exception $e) {
+            \Log::error('Error cargando archivo credencial SAT: '.$e->getMessage());
+            return $this->json_response(['error' => $e->getMessage()], 400);
+        }
+    }
+
+    public function action_upload_credential_file()
+    {
+        return $this->post_upload_credential_file();
+    }
+
     /**
      * SAVE REQUEST
      *
@@ -389,17 +468,126 @@ class Controller_Admin_Sat extends Controller_Adminbase
                 'credential_type' => (string) $credential->credential_type,
                 'rfc' => (string) $credential->rfc,
                 'cer_path' => (string) $credential->cer_path,
+                'cer_original_name' => (string) $credential->cer_original_name,
                 'key_path' => (string) $credential->key_path,
+                'key_original_name' => (string) $credential->key_original_name,
                 'password' => '',
                 'has_password' => $credential->password_encrypted !== '' ? 1 : 0,
+                'certificate_serial' => (string) $credential->certificate_serial,
+                'certificate_subject' => (string) $credential->certificate_subject,
+                'certificate_issuer' => (string) $credential->certificate_issuer,
                 'valid_from' => (string) $credential->valid_from,
                 'valid_until' => (string) $credential->valid_until,
+                'days_remaining' => $this->days_remaining($credential->valid_until),
+                'validity_status' => $this->validity_status($credential->valid_until),
                 'notes' => (string) $credential->notes,
                 'active' => (int) $credential->active,
             ];
         }
 
         return $items;
+    }
+
+    protected function get_integration_status()
+    {
+        $items = [
+            'sat_download' => ['provider' => 'sat', 'enabled' => 0, 'connection' => null],
+            'pac_billing' => ['provider' => 'factura_com', 'enabled' => 0, 'connection' => null],
+        ];
+
+        foreach ($items as $key => $item) {
+            $provider = \DB::select('id', 'code', 'name', 'active')
+                ->from('core_integration_providers')
+                ->where('code', '=', $item['provider'])
+                ->execute()
+                ->current();
+            if (!$provider) {
+                continue;
+            }
+            $connection = \DB::select('id', 'code', 'name', 'environment', 'enabled', 'active')
+                ->from('core_integration_connections')
+                ->where('provider_id', '=', (int) $provider['id'])
+                ->where('active', '=', 1)
+                ->order_by('enabled', 'desc')
+                ->order_by('id', 'desc')
+                ->execute()
+                ->current();
+
+            $items[$key] = [
+                'provider' => $provider,
+                'enabled' => $connection && (int) $connection['enabled'] === 1 && (int) $provider['active'] === 1 ? 1 : 0,
+                'connection' => $connection ?: null,
+            ];
+        }
+
+        return $items;
+    }
+
+    protected function days_remaining($valid_until)
+    {
+        $time = strtotime((string) $valid_until);
+        if (!$time) {
+            return null;
+        }
+        return (int) floor(($time - strtotime(date('Y-m-d'))) / 86400);
+    }
+
+    protected function validity_status($valid_until)
+    {
+        $days = $this->days_remaining($valid_until);
+        if ($days === null) {
+            return 'unknown';
+        }
+        if ($days < 0) {
+            return 'expired';
+        }
+        if ($days <= 30) {
+            return 'warning';
+        }
+        return 'valid';
+    }
+
+    protected function apply_certificate_metadata(Model_Core_Sat_Credential $credential, $path)
+    {
+        $parsed = $this->parse_certificate($path);
+        if (!$parsed) {
+            return;
+        }
+
+        $credential->certificate_serial = (string) \Arr::get($parsed, 'serialNumberHex', \Arr::get($parsed, 'serialNumber', ''));
+        $credential->certificate_subject = json_encode(\Arr::get($parsed, 'subject', []));
+        $credential->certificate_issuer = json_encode(\Arr::get($parsed, 'issuer', []));
+        if (!empty($parsed['validFrom_time_t'])) {
+            $credential->valid_from = date('Y-m-d', (int) $parsed['validFrom_time_t']);
+        }
+        if (!empty($parsed['validTo_time_t'])) {
+            $credential->valid_until = date('Y-m-d', (int) $parsed['validTo_time_t']);
+        }
+    }
+
+    protected function parse_certificate($path)
+    {
+        if (!function_exists('openssl_x509_parse')) {
+            return null;
+        }
+
+        $content = file_get_contents($path);
+        if ($content === false || $content === '') {
+            return null;
+        }
+
+        $pem = $content;
+        if (strpos($content, 'BEGIN CERTIFICATE') === false) {
+            $pem = "-----BEGIN CERTIFICATE-----\n".chunk_split(base64_encode($content), 64, "\n")."-----END CERTIFICATE-----\n";
+        }
+
+        $resource = @openssl_x509_read($pem);
+        if (!$resource) {
+            return null;
+        }
+
+        $parsed = @openssl_x509_parse($resource);
+        return is_array($parsed) ? $parsed : null;
     }
 
     /**
