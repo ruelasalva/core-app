@@ -32,6 +32,29 @@ class Controller_Proveedores extends Controller_Portalbase
         $this->template->content = View::forge('portal/purchases', ['portal_code' => $this->portal_code]);
     }
 
+    public function action_cfdi()
+    {
+        $this->template->title = 'CFDI recibidos';
+        $this->template->content = View::forge('portal/cfdi', [
+            'portal_code' => $this->portal_code,
+            'portal_direction' => 'supplier',
+            'portal_title' => 'CFDI de proveedor',
+        ]);
+    }
+
+    public function action_cfdi_data()
+    {
+        try {
+            $party_id = (int) $this->portal_link->party_id;
+            return $this->json_response([
+                'items' => $this->supplier_cfdi($party_id),
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error cargando CFDI portal proveedores: '.$e->getMessage());
+            return $this->json_response(['error' => 'No se pudo cargar CFDI.'], 500);
+        }
+    }
+
     /**
      * COMPRAS DATA
      *
@@ -266,6 +289,28 @@ class Controller_Proveedores extends Controller_Portalbase
                 ->as_array();
         }
         return $rows;
+    }
+
+    protected function supplier_cfdi($party_id)
+    {
+        if (!\DBUtil::table_exists('core_sat_cfdi')) {
+            return [];
+        }
+
+        $items = [];
+        $rows = \DB::select('id', 'uuid', 'voucher_type', 'serie', 'folio', 'issued_at', 'currency', 'subtotal', 'tax_transferred_total', 'tax_withheld_total', 'total', 'sat_status', 'purchase_status', 'has_payment_complement', 'has_waybill')
+            ->from('core_sat_cfdi')
+            ->where('supplier_party_id', '=', (int) $party_id)
+            ->where('portal_visible_supplier', '=', 1)
+            ->order_by('issued_at', 'desc')
+            ->limit(200)
+            ->execute();
+
+        foreach ($rows as $row) {
+            $row['issued_label'] = $row['issued_at'] ? date('d/m/Y', strtotime($row['issued_at'])) : '';
+            $items[] = $row;
+        }
+        return $items;
     }
 
     protected function purchase_invoices($party_id)

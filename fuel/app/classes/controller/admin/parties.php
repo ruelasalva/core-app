@@ -250,6 +250,9 @@ class Controller_Admin_Parties extends Controller_Adminbase
                 ['value' => 'supplier', 'label' => 'Proveedor'],
                 ['value' => 'both', 'label' => 'Cliente y proveedor'],
             ], 'default' => $type],
+            ['name' => 'department_id', 'label' => 'Departamento', 'type' => 'select', 'options' => 'departments', 'default' => 0],
+            ['name' => 'sales_user_id', 'label' => 'Vendedor asignado', 'type' => 'select', 'options' => 'users', 'default' => 0],
+            ['name' => 'buyer_user_id', 'label' => 'Comprador asignado', 'type' => 'select', 'options' => 'users', 'default' => 0],
             ['name' => 'code', 'label' => 'Codigo', 'type' => 'text', 'default' => ''],
             ['name' => 'name', 'label' => 'Nombre comercial', 'type' => 'text', 'default' => ''],
             ['name' => 'legal_name', 'label' => 'Razon social', 'type' => 'text', 'default' => ''],
@@ -288,6 +291,9 @@ class Controller_Admin_Parties extends Controller_Adminbase
             if (isset($definition['filter'])) {
                 $query->where($definition['filter'][0], 'in', $definition['filter'][1]);
             }
+            if ($definition['table'] === 'core_parties') {
+                $this->apply_party_scope($query, 't0', 'any');
+            }
 
             $items[$key] = [];
             foreach ($query->get() as $row) {
@@ -310,6 +316,8 @@ class Controller_Admin_Parties extends Controller_Adminbase
     {
         return [
             'parties' => $this->select_options('core_parties', 'id', 'name'),
+            'departments' => $this->select_options('core_departments', 'id', 'name'),
+            'users' => $this->select_user_options(),
             'price_lists' => $this->select_options('core_commerce_price_lists', 'id', 'name'),
             'payment_terms' => $this->select_options('core_catalog_payment_terms', 'id', 'name'),
             'sat_cfdi_uses' => $this->select_options('core_sat_cfdi_uses', 'code', 'name'),
@@ -361,6 +369,19 @@ class Controller_Admin_Parties extends Controller_Adminbase
             ];
         }
 
+        return $options;
+    }
+
+    protected function select_user_options()
+    {
+        $options = [['value' => '0', 'label' => 'Sin asignar']];
+        foreach (\DB::select('id', 'username', 'email')->from('users')->order_by('username', 'asc')->execute() as $row) {
+            $label = trim((string) $row['username']);
+            if ($label === '') {
+                $label = (string) $row['email'];
+            }
+            $options[] = ['value' => (string) $row['id'], 'label' => $label];
+        }
         return $options;
     }
 

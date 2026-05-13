@@ -33,6 +33,7 @@ return array (
         27 => '028_create_core_commerce_product_relations',
         28 => '029_create_core_purchase_tables',
         29 => '030_extend_core_sat_cfdi_audit_tables',
+        30 => '031_add_cfdi_party_scope_controls',
       ),
     ),
     'module' => array(    

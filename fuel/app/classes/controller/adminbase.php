@@ -108,4 +108,50 @@ class Controller_Adminbase extends Controller_Template
             ['Content-Type' => 'application/json']
         );
     }
+
+    protected function can_view_all_operational()
+    {
+        return $this->is_super_admin || in_array($this->user_group, [80, 90, 100], true);
+    }
+
+    protected function employee_department_id()
+    {
+        $row = \DB::select('department_id')
+            ->from('core_employees')
+            ->where('user_id', '=', (int) $this->user_id)
+            ->where('active', '=', 1)
+            ->execute()
+            ->current();
+
+        return $row ? (int) $row['department_id'] : 0;
+    }
+
+    protected function apply_party_scope($query, $alias = 'p', $role = 'any')
+    {
+        if ($this->can_view_all_operational()) {
+            return $query;
+        }
+
+        $department_id = $this->employee_department_id();
+        $department_field = $alias.'.department_id';
+        $sales_field = $alias.'.sales_user_id';
+        $buyer_field = $alias.'.buyer_user_id';
+
+        $query->where_open();
+        if ($role === 'sales') {
+            $query->where($sales_field, '=', (int) $this->user_id);
+        } elseif ($role === 'purchases') {
+            $query->where($buyer_field, '=', (int) $this->user_id);
+        } else {
+            $query->where($sales_field, '=', (int) $this->user_id)
+                ->or_where($buyer_field, '=', (int) $this->user_id);
+        }
+
+        if ($department_id > 0) {
+            $query->or_where($department_field, '=', $department_id);
+        }
+        $query->where_close();
+
+        return $query;
+    }
 }

@@ -246,7 +246,10 @@ class Controller_Admin_Sales extends Controller_Adminbase
             )
             ->from(array('core_sales_quotes', 'q'))
             ->join(array('core_parties', 'p'), 'left')
-                ->on('q.party_id', '=', 'p.id')
+                ->on('q.party_id', '=', 'p.id');
+        $this->apply_party_scope($rows, 'p', 'sales');
+
+        $rows = $rows
             ->order_by('q.id', 'desc')
             ->limit(200)
             ->execute()
@@ -356,6 +359,9 @@ class Controller_Admin_Sales extends Controller_Adminbase
         $query = \DB::select($value_field, $label_field)->from($table)->where('active', '=', 1);
         foreach ($where as $field => $value) {
             $query->where($field, '=', $value);
+        }
+        if ($table === 'core_parties') {
+            $this->apply_party_scope($query, $table, 'sales');
         }
         foreach ($query->order_by($label_field, 'asc')->execute() as $row) {
             $items[] = ['value' => (int) $row[$value_field], 'label' => (string) $row[$label_field]];

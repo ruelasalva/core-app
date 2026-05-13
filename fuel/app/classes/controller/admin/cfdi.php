@@ -111,8 +111,11 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
             'emitter_rfc', 'emitter_name', 'receiver_rfc', 'receiver_name',
             'issued_at', 'stamped_at', 'currency', 'subtotal', 'tax_transferred_total',
             'tax_withheld_total', 'total', 'sat_status', 'missing_xml',
-            'has_payment_complement', 'has_waybill', 'origin', 'xml_path'
+            'has_payment_complement', 'has_waybill', 'sales_status', 'purchase_status',
+            'portal_visible_customer', 'portal_visible_supplier', 'origin', 'xml_path'
         )->from('core_sat_cfdi');
+
+        $this->apply_cfdi_scope($query);
 
         $start = $filters['month'].'-01 00:00:00';
         $end = date('Y-m-t 23:59:59', strtotime($filters['month'].'-01'));
@@ -164,9 +167,12 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
 
     protected function payments()
     {
-        return \DB::select(['p.id', 'id'], ['c.uuid', 'payment_uuid'], ['p.invoice_uuid', 'invoice_uuid'], ['p.series', 'series'], ['p.folio', 'folio'], ['p.currency', 'currency'], ['p.partiality_number', 'partiality_number'], ['p.paid_amount', 'paid_amount'], ['p.remaining_balance', 'remaining_balance'])
+        $query = \DB::select(['p.id', 'id'], ['c.uuid', 'payment_uuid'], ['p.invoice_uuid', 'invoice_uuid'], ['p.series', 'series'], ['p.folio', 'folio'], ['p.currency', 'currency'], ['p.partiality_number', 'partiality_number'], ['p.paid_amount', 'paid_amount'], ['p.remaining_balance', 'remaining_balance'])
             ->from(['core_sat_payment_details', 'p'])
-            ->join(['core_sat_cfdi', 'c'], 'left')->on('c.id', '=', 'p.payment_cfdi_id')
+            ->join(['core_sat_cfdi', 'c'], 'left')->on('c.id', '=', 'p.payment_cfdi_id');
+        $this->apply_cfdi_scope($query, 'c');
+
+        return $query
             ->order_by('p.id', 'desc')
             ->limit(100)
             ->execute()
@@ -175,9 +181,12 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
 
     protected function relations()
     {
-        return \DB::select(['r.id', 'id'], ['c.uuid', 'uuid'], ['r.related_uuid', 'related_uuid'], ['r.relation_type', 'relation_type'], ['r.exists_in_system', 'exists_in_system'])
+        $query = \DB::select(['r.id', 'id'], ['c.uuid', 'uuid'], ['r.related_uuid', 'related_uuid'], ['r.relation_type', 'relation_type'], ['r.exists_in_system', 'exists_in_system'])
             ->from(['core_sat_cfdi_relations', 'r'])
-            ->join(['core_sat_cfdi', 'c'], 'left')->on('c.id', '=', 'r.cfdi_id')
+            ->join(['core_sat_cfdi', 'c'], 'left')->on('c.id', '=', 'r.cfdi_id');
+        $this->apply_cfdi_scope($query, 'c');
+
+        return $query
             ->order_by('r.id', 'desc')
             ->limit(100)
             ->execute()
@@ -203,10 +212,50 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
     protected function count_month($start, $end, array $where = [])
     {
         $query = \DB::select()->from('core_sat_cfdi')->where('issued_at', '>=', $start)->where('issued_at', '<=', $end);
+        $this->apply_cfdi_scope($query);
         foreach ($where as $field => $value) {
             $query->where($field, '=', $value);
         }
         return (int) $query->execute()->count();
+    }
+
+    protected function apply_cfdi_scope($query, $alias = 'core_sat_cfdi')
+    {
+        if ($this->can_view_all_operational()) {
+            return $query;
+        }
+
+        $party_ids = $this->scoped_party_ids();
+        if (empty($party_ids)) {
+            $query->where($alias.'.id', '=', -1);
+            return $query;
+        }
+
+        $query->where_open()
+            ->where($alias.'.customer_party_id', 'in', $party_ids)
+            ->or_where($alias.'.supplier_party_id', 'in', $party_ids)
+        ->where_close();
+
+        return $query;
+    }
+
+    protected function scoped_party_ids()
+    {
+        $department_id = $this->employee_department_id();
+        $query = \DB::select('id')->from('core_parties')->where('active', '=', 1);
+        $query->where_open()
+            ->where('sales_user_id', '=', (int) $this->user_id)
+            ->or_where('buyer_user_id', '=', (int) $this->user_id);
+        if ($department_id > 0) {
+            $query->or_where('department_id', '=', $department_id);
+        }
+        $query->where_close();
+
+        $ids = [];
+        foreach ($query->execute() as $row) {
+            $ids[] = (int) $row['id'];
+        }
+        return $ids;
     }
 
     protected function voucher_label($type)

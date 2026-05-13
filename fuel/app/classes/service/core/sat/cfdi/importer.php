@@ -26,6 +26,7 @@ class Service_Core_Sat_Cfdi_Importer
             $this->replace_relations($cfdi, $data);
             $this->replace_payment_details($cfdi, $data);
             $this->sync_purchase_invoice($cfdi);
+            $this->sync_billing_invoice($cfdi);
 
             \DB::commit_transaction();
 
@@ -58,16 +59,26 @@ class Service_Core_Sat_Cfdi_Importer
             $cfdi = Model_Core_Sat_Cfdi::forge(['uuid' => $uuid]);
         }
 
+        $emitter_party = $this->party_by_rfc((string) \Arr::get($data, 'emitter_rfc', ''));
+        $receiver_party = $this->party_by_rfc((string) \Arr::get($data, 'receiver_rfc', ''));
+        $direction = $this->direction($data);
+        $customer_party_id = $direction === 'issued' && $receiver_party ? (int) $receiver_party['id'] : 0;
+        $supplier_party_id = $direction === 'received' && $emitter_party ? (int) $emitter_party['id'] : 0;
+
         $cfdi->set([
             'uuid' => $uuid,
-            'direction' => $this->direction($data),
+            'direction' => $direction,
             'version' => (string) \Arr::get($data, 'version', ''),
             'serie' => (string) \Arr::get($data, 'serie', ''),
             'folio' => (string) \Arr::get($data, 'folio', ''),
             'emitter_rfc' => strtoupper((string) \Arr::get($data, 'emitter_rfc', '')),
+            'emitter_party_id' => $emitter_party ? (int) $emitter_party['id'] : 0,
             'emitter_name' => (string) \Arr::get($data, 'emitter_name', ''),
             'emitter_regime' => (string) \Arr::get($data, 'emitter_regime', ''),
             'receiver_rfc' => strtoupper((string) \Arr::get($data, 'receiver_rfc', '')),
+            'receiver_party_id' => $receiver_party ? (int) $receiver_party['id'] : 0,
+            'customer_party_id' => $customer_party_id,
+            'supplier_party_id' => $supplier_party_id,
             'receiver_name' => (string) \Arr::get($data, 'receiver_name', ''),
             'receiver_regime' => (string) \Arr::get($data, 'receiver_regime', ''),
             'receiver_zip' => (string) \Arr::get($data, 'receiver_zip', ''),
@@ -105,6 +116,10 @@ class Service_Core_Sat_Cfdi_Importer
             'complements_json' => !empty($data['complements']) ? json_encode($data['complements']) : null,
             'has_payment_complement' => (int) \Arr::get($data, 'has_payment_complement', 0),
             'has_waybill' => (int) \Arr::get($data, 'has_waybill', 0),
+            'sales_status' => $direction === 'issued' ? ($customer_party_id > 0 ? 'candidate' : 'unmatched') : '',
+            'purchase_status' => $direction === 'received' ? ($supplier_party_id > 0 ? 'candidate' : 'unmatched') : '',
+            'portal_visible_customer' => $customer_party_id > 0 ? 1 : 0,
+            'portal_visible_supplier' => $supplier_party_id > 0 ? 1 : 0,
             'missing_xml' => 0,
         ]);
         $cfdi->save();
@@ -255,6 +270,8 @@ class Service_Core_Sat_Cfdi_Importer
 
         $invoice->cfdi_id = (int) $cfdi->id;
         $invoice->sat_status = (string) $cfdi->sat_status;
+        $cfdi->purchase_status = 'linked';
+        $cfdi->save();
         if ((float) $invoice->total <= 0) {
             $invoice->subtotal = (float) $cfdi->subtotal;
             $invoice->tax_total = (float) $cfdi->tax_transferred_total;
@@ -263,6 +280,38 @@ class Service_Core_Sat_Cfdi_Importer
             $invoice->balance_due = (float) $cfdi->total;
         }
         $invoice->save();
+    }
+
+    protected function sync_billing_invoice(Model_Core_Sat_Cfdi $cfdi)
+    {
+        if (!\DBUtil::table_exists('core_billing_invoices')) {
+            return;
+        }
+
+        $invoice = Model_Core_Billing_Invoice::query()->where('cfdi_id', '=', (int) $cfdi->id)->get_one();
+        if (!$invoice) {
+            return;
+        }
+
+        $cfdi->sales_status = 'linked';
+        $cfdi->save();
+    }
+
+    protected function party_by_rfc($rfc)
+    {
+        $rfc = strtoupper(trim((string) $rfc));
+        if ($rfc === '') {
+            return null;
+        }
+
+        $row = \DB::select('id', 'party_type')
+            ->from('core_parties')
+            ->where('rfc', '=', $rfc)
+            ->where('active', '=', 1)
+            ->execute()
+            ->current();
+
+        return $row ?: null;
     }
 
     protected function direction(array $data)

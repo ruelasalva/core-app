@@ -135,6 +135,10 @@ class Configsetup
             throw new \Exception('Primero ejecuta: php oil refine migrate');
         }
 
+        if (!\DBUtil::field_exists('core_sat_cfdi', ['emitter_party_id', 'receiver_party_id', 'customer_party_id', 'supplier_party_id', 'purchase_status', 'sales_status'])) {
+            throw new \Exception('Primero ejecuta: php oil refine migrate');
+        }
+
         if (!\DBUtil::field_exists('core_audit_logs', ['table_name', 'record_pk', 'business_event', 'changed_fields_json'])) {
             throw new \Exception('Primero ejecuta: php oil refine migrate');
         }
@@ -191,6 +195,10 @@ class Configsetup
             if (!\DBUtil::table_exists($table)) {
                 throw new \Exception('Primero ejecuta: php oil refine migrate');
             }
+        }
+
+        if (!\DBUtil::field_exists('core_parties', ['department_id', 'sales_user_id', 'buyer_user_id'])) {
+            throw new \Exception('Primero ejecuta: php oil refine migrate');
         }
 
         foreach (['core_portal_profiles', 'core_party_user_links', 'core_party_branding'] as $table) {

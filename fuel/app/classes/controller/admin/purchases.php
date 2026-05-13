@@ -355,7 +355,10 @@ class Controller_Admin_Purchases extends Controller_Adminbase
         $rows = \DB::select(['o.id', 'id'], ['o.folio', 'folio'], ['o.party_id', 'party_id'], ['p.name', 'party_name'], ['p.rfc', 'party_rfc'], ['o.order_date', 'order_date'], ['o.expected_date', 'expected_date'], ['o.status', 'status'], ['o.currency_code', 'currency_code'], ['o.subtotal', 'subtotal'], ['o.tax_total', 'tax_total'], ['o.retention_total', 'retention_total'], ['o.total', 'total'], ['o.invoiced_total', 'invoiced_total'], ['o.balance_total', 'balance_total'], ['o.notes', 'notes'], ['o.internal_notes', 'internal_notes'], ['o.created_at', 'created_at'])
             ->from(['core_purchase_orders', 'o'])
             ->join(['core_parties', 'p'], 'left')->on('o.party_id', '=', 'p.id')
-            ->where('o.active', '=', 1)
+            ->where('o.active', '=', 1);
+        $this->apply_purchase_scope($rows, 'o', 'p');
+
+        $rows = $rows
             ->order_by('o.id', 'desc')
             ->limit(200)
             ->execute()
@@ -385,7 +388,10 @@ class Controller_Admin_Purchases extends Controller_Adminbase
             ->from(['core_purchase_invoices', 'i'])
             ->join(['core_parties', 'p'], 'left')->on('i.party_id', '=', 'p.id')
             ->join(['core_purchase_orders', 'o'], 'left')->on('i.order_id', '=', 'o.id')
-            ->where('i.active', '=', 1)
+            ->where('i.active', '=', 1);
+        $this->apply_purchase_scope($rows, 'o', 'p');
+
+        $rows = $rows
             ->order_by('i.id', 'desc')
             ->limit(200)
             ->execute()
@@ -401,7 +407,10 @@ class Controller_Admin_Purchases extends Controller_Adminbase
         $rows = \DB::select(['r.id', 'id'], ['r.folio', 'folio'], ['r.party_id', 'party_id'], ['p.name', 'party_name'], ['r.issue_date', 'issue_date'], ['r.scheduled_payment_date', 'scheduled_payment_date'], ['r.currency_code', 'currency_code'], ['r.total', 'total'], ['r.status', 'status'], ['r.notes', 'notes'], ['r.created_at', 'created_at'])
             ->from(['core_purchase_receipts', 'r'])
             ->join(['core_parties', 'p'], 'left')->on('r.party_id', '=', 'p.id')
-            ->where('r.active', '=', 1)
+            ->where('r.active', '=', 1);
+        $this->apply_party_scope($rows, 'p', 'purchases');
+
+        $rows = $rows
             ->order_by('r.id', 'desc')
             ->limit(200)
             ->execute()
@@ -558,13 +567,38 @@ class Controller_Admin_Purchases extends Controller_Adminbase
     {
         $query = \DB::select($value_field, $label_field)->from($table)->where('active', '=', 1);
         foreach ($where as $field => $value) {
-            $query->where($field, '=', $value);
+            if ($field === 'party_type') {
+                $query->where($field, 'in', [$value, 'both']);
+            } else {
+                $query->where($field, '=', $value);
+            }
+        }
+        if ($table === 'core_parties') {
+            $this->apply_party_scope($query, $table, 'purchases');
         }
         $items = [];
         foreach ($query->order_by($label_field, 'asc')->execute() as $row) {
             $items[] = ['value' => (string) $row[$value_field], 'label' => (string) $row[$label_field]];
         }
         return $items;
+    }
+
+    protected function apply_purchase_scope($query, $order_alias, $party_alias)
+    {
+        if ($this->can_view_all_operational()) {
+            return $query;
+        }
+
+        $department_id = $this->employee_department_id();
+        $query->where_open()
+            ->where($party_alias.'.buyer_user_id', '=', (int) $this->user_id);
+        if ($department_id > 0) {
+            $query->or_where($party_alias.'.department_id', '=', $department_id)
+                ->or_where($order_alias.'.department_id', '=', $department_id);
+        }
+        $query->where_close();
+
+        return $query;
     }
 
     protected function select_rate_options($table, $value_field, $label_field, array $where = [])

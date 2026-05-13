@@ -32,6 +32,9 @@
                 <li class="nav-item">
                     <a class="nav-link <?php echo Uri::segment(2) == 'helpdesk' ? 'active' : ''; ?>" href="<?php echo Uri::create($portal_code.'/helpdesk'); ?>">Helpdesk</a>
                 </li>
+                <li class="nav-item">
+                    <a class="nav-link <?php echo Uri::segment(2) == 'cfdi' ? 'active' : ''; ?>" href="<?php echo Uri::create($portal_code.'/cfdi'); ?>">CFDI</a>
+                </li>
                 <?php if ($portal_code === 'proveedores'): ?>
                 <li class="nav-item">
                     <a class="nav-link <?php echo Uri::segment(2) == 'compras' ? 'active' : ''; ?>" href="<?php echo Uri::create($portal_code.'/compras'); ?>">Compras</a>
