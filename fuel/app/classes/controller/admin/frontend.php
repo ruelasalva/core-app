@@ -310,6 +310,14 @@ class Controller_Admin_Frontend extends Controller_Adminbase
                     ['name' => 'heading_font_family', 'label' => 'Fuente titulos', 'type' => 'text', 'default' => 'Arial, Helvetica, sans-serif'],
                     ['name' => 'logo_path', 'label' => 'Logo', 'type' => 'image', 'default' => ''],
                     ['name' => 'favicon_path', 'label' => 'Favicon', 'type' => 'image', 'default' => ''],
+                    ['name' => 'site_name', 'label' => 'Nombre sitio', 'type' => 'text', 'default' => ''],
+                    ['name' => 'seo_title_suffix', 'label' => 'Sufijo SEO', 'type' => 'text', 'default' => ''],
+                    ['name' => 'default_seo_description', 'label' => 'Descripcion SEO default', 'type' => 'textarea', 'default' => ''],
+                    ['name' => 'og_image_path', 'label' => 'Imagen social', 'type' => 'image', 'default' => ''],
+                    ['name' => 'robots', 'label' => 'Robots', 'type' => 'select_static', 'options' => [
+                        ['value' => 'index,follow', 'label' => 'Indexar y seguir'],
+                        ['value' => 'noindex,nofollow', 'label' => 'No indexar'],
+                    ], 'default' => 'index,follow'],
                     ['name' => 'header_style', 'label' => 'Header', 'type' => 'select_static', 'options' => [
                         ['value' => 'standard', 'label' => 'Estandar'],
                         ['value' => 'compact', 'label' => 'Compacto'],

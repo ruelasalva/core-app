@@ -380,12 +380,18 @@ class Controller_Account extends Controller_Template
      */
     protected function prepare_template($title, $description = '')
     {
+        # SE RESUELVE TEMA Y EMPRESA PARA BRANDING/SEO
+        $theme = $this->get_active_theme();
+        $company = Model_Core_Company::get_current();
+
         # SE REUTILIZAN LOS DATOS PUBLICOS MINIMOS
         $this->template->title = $title;
-        $this->template->seo_description = $description;
+        $this->template->seo_description = $description ?: (($theme && !empty($theme->default_seo_description)) ? $theme->default_seo_description : '');
+        $this->template->site_name = ($theme && !empty($theme->site_name)) ? $theme->site_name : ($company ? $company->name : 'Core-App');
+        $this->template->canonical_url = \Uri::current();
         $this->template->menu_items = $this->get_menu_items('header');
         $this->template->footer_columns = $this->get_footer_columns();
-        $this->template->theme = $this->get_active_theme();
+        $this->template->theme = $theme;
         $this->template->frontend_user = [
             'logged_in' => \Auth::check() && (bool) $this->customer_link(),
             'name' => \Auth::check() ? \Auth::get_screen_name() : '',

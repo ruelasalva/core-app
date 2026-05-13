@@ -29,6 +29,7 @@ return array (
         23 => '024_create_core_calendar_tables',
         24 => '025_create_core_cart_tables',
         25 => '026_create_core_sales_quote_tables',
+        26 => '027_add_frontend_theme_seo_fields',
       ),
     ),
     'module' => array(    

@@ -206,6 +206,10 @@ class Configsetup
             }
         }
 
+        if (!\DBUtil::field_exists('core_frontend_themes', ['site_name', 'seo_title_suffix', 'default_seo_description', 'og_image_path', 'robots'])) {
+            throw new \Exception('Primero ejecuta: php oil refine migrate');
+        }
+
         foreach (['core_knowledge_articles'] as $table) {
             if (!\DBUtil::table_exists($table)) {
                 throw new \Exception('Primero ejecuta: php oil refine migrate');
@@ -1362,6 +1366,11 @@ class Configsetup
             'heading_font_family' => 'Arial, Helvetica, sans-serif',
             'logo_path' => '',
             'favicon_path' => '',
+            'site_name' => 'Core-App ERP',
+            'seo_title_suffix' => 'Core-App ERP',
+            'default_seo_description' => 'Catalogo y portal administrable de Core-App.',
+            'og_image_path' => '',
+            'robots' => 'index,follow',
             'header_style' => 'standard',
             'footer_style' => 'standard',
             'custom_css' => '',
@@ -1370,6 +1379,36 @@ class Configsetup
             'created_at' => time(),
             'updated_at' => time(),
         ]);
+
+        $theme = \DB::select('id', 'site_name', 'seo_title_suffix', 'default_seo_description', 'robots')
+            ->from('core_frontend_themes')
+            ->where('code', '=', 'core_default')
+            ->execute()
+            ->current();
+
+        if ($theme) {
+            $theme_updates = [];
+            if (empty($theme['site_name'])) {
+                $theme_updates['site_name'] = 'Core-App ERP';
+            }
+            if (empty($theme['seo_title_suffix'])) {
+                $theme_updates['seo_title_suffix'] = 'Core-App ERP';
+            }
+            if (empty($theme['default_seo_description'])) {
+                $theme_updates['default_seo_description'] = 'Catalogo y portal administrable de Core-App.';
+            }
+            if (empty($theme['robots'])) {
+                $theme_updates['robots'] = 'index,follow';
+            }
+
+            if (!empty($theme_updates)) {
+                $theme_updates['updated_at'] = time();
+                \DB::update('core_frontend_themes')
+                    ->set($theme_updates)
+                    ->where('id', '=', (int) $theme['id'])
+                    ->execute();
+            }
+        }
 
         $this->insert_if_missing('core_frontend_pages', 'slug', 'inicio', [
             'title' => 'Inicio',
@@ -1686,7 +1725,7 @@ class Configsetup
             'title' => 'Como editar paginas y mostrarlas en el frontend',
             'category' => 'Frontend',
             'summary' => 'Manual operativo para crear paginas, agregar secciones, publicarlas en menu y validar que aparezcan en el sitio publico.',
-            'content' => '<h3>Objetivo</h3><p>Este manual explica como crear o editar una pagina administrable y hacer que se vea en el frontend publico. La idea no es editar archivos PHP para cada pagina, sino administrar contenido desde el panel.</p><h4>Conceptos base</h4><ul><li><strong>Apariencia</strong>: define tema activo, logo, colores, tipografias y CSS controlado.</li><li><strong>Pagina</strong>: define URL, titulo, SEO y estado publicado.</li><li><strong>Seccion</strong>: cada bloque visual dentro de una pagina, por ejemplo hero, texto con imagen, productos, marcas, descargas o contacto.</li><li><strong>Menu</strong>: permite que una pagina aparezca en la navegacion publica.</li><li><strong>Bloque reutilizable</strong>: contenido que puede usarse en varias paginas sin duplicarlo manualmente.</li></ul><h4>Crear o editar una pagina</h4><ol><li>Entra a <strong>Admin &gt; Frontend</strong>.</li><li>Abre el apartado <strong>Paginas</strong>.</li><li>Para una pagina nueva usa <strong>Nuevo</strong>; para modificar una existente usa el boton de editar.</li><li>Captura <strong>Titulo</strong>. El <strong>slug</strong> sera la URL publica, por ejemplo <code>empresa</code> se vera como <code>/empresa</code> o <code>/pagina/empresa</code> segun la ruta configurada.</li><li>Activa la pagina con <strong>Publicado</strong> o <strong>Activo</strong>. Si queda inactiva no debe mostrarse publicamente.</li><li>Captura SEO: titulo, descripcion y palabras clave cuando aplique.</li><li>Guarda la pagina.</li></ol><h4>Agregar contenido con secciones</h4><ol><li>Entra a <strong>Frontend &gt; Secciones</strong>.</li><li>Crea una seccion y selecciona la pagina a la que pertenece.</li><li>Define <strong>section_key</strong> con un codigo unico, por ejemplo <code>empresa_historia</code>.</li><li>Elige el <strong>tipo de seccion</strong>. Los mas utiles al inicio son contenido, contenido con imagen, CTA, productos, marcas, descargas y contacto.</li><li>Captura titulo, subtitulo, contenido e imagen si aplica.</li><li>Usa <strong>Orden</strong> para acomodar la seccion. Numeros menores aparecen primero.</li><li>Cuando el tipo de seccion tenga opciones especiales, usa <strong>Configuracion del componente</strong> en vez de escribir JSON manualmente.</li><li>Guarda y revisa el frontend.</li></ol><h4>Publicar en el menu</h4><ol><li>Entra a <strong>Frontend &gt; Menus</strong> y confirma que exista el menu principal.</li><li>Entra a <strong>Items menu</strong>.</li><li>Crea un item con la etiqueta visible, por ejemplo <code>Empresa</code>.</li><li>Selecciona el destino. Si es pagina interna, apunta al slug de la pagina; si es URL personalizada, captura la ruta.</li><li>Activa el item y define orden.</li><li>Guarda y revisa que aparezca en la navegacion publica.</li></ol><h4>Ver la pagina en el frontend</h4><ul><li>Pagina de inicio: abre <code>/</code>.</li><li>Pagina por slug: abre <code>/pagina/slug</code>.</li><li>Alias principales: si existe ruta dedicada como <code>/empresa</code>, tambien puede abrirse directo.</li><li>Productos: abre <code>/productos</code> y revisa que productos activos se vean con precio publico base.</li></ul><h4>Checklist antes de darla por lista</h4><ul><li>La pagina esta activa.</li><li>Tiene slug limpio y sin espacios.</li><li>Tiene al menos una seccion activa.</li><li>Las secciones tienen orden correcto.</li><li>Las imagenes cargan desde una ruta publica valida.</li><li>El menu apunta a la pagina correcta.</li><li>La vista publica no muestra textos de prueba.</li></ul>',
+            'content' => '<h3>Objetivo</h3><p>Este manual explica como crear o editar una pagina administrable y hacer que se vea en el frontend publico. La idea no es editar archivos PHP para cada pagina, sino administrar contenido desde el panel.</p><h4>Conceptos base</h4><ul><li><strong>Apariencia</strong>: define tema activo, nombre del sitio, logo, favicon, colores, tipografias, SEO default, imagen social, robots y CSS controlado.</li><li><strong>Pagina</strong>: define URL, titulo, SEO y estado publicado.</li><li><strong>Seccion</strong>: cada bloque visual dentro de una pagina, por ejemplo hero, texto con imagen, productos, marcas, descargas o contacto.</li><li><strong>Menu</strong>: permite que una pagina aparezca en la navegacion publica.</li><li><strong>Bloque reutilizable</strong>: contenido que puede usarse en varias paginas sin duplicarlo manualmente.</li></ul><h4>Crear o editar una pagina</h4><ol><li>Entra a <strong>Admin &gt; Frontend</strong>.</li><li>Abre el apartado <strong>Paginas</strong>.</li><li>Para una pagina nueva usa <strong>Nuevo</strong>; para modificar una existente usa el boton de editar.</li><li>Captura <strong>Titulo</strong>. El <strong>slug</strong> sera la URL publica, por ejemplo <code>empresa</code> se vera como <code>/empresa</code> o <code>/pagina/empresa</code> segun la ruta configurada.</li><li>Activa la pagina con <strong>Publicado</strong> o <strong>Activo</strong>. Si queda inactiva no debe mostrarse publicamente.</li><li>Captura SEO: titulo, descripcion y palabras clave cuando aplique.</li><li>Guarda la pagina.</li></ol><h4>Configurar branding y SEO global</h4><ol><li>Entra a <strong>Frontend &gt; Apariencia</strong>.</li><li>Captura <strong>Nombre sitio</strong>, logo y favicon. El frontend los usara automaticamente en encabezado y metadatos.</li><li>Define <strong>Sufijo SEO</strong> para completar titulos, por ejemplo <code>Mi empresa</code>.</li><li>Captura <strong>Descripcion SEO default</strong> para paginas que no tengan descripcion propia.</li><li>Configura <strong>Imagen social</strong> para compartir en redes y <strong>Robots</strong> segun si el sitio debe indexarse.</li><li>Guarda y revisa el codigo fuente del frontend para confirmar title, description, canonical y etiquetas Open Graph.</li></ol><h4>Agregar contenido con secciones</h4><ol><li>Entra a <strong>Frontend &gt; Secciones</strong>.</li><li>Crea una seccion y selecciona la pagina a la que pertenece.</li><li>Define <strong>section_key</strong> con un codigo unico, por ejemplo <code>empresa_historia</code>.</li><li>Elige el <strong>tipo de seccion</strong>. Los mas utiles al inicio son contenido, contenido con imagen, CTA, productos, marcas, descargas y contacto.</li><li>Captura titulo, subtitulo, contenido e imagen si aplica.</li><li>Usa <strong>Orden</strong> para acomodar la seccion. Numeros menores aparecen primero.</li><li>Cuando el tipo de seccion tenga opciones especiales, usa <strong>Configuracion del componente</strong> en vez de escribir JSON manualmente.</li><li>Guarda y revisa el frontend.</li></ol><h4>Publicar en el menu</h4><ol><li>Entra a <strong>Frontend &gt; Menus</strong> y confirma que exista el menu principal.</li><li>Entra a <strong>Items menu</strong>.</li><li>Crea un item con la etiqueta visible, por ejemplo <code>Empresa</code>.</li><li>Selecciona el destino. Si es pagina interna, apunta al slug de la pagina; si es URL personalizada, captura la ruta.</li><li>Activa el item y define orden.</li><li>Guarda y revisa que aparezca en la navegacion publica.</li></ol><h4>Ver la pagina en el frontend</h4><ul><li>Pagina de inicio: abre <code>/</code>.</li><li>Pagina por slug: abre <code>/pagina/slug</code>.</li><li>Alias principales: si existe ruta dedicada como <code>/empresa</code>, tambien puede abrirse directo.</li><li>Productos: abre <code>/productos</code> y revisa que productos activos se vean con precio publico base.</li></ul><h4>Checklist antes de darla por lista</h4><ul><li>La pagina esta activa.</li><li>Tiene slug limpio y sin espacios.</li><li>Tiene al menos una seccion activa.</li><li>Las secciones tienen orden correcto.</li><li>Las imagenes cargan desde una ruta publica valida.</li><li>El menu apunta a la pagina correcta.</li><li>Title, description, canonical, robots y Open Graph se ven correctamente.</li><li>La vista publica no muestra textos de prueba.</li></ul>',
             'sort_order' => 10,
             'active' => 1,
             'created_at' => time(),

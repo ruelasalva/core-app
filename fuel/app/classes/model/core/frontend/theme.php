@@ -8,7 +8,8 @@ class Model_Core_Frontend_Theme extends \Orm\Model
         'id', 'code', 'name', 'layout_key', 'color_primary', 'color_secondary', 'color_accent',
         'color_background', 'color_surface', 'color_text', 'color_muted', 'font_family',
         'heading_font_family', 'logo_path', 'favicon_path', 'header_style', 'footer_style',
-        'custom_css', 'is_active', 'active', 'created_at', 'updated_at',
+        'custom_css', 'site_name', 'seo_title_suffix', 'default_seo_description',
+        'og_image_path', 'robots', 'is_active', 'active', 'created_at', 'updated_at',
     ];
     protected static $_observers = [
         'Orm\Observer_CreatedAt' => ['events' => ['before_insert'], 'property' => 'created_at', 'mysql_timestamp' => false],

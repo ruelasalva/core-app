@@ -16,10 +16,42 @@
 
         return Uri::base(false).ltrim($path, '/');
     };
+    $site_name = !empty($site_name)
+        ? (string) $site_name
+        : (($theme && !empty($theme->site_name)) ? (string) $theme->site_name : 'Core-App');
+    $page_title = !empty($title) ? (string) $title : $site_name;
+    $title_suffix = ($theme && !empty($theme->seo_title_suffix)) ? (string) $theme->seo_title_suffix : $site_name;
+    $full_title = $page_title;
+    if ($title_suffix !== '' && strcasecmp($page_title, $title_suffix) !== 0 && stripos($page_title, $title_suffix) === false) {
+        $full_title .= ' | '.$title_suffix;
+    }
+    $seo_description = !empty($seo_description)
+        ? (string) $seo_description
+        : (($theme && !empty($theme->default_seo_description)) ? (string) $theme->default_seo_description : '');
+    $canonical_url = !empty($canonical_url) ? (string) $canonical_url : Uri::current();
+    $robots = ($theme && !empty($theme->robots)) ? (string) $theme->robots : 'index,follow';
+    $og_image = ($theme && !empty($theme->og_image_path)) ? $theme_asset($theme->og_image_path) : '';
     ?>
-    <title><?php echo e(!empty($title) ? $title : 'Core-App'); ?></title>
+    <title><?php echo e($full_title); ?></title>
+    <meta name="robots" content="<?php echo e($robots); ?>">
+    <link rel="canonical" href="<?php echo e($canonical_url); ?>">
     <?php if (!empty($seo_description)): ?>
     <meta name="description" content="<?php echo e($seo_description); ?>">
+    <?php endif; ?>
+    <meta property="og:site_name" content="<?php echo e($site_name); ?>">
+    <meta property="og:title" content="<?php echo e($full_title); ?>">
+    <?php if (!empty($seo_description)): ?>
+    <meta property="og:description" content="<?php echo e($seo_description); ?>">
+    <?php endif; ?>
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="<?php echo e($canonical_url); ?>">
+    <?php if (!empty($og_image)): ?>
+    <meta property="og:image" content="<?php echo e($og_image); ?>">
+    <?php endif; ?>
+    <meta name="twitter:card" content="<?php echo !empty($og_image) ? 'summary_large_image' : 'summary'; ?>">
+    <meta name="twitter:title" content="<?php echo e($full_title); ?>">
+    <?php if (!empty($seo_description)): ?>
+    <meta name="twitter:description" content="<?php echo e($seo_description); ?>">
     <?php endif; ?>
     <?php if ($theme && !empty($theme->favicon_path)): ?>
     <link rel="icon" href="<?php echo e($theme_asset($theme->favicon_path)); ?>">
@@ -200,9 +232,9 @@
             <nav class="site-nav" aria-label="Menu principal">
                 <a class="brand" href="<?php echo Uri::base(false); ?>">
                     <?php if ($theme && !empty($theme->logo_path)): ?>
-                    <img src="<?php echo e($theme_asset($theme->logo_path)); ?>" alt="Core-App">
+                    <img src="<?php echo e($theme_asset($theme->logo_path)); ?>" alt="<?php echo e($site_name); ?>">
                     <?php else: ?>
-                    CORE-APP <span>ERP</span>
+                    <span><?php echo e($site_name); ?></span>
                     <?php endif; ?>
                 </a>
                 <?php if (!empty($menu_items)): ?>

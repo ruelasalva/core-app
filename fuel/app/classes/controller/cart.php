@@ -260,18 +260,56 @@ class Controller_Cart extends Controller_Template
      */
     protected function prepare_template($title, $description = '')
     {
+        # SE RESUELVE TEMA Y EMPRESA PARA BRANDING/SEO
+        $theme = $this->get_active_theme();
+        $company = Model_Core_Company::get_current();
+
         # SE ASIGNAN VARIABLES GLOBALES DEL FRONTEND
-        $this->template->title = $title;
-        $this->template->seo_description = $description;
+        $this->template->title = $title ?: $this->site_name($theme, $company);
+        $this->template->seo_description = $description ?: $this->default_seo_description($theme, $company);
+        $this->template->site_name = $this->site_name($theme, $company);
+        $this->template->canonical_url = \Uri::current();
         $this->template->menu_items = $this->get_menu_items('header');
         $this->template->footer_columns = $this->get_footer_columns();
-        $this->template->theme = $this->get_active_theme();
+        $this->template->theme = $theme;
         $this->template->frontend_user = [
             'logged_in' => \Auth::check(),
             'name' => \Auth::check() ? \Auth::get_screen_name() : '',
         ];
         $this->template->cart_count = class_exists('Helper_Core_Cart') ? Helper_Core_Cart::count() : 0;
         $this->template->set('cookie_banner', class_exists('Helper_Core_Legal') ? Helper_Core_Legal::render_cookie_banner() : '', false);
+    }
+
+    /**
+     * SITE NAME
+     *
+     * RESUELVE NOMBRE PUBLICO DEL SITIO.
+     *
+     * @access  protected
+     * @return  String
+     */
+    protected function site_name($theme, $company)
+    {
+        # SE DA PRIORIDAD AL TEMA ACTIVO Y DESPUES A LA EMPRESA
+        return ($theme && !empty($theme->site_name)) ? (string) $theme->site_name : (string) ($company ? $company->name : 'Core-App');
+    }
+
+    /**
+     * DEFAULT SEO DESCRIPTION
+     *
+     * RESUELVE DESCRIPCION SEO PUBLICA POR DEFECTO.
+     *
+     * @access  protected
+     * @return  String
+     */
+    protected function default_seo_description($theme, $company)
+    {
+        # SE USA EL VALOR DEL TEMA COMO FUENTE CENTRAL DEL FRONTEND
+        if ($theme && !empty($theme->default_seo_description)) {
+            return (string) $theme->default_seo_description;
+        }
+
+        return $company && !empty($company->legal_name) ? (string) $company->legal_name : '';
     }
 
     protected function get_menu_items($location = 'header')
