@@ -71,59 +71,22 @@
 
             <nav class="mt-2">
     <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu" data-accordion="false">
-        
         <li class="nav-item">
             <a href="<?php echo Uri::create('admin'); ?>" class="nav-link <?php echo (Uri::segment(2) == '') ? 'active' : ''; ?>">
                 <i class="nav-icon bi bi-speedometer2"></i>
-                <p>Dashboard</p>
+                <p>Inicio</p>
             </a>
         </li>
-        
-        <?php if ($menu['web']): ?>
+
+        <li class="nav-header">OPERACION</li>
+        <?php if ($menu['commerce']): ?>
         <li class="nav-item">
-            <a href="<?php echo Uri::create('admin/web'); ?>" class="nav-link <?php echo (Uri::segment(2) == 'web') ? 'active' : ''; ?>">
-                <i class="nav-icon bi bi-globe2"></i>
-                <p>Web</p>
+            <a href="<?php echo Uri::create('admin/commerce'); ?>" class="nav-link <?php echo (Uri::segment(2) == 'commerce') ? 'active' : ''; ?>">
+                <i class="nav-icon bi bi-box-seam"></i>
+                <p>Productos y precios</p>
             </a>
         </li>
         <?php endif; ?>
-
-        <?php if ($menu['legal']): ?>
-        <li class="nav-item">
-            <a href="<?php echo Uri::create('admin/legal'); ?>" class="nav-link <?php echo (Uri::segment(2) == 'legal') ? 'active' : ''; ?>">
-                <i class="nav-icon bi bi-file-earmark-check"></i>
-                <p>Legal</p>
-            </a>
-        </li>
-        <?php endif; ?>
-
-        <?php if ($menu['communications']): ?>
-        <li class="nav-item">
-            <a href="<?php echo Uri::create('admin/communications'); ?>" class="nav-link <?php echo (Uri::segment(2) == 'communications') ? 'active' : ''; ?>">
-                <i class="nav-icon bi bi-chat-square-dots"></i>
-                <p>Comunicaciones</p>
-            </a>
-        </li>
-        <?php endif; ?>
-
-        <?php if ($menu['integrations']): ?>
-        <li class="nav-item">
-            <a href="<?php echo Uri::create('admin/integrations'); ?>" class="nav-link <?php echo (Uri::segment(2) == 'integrations') ? 'active' : ''; ?>">
-                <i class="nav-icon bi bi-plug"></i>
-                <p>Integraciones</p>
-            </a>
-        </li>
-        <?php endif; ?>
-
-        <?php if ($menu['payments']): ?>
-        <li class="nav-item">
-            <a href="<?php echo Uri::create('admin/payments'); ?>" class="nav-link <?php echo (Uri::segment(2) == 'payments') ? 'active' : ''; ?>">
-                <i class="nav-icon bi bi-bank"></i>
-                <p>Pagos y Bancos</p>
-            </a>
-        </li>
-        <?php endif; ?>
-
         <?php if ($menu['sales']): ?>
         <li class="nav-item">
             <a href="<?php echo Uri::create('admin/sales'); ?>" class="nav-link <?php echo (Uri::segment(2) == 'sales') ? 'active' : ''; ?>">
@@ -132,88 +95,37 @@
             </a>
         </li>
         <?php endif; ?>
-
+        <?php if ($menu['purchases']): ?>
+        <li class="nav-item">
+            <a href="<?php echo Uri::create('admin/purchases'); ?>" class="nav-link <?php echo (Uri::segment(2) == 'purchases') ? 'active' : ''; ?>">
+                <i class="nav-icon bi bi-cart-check"></i>
+                <p>Compras</p>
+            </a>
+        </li>
+        <?php endif; ?>
         <?php if ($menu['billing']): ?>
         <li class="nav-item">
             <a href="<?php echo Uri::create('admin/billing'); ?>" class="nav-link <?php echo (Uri::segment(2) == 'billing') ? 'active' : ''; ?>">
                 <i class="nav-icon bi bi-receipt-cutoff"></i>
-                <p>Facturacion</p>
+                <p>Facturaci&oacute;n CFDI</p>
             </a>
         </li>
         <?php endif; ?>
-
-        <?php if ($menu['audit']): ?>
+        <?php if ($menu['payments']): ?>
         <li class="nav-item">
-            <a href="<?php echo Uri::create('admin/audit'); ?>" class="nav-link <?php echo (Uri::segment(2) == 'audit') ? 'active' : ''; ?>">
-                <i class="nav-icon bi bi-shield-check"></i>
-                <p>Auditoria</p>
+            <a href="<?php echo Uri::create('admin/payments'); ?>" class="nav-link <?php echo (Uri::segment(2) == 'payments') ? 'active' : ''; ?>">
+                <i class="nav-icon bi bi-bank"></i>
+                <p>Bancos y pagos</p>
             </a>
         </li>
         <?php endif; ?>
 
-        <?php if ($menu['sat']): ?>
-        <li class="nav-item">
-            <a href="<?php echo Uri::create('admin/sat'); ?>" class="nav-link <?php echo (Uri::segment(2) == 'sat') ? 'active' : ''; ?>">
-                <i class="nav-icon bi bi-receipt"></i>
-                <p>SAT</p>
-            </a>
-        </li>
-        <?php endif; ?>
-
-        <?php if ($menu['catalogs']): ?>
-        <?php $catalog_group = Input::get('group', 'general'); ?>
-        <?php $catalog_open = (Uri::segment(2) == 'catalogs'); ?>
-        <li class="nav-item has-treeview <?php echo $catalog_open ? 'menu-open' : ''; ?>">
-            <a href="#" class="nav-link <?php echo (Uri::segment(2) == 'catalogs') ? 'active' : ''; ?>">
-                <i class="nav-icon bi bi-collection"></i>
-                <p>
-                    Catalogos
-                    <i class="right fas fa-angle-left"></i>
-                </p>
-            </a>
-            <ul class="nav nav-treeview" style="display: <?php echo $catalog_open ? 'block' : 'none'; ?>;">
-                <li class="nav-item">
-                    <a href="<?php echo Uri::create('admin/catalogs').'?group=general'; ?>" class="nav-link <?php echo (Uri::segment(2) == 'catalogs' && $catalog_group == 'general') ? 'active' : ''; ?>">
-                        <i class="bi bi-grid nav-icon"></i>
-                        <p>Generales</p>
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a href="<?php echo Uri::create('admin/catalogs').'?group=financial'; ?>" class="nav-link <?php echo (Uri::segment(2) == 'catalogs' && $catalog_group == 'financial') ? 'active' : ''; ?>">
-                        <i class="bi bi-currency-exchange nav-icon"></i>
-                        <p>Monedas y bancos</p>
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a href="<?php echo Uri::create('admin/catalogs').'?group=fiscal'; ?>" class="nav-link <?php echo (Uri::segment(2) == 'catalogs' && $catalog_group == 'fiscal') ? 'active' : ''; ?>">
-                        <i class="bi bi-percent nav-icon"></i>
-                        <p>Fiscales</p>
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a href="<?php echo Uri::create('admin/catalogs').'?group=logistics'; ?>" class="nav-link <?php echo (Uri::segment(2) == 'catalogs' && $catalog_group == 'logistics') ? 'active' : ''; ?>">
-                        <i class="bi bi-truck nav-icon"></i>
-                        <p>Logisticos</p>
-                    </a>
-                </li>
-            </ul>
-        </li>
-        <?php endif; ?>
-
-        <?php if ($menu['commerce']): ?>
-        <li class="nav-item">
-            <a href="<?php echo Uri::create('admin/commerce'); ?>" class="nav-link <?php echo (Uri::segment(2) == 'commerce') ? 'active' : ''; ?>">
-                <i class="nav-icon bi bi-box-seam"></i>
-                <p>Comercial</p>
-            </a>
-        </li>
-        <?php endif; ?>
-
+        <li class="nav-header">RELACIONES</li>
         <?php if ($menu['parties']): ?>
         <li class="nav-item">
             <a href="<?php echo Uri::create('admin/parties'); ?>" class="nav-link <?php echo (Uri::segment(2) == 'parties') ? 'active' : ''; ?>">
                 <i class="nav-icon bi bi-person-vcard"></i>
-                <p>Terceros</p>
+                <p>Clientes y proveedores</p>
             </a>
         </li>
         <?php endif; ?>
@@ -279,11 +191,114 @@
         </li>
         <?php endif; ?>
 
+        <li class="nav-header">FISCAL Y CATALOGOS</li>
+        <?php if ($menu['sat']): ?>
+        <li class="nav-item">
+            <a href="<?php echo Uri::create('admin/sat'); ?>" class="nav-link <?php echo (Uri::segment(2) == 'sat') ? 'active' : ''; ?>">
+                <i class="nav-icon bi bi-receipt"></i>
+                <p>SAT y CFDI</p>
+            </a>
+        </li>
+        <li class="nav-item">
+            <a href="<?php echo Uri::create('admin/cfdi'); ?>" class="nav-link <?php echo (Uri::segment(2) == 'cfdi') ? 'active' : ''; ?>">
+                <i class="nav-icon bi bi-search"></i>
+                <p>Auditoria SAT</p>
+            </a>
+        </li>
+        <?php endif; ?>
+
+        <?php if ($menu['catalogs']): ?>
+        <?php $catalog_group = Input::get('group', 'general'); ?>
+        <?php $catalog_open = (Uri::segment(2) == 'catalogs'); ?>
+        <li class="nav-item has-treeview <?php echo $catalog_open ? 'menu-open' : ''; ?>">
+            <a href="#" class="nav-link <?php echo (Uri::segment(2) == 'catalogs') ? 'active' : ''; ?>">
+                <i class="nav-icon bi bi-collection"></i>
+                <p>
+                    Catalogos base
+                    <i class="right fas fa-angle-left"></i>
+                </p>
+            </a>
+            <ul class="nav nav-treeview" style="display: <?php echo $catalog_open ? 'block' : 'none'; ?>;">
+                <li class="nav-item">
+                    <a href="<?php echo Uri::create('admin/catalogs').'?group=general'; ?>" class="nav-link <?php echo (Uri::segment(2) == 'catalogs' && $catalog_group == 'general') ? 'active' : ''; ?>">
+                        <i class="bi bi-grid nav-icon"></i>
+                        <p>Generales</p>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="<?php echo Uri::create('admin/catalogs').'?group=financial'; ?>" class="nav-link <?php echo (Uri::segment(2) == 'catalogs' && $catalog_group == 'financial') ? 'active' : ''; ?>">
+                        <i class="bi bi-currency-exchange nav-icon"></i>
+                        <p>Bancos y monedas</p>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="<?php echo Uri::create('admin/catalogs').'?group=fiscal'; ?>" class="nav-link <?php echo (Uri::segment(2) == 'catalogs' && $catalog_group == 'fiscal') ? 'active' : ''; ?>">
+                        <i class="bi bi-percent nav-icon"></i>
+                        <p>Impuestos y retenciones</p>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="<?php echo Uri::create('admin/catalogs').'?group=logistics'; ?>" class="nav-link <?php echo (Uri::segment(2) == 'catalogs' && $catalog_group == 'logistics') ? 'active' : ''; ?>">
+                        <i class="bi bi-truck nav-icon"></i>
+                        <p>Logistica</p>
+                    </a>
+                </li>
+            </ul>
+        </li>
+        <?php endif; ?>
+
+        <li class="nav-header">SITIO E INTEGRACIONES</li>
+        <?php if ($menu['web']): ?>
+        <li class="nav-item">
+            <a href="<?php echo Uri::create('admin/web'); ?>" class="nav-link <?php echo (Uri::segment(2) == 'web') ? 'active' : ''; ?>">
+                <i class="nav-icon bi bi-globe2"></i>
+                <p>Web y tracking</p>
+            </a>
+        </li>
+        <?php endif; ?>
+
+        <?php if ($menu['legal']): ?>
+        <li class="nav-item">
+            <a href="<?php echo Uri::create('admin/legal'); ?>" class="nav-link <?php echo (Uri::segment(2) == 'legal') ? 'active' : ''; ?>">
+                <i class="nav-icon bi bi-file-earmark-check"></i>
+                <p>Legal y privacidad</p>
+            </a>
+        </li>
+        <?php endif; ?>
+
+        <?php if ($menu['communications']): ?>
+        <li class="nav-item">
+            <a href="<?php echo Uri::create('admin/communications'); ?>" class="nav-link <?php echo (Uri::segment(2) == 'communications') ? 'active' : ''; ?>">
+                <i class="nav-icon bi bi-chat-square-dots"></i>
+                <p>Correos y avisos</p>
+            </a>
+        </li>
+        <?php endif; ?>
+
+        <?php if ($menu['integrations']): ?>
+        <li class="nav-item">
+            <a href="<?php echo Uri::create('admin/integrations'); ?>" class="nav-link <?php echo (Uri::segment(2) == 'integrations') ? 'active' : ''; ?>">
+                <i class="nav-icon bi bi-plug"></i>
+                <p>Integraciones</p>
+            </a>
+        </li>
+        <?php endif; ?>
+
         <?php if ($menu['frontend']): ?>
         <li class="nav-item">
             <a href="<?php echo Uri::create('admin/frontend'); ?>" class="nav-link <?php echo (Uri::segment(2) == 'frontend') ? 'active' : ''; ?>">
                 <i class="nav-icon bi bi-window"></i>
-                <p>Frontend</p>
+                <p>Sitio publico</p>
+            </a>
+        </li>
+        <?php endif; ?>
+
+        <li class="nav-header">CONTROL</li>
+        <?php if ($menu['audit']): ?>
+        <li class="nav-item">
+            <a href="<?php echo Uri::create('admin/audit'); ?>" class="nav-link <?php echo (Uri::segment(2) == 'audit') ? 'active' : ''; ?>">
+                <i class="nav-icon bi bi-shield-check"></i>
+                <p>Auditoria</p>
             </a>
         </li>
         <?php endif; ?>

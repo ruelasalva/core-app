@@ -32,6 +32,11 @@
                 <li class="nav-item">
                     <a class="nav-link <?php echo Uri::segment(2) == 'helpdesk' ? 'active' : ''; ?>" href="<?php echo Uri::create($portal_code.'/helpdesk'); ?>">Helpdesk</a>
                 </li>
+                <?php if ($portal_code === 'proveedores'): ?>
+                <li class="nav-item">
+                    <a class="nav-link <?php echo Uri::segment(2) == 'compras' ? 'active' : ''; ?>" href="<?php echo Uri::create($portal_code.'/compras'); ?>">Compras</a>
+                </li>
+                <?php endif; ?>
             </ul>
             <ul class="navbar-nav ml-auto">
                 <li class="nav-item">

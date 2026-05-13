@@ -23,4 +23,20 @@
             </div>
         </div>
     </div>
+    <?php if ($current_portal_code === 'proveedores'): ?>
+    <div class="col-md-4">
+        <div class="card card-success card-outline h-100">
+            <div class="card-body">
+                <div class="d-flex align-items-center mb-2">
+                    <i class="bi bi-cart-check h4 mb-0 mr-2 text-success"></i>
+                    <h2 class="h6 mb-0">Compras</h2>
+                </div>
+                <p class="text-muted small">Consulta ordenes de compra, registra facturas y adjunta evidencias.</p>
+                <a href="<?php echo Uri::create($current_portal_code.'/compras'); ?>" class="btn btn-success btn-sm">
+                    <i class="bi bi-arrow-right"></i> Entrar
+                </a>
+            </div>
+        </div>
+    </div>
+    <?php endif; ?>
 </div>

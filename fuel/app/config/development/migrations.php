@@ -31,6 +31,8 @@ return array (
         25 => '026_create_core_sales_quote_tables',
         26 => '027_add_frontend_theme_seo_fields',
         27 => '028_create_core_commerce_product_relations',
+        28 => '029_create_core_purchase_tables',
+        29 => '030_extend_core_sat_cfdi_audit_tables',
       ),
     ),
     'module' => array(    

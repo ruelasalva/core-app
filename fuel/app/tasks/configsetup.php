@@ -24,12 +24,15 @@ class Configsetup
             $this->seed_portals();
             $this->seed_documents();
             $this->seed_helpdesk();
+            $this->seed_purchases();
             $this->seed_calendar();
             $this->seed_frontend();
             $this->seed_knowledge();
             $this->sync_groups();
             $this->sync_permissions();
             $this->cleanup_legacy_permissions();
+            $this->sync_purchase_group_permissions();
+            $this->sync_sat_group_permissions();
 
             echo "\n [SUCCESS] Configuracion base preparada.\n";
             echo " - Empresa base\n";
@@ -51,11 +54,13 @@ class Configsetup
             echo " - Portales externos base\n";
             echo " - Documentos y evidencias base\n";
             echo " - Helpdesk base\n";
+            echo " - Compras y portal proveedores base\n";
             echo " - Calendario y sala de juntas base\n";
             echo " - Frontend administrable base\n";
             echo " - Ayuda y conocimiento base\n";
             echo " - Grupos de acceso recomendados\n";
             echo " - Permisos base\n";
+            echo " - Permisos recomendados de compras y SAT\n";
         } catch (\Exception $e) {
             echo "\n [ERROR] ".$e->getMessage()."\n";
             \Log::error('Fallo en configsetup: '.$e->getMessage());
@@ -117,6 +122,16 @@ class Configsetup
         }
 
         if (!\DBUtil::field_exists('core_sat_cfdi', ['missing_xml', 'last_validated_at', 'sat_status_code'])) {
+            throw new \Exception('Primero ejecuta: php oil refine migrate');
+        }
+
+        foreach (['core_sat_cfdi_details', 'core_sat_payment_details'] as $table) {
+            if (!\DBUtil::table_exists($table)) {
+                throw new \Exception('Primero ejecuta: php oil refine migrate');
+            }
+        }
+
+        if (!\DBUtil::field_exists('core_sat_cfdi', ['emitter_regime', 'receiver_regime', 'complements_json', 'has_payment_complement'])) {
             throw new \Exception('Primero ejecuta: php oil refine migrate');
         }
 
@@ -191,6 +206,12 @@ class Configsetup
         }
 
         foreach (['core_helpdesk_categories', 'core_helpdesk_statuses', 'core_helpdesk_tickets', 'core_helpdesk_messages'] as $table) {
+            if (!\DBUtil::table_exists($table)) {
+                throw new \Exception('Primero ejecuta: php oil refine migrate');
+            }
+        }
+
+        foreach (['core_purchase_orders', 'core_purchase_order_items', 'core_purchase_invoices', 'core_purchase_receipts', 'core_purchase_receipt_items'] as $table) {
             if (!\DBUtil::table_exists($table)) {
                 throw new \Exception('Primero ejecuta: php oil refine migrate');
             }
@@ -1318,6 +1339,45 @@ class Configsetup
     }
 
     /**
+     * SEED PURCHASES
+     *
+     * CREA EVENTOS Y CONFIGURACION BASE PARA COMPRAS SIN DUPLICAR PROVEEDORES,
+     * DOCUMENTOS, SAT, PAGOS NI FACTURACION.
+     *
+     * @access  protected
+     * @return  Void
+     */
+    protected function seed_purchases()
+    {
+        $events = [
+            ['purchases.order_saved', 'Orden de compra guardada', 'Se creo o actualizo una orden de compra.', 'Orden {{folio}}', '{{message}}'],
+            ['purchases.portal_create_invoice', 'Factura recibida de proveedor', 'Un proveedor registro una factura desde portal.', 'Factura de proveedor {{folio}}', '{{message}}'],
+            ['purchases.portal_upload_document', 'Evidencia de proveedor', 'Un proveedor adjunto evidencia o documento.', 'Evidencia de proveedor', '{{message}}'],
+            ['purchases.receipt_created', 'Contrarecibo creado', 'Se creo un contrarecibo de proveedor.', 'Contrarecibo {{folio}}', '{{message}}'],
+        ];
+
+        foreach ($events as $event) {
+            $this->upsert_seed('core_notification_events', 'code', $event[0], [
+                'code' => $event[0],
+                'name' => $event[1],
+                'description' => $event[2],
+                'title_template' => $event[3],
+                'message_template' => $event[4],
+                'url_template' => 'admin/purchases',
+                'icon' => 'bi bi-cart-check',
+                'priority' => 2,
+                'notify_internal' => 1,
+                'notify_email' => 0,
+                'email_role' => 'system',
+                'email_template_code' => 'system_notification',
+                'active' => 1,
+                'created_at' => time(),
+                'updated_at' => time(),
+            ]);
+        }
+    }
+
+    /**
      * SEED CALENDAR
      *
      * PREPARA RECURSOS Y EVENTOS BASE PARA CALENDARIO TRANSVERSAL
@@ -1895,6 +1955,18 @@ class Configsetup
             'updated_at' => time(),
         ]);
 
+        $this->upsert_seed('core_knowledge_articles', 'code', 'compras_proveedores_core_app', [
+            'code' => 'compras_proveedores_core_app',
+            'title' => 'Compras y portal de proveedores',
+            'category' => 'Compras',
+            'summary' => 'Flujo base para ordenes de compra, facturas de proveedor, contrarecibos y evidencias usando terceros, documentos, pagos, SAT y auditoria.',
+            'content' => '<h3>Objetivo</h3><p>Compras centraliza el flujo proveedor sin repetir las estructuras historicas de Sajor. El proveedor vive en <strong>Terceros</strong>, los archivos en <strong>Documentos</strong>, los pagos en <strong>Pagos y Bancos</strong>, la validacion fiscal en <strong>SAT</strong> y los cambios relevantes en <strong>Auditoria</strong>.</p><h4>Flujo base</h4><ol><li>Crear una orden desde <strong>Admin &gt; Compras</strong>.</li><li>Seleccionar proveedor, fechas, moneda, estado y conceptos.</li><li>Autorizar o mantener como borrador segun el proceso interno.</li><li>El proveedor entra a <code>/proveedores/compras</code> para consultar sus ordenes.</li><li>El proveedor registra la factura y puede adjuntar PDF, XML o evidencias.</li><li>Administracion valida la factura y crea contrarecibo con las facturas pendientes.</li><li>El pago futuro debe registrarse en Pagos y relacionarse por asignaciones.</li></ol><h4>Tablas principales</h4><ul><li><code>core_purchase_orders</code>: encabezado de orden de compra.</li><li><code>core_purchase_order_items</code>: conceptos de la orden.</li><li><code>core_purchase_invoices</code>: facturas recibidas de proveedor.</li><li><code>core_purchase_receipts</code>: contrarecibos.</li><li><code>core_purchase_receipt_items</code>: relacion entre contrarecibos y facturas.</li></ul><h4>Reglas de crecimiento</h4><ul><li>No crear una tabla nueva de proveedores; usar <code>core_parties.party_type = supplier</code>.</li><li>No crear tablas de archivos por modulo; usar <code>core_documents</code> y <code>core_document_links</code>.</li><li>No guardar pagos dentro de compras; usar <code>core_payments</code> y <code>core_payment_allocations</code>.</li><li>No mezclar la factura operativa con el CFDI fiscal; relacionar por <code>cfdi_id</code> o UUID cuando SAT lo tenga.</li><li>Cada cambio de estado, registro o evidencia relevante debe auditarse.</li></ul><h4>Importacion desde Sajor</h4><p>Para cargar datos de ejemplo se puede ejecutar <code>php oil r purchasesimport</code>. La tarea toma proveedores, ordenes y facturas desde la base local <code>sajor</code> y los inserta como ejemplos en Core-App respetando la estructura nueva.</p>',
+            'sort_order' => 56,
+            'active' => 1,
+            'created_at' => time(),
+            'updated_at' => time(),
+        ]);
+
         $this->upsert_seed('core_knowledge_articles', 'code', 'integraciones_pasarelas_seguras', [
             'code' => 'integraciones_pasarelas_seguras',
             'title' => 'Integraciones, pasarelas y proveedores externos',
@@ -1933,10 +2005,10 @@ class Configsetup
 
         $this->upsert_seed('core_knowledge_articles', 'code', 'sat_cfdi_descarga_validacion', [
             'code' => 'sat_cfdi_descarga_validacion',
-            'title' => 'SAT CFDI: descarga, metadata y validacion',
+            'title' => 'Auditoria SAT CFDI',
             'category' => 'SAT',
-            'summary' => 'Base conceptual para usar SAT como auditor fiscal: XML descargados, metadata, faltantes, cancelaciones y validacion SOAP.',
-            'content' => '<h3>Objetivo</h3><p>El modulo SAT/CFDI no es donde se captura una factura operativa. Su funcion es comprobar informacion fiscal contra el SAT: descargar XML, procesar metadata, detectar CFDI faltantes, validar vigencia/cancelacion y alimentar alertas.</p><h4>Flujo recomendado</h4><ol><li><strong>Solicitar XML</strong>: crea una solicitud para recibidos o emitidos en un rango de fechas.</li><li><strong>Verificar solicitud</strong>: consulta si el SAT ya preparo paquetes.</li><li><strong>Descargar paquetes</strong>: guarda ZIP/XML en una ruta controlada.</li><li><strong>Importar CFDI</strong>: parsea XML y crea o actualiza <code>core_sat_cfdi</code>.</li><li><strong>Solicitar metadata</strong>: descarga metadatos para comparar contra lo que si tiene XML.</li><li><strong>Comparar</strong>: marca CFDI sin XML con <code>missing_xml = 1</code>.</li><li><strong>Validar SOAP</strong>: consulta estado vigente/cancelado y actualiza <code>sat_status</code>, <code>sat_status_code</code>, <code>last_validated_at</code> y <code>cancelled_at</code>.</li></ol><h4>Tareas Oil disponibles</h4><ul><li><code>php oil r satsync:status</code>: muestra resumen de solicitudes y CFDI.</li><li><code>php oil r satsync:request metadata received 2026-05-01 2026-05-12</code>: crea solicitud local de metadata recibida.</li><li><code>php oil r satsync:request xml issued 2026-05-01 2026-05-12</code>: crea solicitud local de XML emitidos.</li><li><code>php oil r satsync:submit</code>: prepara solicitudes pendientes. En test genera folio local; en produccion queda bloqueado hasta conectar el adaptador real.</li><li><code>php oil r satsync:verify</code>: verifica solicitudes. En test termina sin paquetes reales.</li><li><code>php oil r satsync:compare</code>: marca CFDI de metadata sin XML y contabiliza cancelados.</li></ul><h4>Reglas importantes</h4><ul><li>Metadata no debe sobrescribir un XML existente; solo complementa o detecta faltantes.</li><li>XML y metadata deben coexistir sin duplicar UUID.</li><li>Las solicitudes SAT deben auditarse.</li><li>No guardar certificados ni llaves en rutas publicas.</li><li>La conexion real con SAT se implementara mediante servicio aislado y cron, no desde la vista.</li></ul><h4>Relacion con Facturacion</h4><p><strong>Facturacion</strong> prepara documentos operativos. <strong>SAT/CFDI</strong> comprueba documentos fiscales reales descargados o validados contra SAT. Cuando exista timbrado/PAC, ambos se relacionaran por UUID o <code>cfdi_id</code>, pero no deben mezclarse.</p>',
+            'summary' => 'Manual para importar XML, revisar recibidos/emitidos/cancelados/REP y alimentar Compras con CFDI reales.',
+            'content' => '<h3>Objetivo</h3><p>Auditoria SAT concentra los CFDI reales descargados o importados. Guarda cabeceras en <code>core_sat_cfdi</code>, conceptos y relaciones en <code>core_sat_cfdi_details</code>, y documentos pagados de REP en <code>core_sat_payment_details</code>. Esta estructura sigue el mapa funcional de Sajor, pero separada de Compras, Facturacion y Pagos para evitar parches cruzados.</p><h4>Flujo recomendado</h4><ol><li>Entra a <strong>Admin &gt; SAT y CFDI</strong> para configurar modo, ruta de almacenamiento y credenciales FIEL/CSD.</li><li>Usa <strong>Admin &gt; Auditoria SAT</strong> para importar XML manuales, revisar recibidos, emitidos, cancelados, relaciones y complementos de pago.</li><li>Importa XML descargados del SAT con <code>php oil r satcfdi:import_file ruta.xml</code> o una carpeta con <code>php oil r satcfdi:import_dir ruta 500</code>.</li><li>Si el UUID existe en facturas de proveedor, el importador relaciona Compras con <code>cfdi_id</code>, estado SAT y totales.</li><li>Usa <code>php oil r satsync:request metadata received 2026-05-01 2026-05-12</code> para preparar solicitudes locales de metadata y <code>php oil r satsync:compare</code> para marcar faltantes.</li></ol><h4>Que se captura del XML</h4><ul><li>Cabecera: UUID, serie, folio, fecha, emisor, receptor, regimenes, moneda, subtotal, descuentos, impuestos, retenciones, tipo CFDI, uso CFDI, forma y metodo de pago.</li><li>Conceptos: clave SAT, no identificacion, unidad, descripcion, cantidad, valor unitario, importe, IVA, IEPS, retencion IVA, retencion ISR y objeto de impuesto.</li><li>Relaciones: tipo de relacion y UUID relacionado para notas, sustituciones y documentos vinculados.</li><li>REP: UUID de factura pagada, serie, folio, moneda, parcialidad, saldo anterior, importe pagado y saldo insoluto.</li><li>Complementos: marca si tiene complemento de pago o carta porte para reportes y revision operativa.</li></ul><h4>Libreria SAT</h4><p>La descarga masiva real queda preparada para <code>phpcfdi/sat-ws-descarga-masiva</code>. Si una instalacion nueva no la trae, instala con <code>composer require phpcfdi/sat-ws-descarga-masiva:0.5.7 "guzzlehttp/guzzle:^7.10"</code>. La vista no debe ejecutar descargas largas; eso debe correr por tareas Oil o cron.</p><h4>Relacion con Compras y Pagos</h4><ul><li>Compras registra la operacion y contrarecibos; Auditoria SAT comprueba el XML fiscal.</li><li>Una factura de proveedor puede vincularse por UUID para validar importe, retenciones y estado SAT.</li><li>Los REP alimentan pagos aplicados sin duplicar el registro bancario.</li><li>Las guias/fletes pueden originar ordenes de compra, pero el XML se conserva fiscalmente en SAT.</li></ul><h4>Reglas importantes</h4><ul><li>No mezclar XML fiscal con documentos operativos; se relacionan por UUID o <code>cfdi_id</code>.</li><li>No guardar certificados, llaves ni passwords en rutas publicas.</li><li>Metadata no debe sobrescribir datos extraidos del XML.</li><li>Todo importado debe auditarse y conservar ruta de origen.</li><li>La estructura de detalle debe mantenerse estable porque sirve para reportes, conciliacion y futura salida SAP.</li></ul>',
             'sort_order' => 54,
             'active' => 1,
             'created_at' => time(),
@@ -2013,6 +2085,7 @@ class Configsetup
             'communications' => 'Gestion de correos, eventos y notificaciones',
             'integrations' => 'Gestion de proveedores externos, pasarelas, conexiones y webhooks',
             'payments' => 'Gestion de pagos, bancos, movimientos y conciliaciones',
+            'purchases' => 'Gestion de compras, ordenes, facturas proveedor, contrarecibos y evidencias',
             'sales' => 'Gestion de cotizaciones, pedidos y solicitudes comerciales',
             'billing' => 'Gestion de facturacion, conceptos y preparacion CFDI',
             'audit' => 'Consulta de auditoria funcional del sistema',
@@ -2057,6 +2130,104 @@ class Configsetup
                 'created_at' => time(),
                 'updated_at' => time(),
             ])->execute();
+        }
+    }
+
+    protected function sync_purchase_group_permissions()
+    {
+        $permission = \DB::select('id', 'actions')
+            ->from('users_permissions')
+            ->where('area', '=', 'purchases')
+            ->where('permission', '=', 'access')
+            ->execute()
+            ->current();
+
+        if (!$permission) {
+            return;
+        }
+
+        $actions = !empty($permission['actions']) ? @unserialize($permission['actions']) : [];
+        if (!is_array($actions) || empty($actions)) {
+            $actions = ['view', 'create', 'edit', 'delete', 'import', 'export'];
+        }
+
+        foreach ([70, 100] as $group_id) {
+            $exists = \DB::select('id')
+                ->from('users_group_permissions')
+                ->where('group_id', '=', $group_id)
+                ->where('perms_id', '=', (int) $permission['id'])
+                ->execute()
+                ->current();
+
+            if ($exists) {
+                \DB::update('users_group_permissions')
+                    ->set(['actions' => serialize($actions)])
+                    ->where('id', '=', (int) $exists['id'])
+                    ->execute();
+            } else {
+                \DB::insert('users_group_permissions')->set([
+                    'group_id' => $group_id,
+                    'perms_id' => (int) $permission['id'],
+                    'actions' => serialize($actions),
+                ])->execute();
+            }
+
+            foreach (\DB::select('id')->from('users')->where('group_id', '=', $group_id)->execute() as $user) {
+                try {
+                    \Cache::delete('auth.permissions.user_'.(int) $user['id']);
+                } catch (\Exception $e) {
+                    // Cache may not exist yet.
+                }
+            }
+        }
+    }
+
+    protected function sync_sat_group_permissions()
+    {
+        $permission = \DB::select('id', 'actions')
+            ->from('users_permissions')
+            ->where('area', '=', 'sat')
+            ->where('permission', '=', 'access')
+            ->execute()
+            ->current();
+
+        if (!$permission) {
+            return;
+        }
+
+        $actions = !empty($permission['actions']) ? @unserialize($permission['actions']) : [];
+        if (!is_array($actions) || empty($actions)) {
+            $actions = ['view', 'create', 'edit', 'delete', 'import', 'export'];
+        }
+
+        foreach ([70, 80, 90, 100] as $group_id) {
+            $exists = \DB::select('id')
+                ->from('users_group_permissions')
+                ->where('group_id', '=', $group_id)
+                ->where('perms_id', '=', (int) $permission['id'])
+                ->execute()
+                ->current();
+
+            if ($exists) {
+                \DB::update('users_group_permissions')
+                    ->set(['actions' => serialize($actions)])
+                    ->where('id', '=', (int) $exists['id'])
+                    ->execute();
+            } else {
+                \DB::insert('users_group_permissions')->set([
+                    'group_id' => $group_id,
+                    'perms_id' => (int) $permission['id'],
+                    'actions' => serialize($actions),
+                ])->execute();
+            }
+
+            foreach (\DB::select('id')->from('users')->where('group_id', '=', $group_id)->execute() as $user) {
+                try {
+                    \Cache::delete('auth.permissions.user_'.(int) $user['id']);
+                } catch (\Exception $e) {
+                    // Cache may not exist yet.
+                }
+            }
         }
     }
 
