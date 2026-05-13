@@ -182,9 +182,23 @@
                 <div class="tab-pane fade" id="tab-sat-requests" role="tabpanel">
                     <div class="d-flex justify-content-between align-items-center mb-3">
                         <h5 class="mb-0">Ultimas solicitudes</h5>
-                        <button class="btn btn-primary btn-sm" @click="newRequest">
-                            <i class="bi bi-plus-circle"></i> Nueva solicitud
-                        </button>
+                        <div class="btn-group btn-group-sm">
+                            <button class="btn btn-outline-primary" @click="runSatOperation('submit_requests')" :disabled="operating">
+                                <i class="bi bi-send"></i> Enviar
+                            </button>
+                            <button class="btn btn-outline-info" @click="runSatOperation('verify_requests')" :disabled="operating">
+                                <i class="bi bi-search"></i> Verificar
+                            </button>
+                            <button class="btn btn-outline-success" @click="runSatOperation('download_packages')" :disabled="operating">
+                                <i class="bi bi-download"></i> Descargar
+                            </button>
+                            <button class="btn btn-primary" @click="newRequest" :disabled="operating">
+                                <i class="bi bi-plus-circle"></i> Nueva solicitud
+                            </button>
+                        </div>
+                    </div>
+                    <div v-if="operationMessage" class="alert mb-3" :class="operationError ? 'alert-warning' : 'alert-info'">
+                        {{ operationMessage }}
                     </div>
                     <table class="table table-bordered table-hover">
                         <thead>
@@ -199,6 +213,7 @@
                                 <th>Procesados</th>
                                 <th>Faltantes</th>
                                 <th>Cancelados</th>
+                                <th>ID SAT / Mensaje</th>
                                 <th>Creada</th>
                             </tr>
                         </thead>
@@ -214,7 +229,45 @@
                                 <td>{{ request.processed_count }}</td>
                                 <td>{{ request.missing_count }}</td>
                                 <td>{{ request.cancelled_count }}</td>
+                                <td>
+                                    <div v-if="request.sat_request_id"><code>{{ request.sat_request_id }}</code></div>
+                                    <small v-if="request.error_message" class="text-muted">{{ request.error_message }}</small>
+                                </td>
                                 <td>{{ request.created_at }}</td>
+                            </tr>
+                            <tr v-if="requests.length === 0">
+                                <td colspan="12" class="text-muted">Sin solicitudes SAT.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <h5 class="mt-4">Paquetes SAT</h5>
+                    <table class="table table-bordered table-hover">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Solicitud</th>
+                                <th>Paquete SAT</th>
+                                <th>Tipo</th>
+                                <th>Estado</th>
+                                <th>Registros</th>
+                                <th>Archivo</th>
+                                <th>Creado</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="packageItem in packages" :key="packageItem.id">
+                                <td>{{ packageItem.id }}</td>
+                                <td>{{ packageItem.sync_request_id }}</td>
+                                <td><code>{{ packageItem.package_id }}</code></td>
+                                <td>{{ packageItem.package_type }}</td>
+                                <td>{{ packageItem.status }}</td>
+                                <td>{{ packageItem.xml_count }}</td>
+                                <td><small>{{ packageItem.path || '-' }}</small></td>
+                                <td>{{ packageItem.created_at }}</td>
+                            </tr>
+                            <tr v-if="packages.length === 0">
+                                <td colspan="8" class="text-muted">Sin paquetes SAT descargados o pendientes.</td>
                             </tr>
                         </tbody>
                     </table>
@@ -405,7 +458,7 @@
                         </div>
                     </div>
                     <div class="alert alert-info mb-0">
-                        Esta accion registra la solicitud local. La llamada real al SAT se conectara despues con el servicio de descarga masiva y cron.
+                        Esta accion registra la solicitud local. Despues usa Enviar, Verificar y Descargar para probar el ciclo completo con SAT.
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -426,11 +479,15 @@ window.onload = function() {
             config: { id: null, mode: 'test', enabled: false, storage_path: 'fuel/app/storage/sat', last_sync_at: 'Nunca' },
             credentials: [],
             requests: [],
+            packages: [],
             cfdiAlerts: [],
             stats: { cfdi: 0, requests: 0, packages: 0, credentials: 0, missing_xml: 0, cancelled: 0, unvalidated: 0 },
             integrations: {},
             credentialForm: {},
-            requestForm: {}
+            requestForm: {},
+            operating: false,
+            operationMessage: '',
+            operationError: false
         },
         mounted() {
             this.loadData();
@@ -466,6 +523,7 @@ window.onload = function() {
                         this.integrations = data.integrations || {};
                         this.credentials = data.credentials || [];
                         this.requests = data.requests || [];
+                        this.packages = data.packages || [];
                         this.cfdiAlerts = data.cfdi_alerts || [];
                         this.stats = data.stats || this.stats;
                     });
@@ -563,8 +621,39 @@ window.onload = function() {
                         return;
                     }
                     this.requests = data.requests || [];
+                    this.packages = data.packages || [];
                     this.stats = data.stats || this.stats;
                     this.hideModal('modal-request');
+                });
+            },
+            runSatOperation(action) {
+                this.operating = true;
+                this.operationMessage = 'Procesando operacion SAT...';
+                this.operationError = false;
+                fetch('<?php echo Uri::create('admin/sat'); ?>/' + action, {
+                    ...window.coreAppFetchOptions({})
+                })
+                .then(res => res.json())
+                .then(data => {
+                    this.operating = false;
+                    if (data.error) {
+                        this.operationError = true;
+                        this.operationMessage = data.error;
+                        return;
+                    }
+                    this.requests = data.requests || [];
+                    this.packages = data.packages || [];
+                    this.stats = data.stats || this.stats;
+                    this.cfdiAlerts = data.cfdi_alerts || [];
+                    const result = data.result || {};
+                    const errors = result.errors && result.errors.length ? ' Errores: ' + result.errors.join(' | ') : '';
+                    this.operationError = !!errors;
+                    this.operationMessage = 'Listo. ' + JSON.stringify(result) + errors;
+                })
+                .catch(error => {
+                    this.operating = false;
+                    this.operationError = true;
+                    this.operationMessage = error.message || 'No se pudo completar la operacion SAT.';
                 });
             },
             showModal(id) {

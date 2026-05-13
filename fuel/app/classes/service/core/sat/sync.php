@@ -60,7 +60,7 @@ class Service_Core_Sat_Sync
     /**
      * SUBMIT PENDING
      *
-     * PREPARA SOLICITUDES PENDIENTES; EN PRODUCCION REQUIERE ADAPTADOR SAT REAL
+     * ENVIA SOLICITUDES PENDIENTES AL SAT O LAS SIMULA EN MODO TEST
      *
      * @access  public
      * @return  Array
@@ -80,8 +80,22 @@ class Service_Core_Sat_Sync
             try {
                 $config = Model_Core_Sat_Config::get_current();
                 if ($config->mode === 'production') {
-                    $this->mark_blocked($request, 'Pendiente implementar adaptador phpcfdi/sat-ws-descarga-masiva para produccion.');
-                    $result['blocked']++;
+                    $service = $this->sat_service();
+                    $query = $service->query($this->query_parameters($request));
+                    $message = $query->getStatus()->getCode().' '.$query->getStatus()->getMessage();
+
+                    if ($query->getStatus()->isAccepted()) {
+                        $request->attempts = (int) $request->attempts + 1;
+                        $request->sat_request_id = $query->getRequestId();
+                        $request->status = 'requested';
+                        $request->error_message = '';
+                        $request->save();
+                        $this->event($request, 'request_submitted', 'Solicitud SAT enviada: '.$message);
+                        $result['processed']++;
+                    } else {
+                        $this->mark_blocked($request, 'SAT no acepto la solicitud: '.$message);
+                        $result['blocked']++;
+                    }
                     continue;
                 }
 
@@ -95,6 +109,7 @@ class Service_Core_Sat_Sync
                 $this->event($request, 'request_submitted', 'Solicitud SAT preparada en modo test.');
                 $result['processed']++;
             } catch (\Exception $e) {
+                $this->mark_blocked($request, $e->getMessage());
                 $result['errors'][] = $e->getMessage();
             }
         }
@@ -105,7 +120,7 @@ class Service_Core_Sat_Sync
     /**
      * VERIFY REQUESTS
      *
-     * VERIFICA SOLICITUDES ENVIADAS; EN TEST LAS MARCA COMO SIN RESULTADOS
+     * VERIFICA SOLICITUDES ENVIADAS Y REGISTRA PAQUETES DISPONIBLES
      *
      * @access  public
      * @return  Array
@@ -120,24 +135,126 @@ class Service_Core_Sat_Sync
             ->get();
 
         # SE PROCESAN SOLICITUDES
-        $result = ['processed' => 0, 'completed' => 0];
+        $result = ['processed' => 0, 'completed' => 0, 'packages' => 0, 'errors' => []];
         foreach ($requests as $request) {
-            $config = Model_Core_Sat_Config::get_current();
-            if ($config->mode === 'production') {
-                $this->mark_blocked($request, 'Pendiente consultar estado real con adaptador SAT.');
-                continue;
+            try {
+                $config = Model_Core_Sat_Config::get_current();
+                if ($config->mode === 'production') {
+                    $verify = $this->sat_service()->verify((string) $request->sat_request_id);
+                    $status = $verify->getStatusRequest();
+                    $code = $verify->getCodeRequest();
+
+                    $request->attempts = (int) $request->attempts + 1;
+                    $request->package_count = (int) $verify->countPackages();
+                    $request->error_message = trim($verify->getStatus()->getCode().' '.$verify->getStatus()->getMessage().' | '.$code->getValue().' '.$code->getMessage().' | '.$status->getMessage());
+
+                    if ($status->isFinished()) {
+                        foreach ($verify->getPackagesIds() as $package_id) {
+                            if (!$this->package_exists($package_id)) {
+                                Model_Core_Sat_Package::forge([
+                                    'sync_request_id' => (int) $request->id,
+                                    'package_id' => (string) $package_id,
+                                    'package_type' => (string) $request->download_type,
+                                    'xml_count' => 0,
+                                    'status' => 'ready',
+                                    'path' => '',
+                                    'sha256_hash' => '',
+                                ])->save();
+                                $result['packages']++;
+                            }
+                        }
+                        $request->status = $request->package_count > 0 ? 'ready_to_download' : 'completed_no_results';
+                        $result['completed']++;
+                    } elseif ($status->isAccepted() || $status->isInProgress()) {
+                        $request->status = 'processing';
+                    } else {
+                        $request->status = 'blocked';
+                    }
+
+                    $request->save();
+                    $this->event($request, 'request_verified', 'Solicitud SAT verificada: '.$request->error_message);
+                    $result['processed']++;
+                    continue;
+                }
+
+                # EN MODO TEST QUEDA TERMINADA SIN RESULTADOS REALES
+                $request->status = 'completed_no_results';
+                $request->package_count = 0;
+                $request->downloaded_count = 0;
+                $request->processed_count = 0;
+                $request->save();
+
+                $this->event($request, 'request_verified', 'Solicitud SAT verificada en modo test sin paquetes.');
+                $result['processed']++;
+                $result['completed']++;
+            } catch (\Exception $e) {
+                $this->mark_blocked($request, $e->getMessage());
+                $result['errors'][] = $e->getMessage();
             }
+        }
 
-            # EN MODO TEST QUEDA TERMINADA SIN RESULTADOS REALES
-            $request->status = 'completed_no_results';
-            $request->package_count = 0;
-            $request->downloaded_count = 0;
-            $request->processed_count = 0;
-            $request->save();
+        return $result;
+    }
 
-            $this->event($request, 'request_verified', 'Solicitud SAT verificada en modo test sin paquetes.');
-            $result['processed']++;
-            $result['completed']++;
+    /**
+     * DOWNLOAD PACKAGES
+     *
+     * DESCARGA PAQUETES DISPONIBLES Y PROCESA XML CUANDO APLICA
+     *
+     * @access  public
+     * @return  Array
+     */
+    public function download_packages($limit = 5)
+    {
+        $packages = Model_Core_Sat_Package::query()
+            ->where('status', 'in', ['ready', 'download_error'])
+            ->order_by('id', 'asc')
+            ->limit((int) $limit)
+            ->get();
+
+        $result = ['downloaded' => 0, 'processed' => 0, 'errors' => []];
+        foreach ($packages as $package) {
+            try {
+                $request = Model_Core_Sat_Sync_Request::find((int) $package->sync_request_id);
+                if (!$request) {
+                    throw new \RuntimeException('Solicitud SAT no encontrada para paquete '.$package->package_id.'.');
+                }
+
+                $config = Model_Core_Sat_Config::get_current();
+                if ($config->mode !== 'production') {
+                    $package->status = 'downloaded';
+                    $package->save();
+                    $this->refresh_request_counts($request);
+                    $result['downloaded']++;
+                    continue;
+                }
+
+                $download = $this->sat_service()->download((string) $package->package_id);
+                if (!$download->getStatus()->isAccepted()) {
+                    throw new \RuntimeException('SAT no entrego paquete '.$package->package_id.': '.$download->getStatus()->getCode().' '.$download->getStatus()->getMessage());
+                }
+
+                $zip_content = $download->getPackageContent();
+                $relative_path = $this->package_relative_path($request, $package);
+                $absolute_path = $this->absolute_storage_path($relative_path);
+                $this->ensure_dir(dirname($absolute_path));
+                file_put_contents($absolute_path, $zip_content);
+
+                $package->path = $relative_path;
+                $package->sha256_hash = hash('sha256', $zip_content);
+                $package->status = 'downloaded';
+                $package->xml_count = $this->process_package($package, $absolute_path);
+                $package->status = 'processed';
+                $package->save();
+
+                $this->refresh_request_counts($request);
+                $result['downloaded']++;
+                $result['processed'] += (int) $package->xml_count;
+            } catch (\Exception $e) {
+                $package->status = 'download_error';
+                $package->save();
+                $result['errors'][] = $e->getMessage();
+            }
         }
 
         return $result;
@@ -200,6 +317,253 @@ class Service_Core_Sat_Sync
         $request->save();
 
         $this->event($request, 'request_blocked', $message);
+    }
+
+    protected function sat_service()
+    {
+        if (!class_exists('\PhpCfdi\SatWsDescargaMasiva\Service')) {
+            throw new \RuntimeException('Falta instalar phpcfdi/sat-ws-descarga-masiva con composer.');
+        }
+
+        $credential = Model_Core_Sat_Credential::query()
+            ->where('credential_type', '=', 'fiel')
+            ->where('active', '=', 1)
+            ->order_by('id', 'desc')
+            ->get_one();
+
+        if (!$credential) {
+            throw new \RuntimeException('No hay FIEL activa para descargar del SAT.');
+        }
+
+        $cer_path = $this->absolute_storage_path((string) $credential->cer_path);
+        $key_path = $this->absolute_storage_path((string) $credential->key_path);
+        if (!is_file($cer_path) || !is_file($key_path)) {
+            throw new \RuntimeException('La FIEL activa necesita archivos .cer y .key cargados.');
+        }
+
+        $password = (string) $credential->password_encrypted;
+        $password = $password !== '' ? \Crypt::decode($password) : '';
+        if ($password === '') {
+            throw new \RuntimeException('La FIEL activa necesita password de la llave privada.');
+        }
+
+        $fiel = \PhpCfdi\SatWsDescargaMasiva\RequestBuilder\FielRequestBuilder\Fiel::create(
+            file_get_contents($cer_path),
+            file_get_contents($key_path),
+            $password
+        );
+        if (!$fiel->isValid()) {
+            throw new \RuntimeException('La FIEL no es valida o esta vencida.');
+        }
+
+        return new \PhpCfdi\SatWsDescargaMasiva\Service(
+            new \PhpCfdi\SatWsDescargaMasiva\RequestBuilder\FielRequestBuilder\FielRequestBuilder($fiel),
+            new \PhpCfdi\SatWsDescargaMasiva\WebClient\GuzzleWebClient()
+        );
+    }
+
+    protected function query_parameters(Model_Core_Sat_Sync_Request $request)
+    {
+        $period = \PhpCfdi\SatWsDescargaMasiva\Shared\DateTimePeriod::createFromValues(
+            $request->date_from.' 00:00:00',
+            $request->date_to.' 23:59:59'
+        );
+        $download_type = $request->direction === 'issued'
+            ? \PhpCfdi\SatWsDescargaMasiva\Shared\DownloadType::issued()
+            : \PhpCfdi\SatWsDescargaMasiva\Shared\DownloadType::received();
+        $request_type = $request->download_type === 'xml'
+            ? \PhpCfdi\SatWsDescargaMasiva\Shared\RequestType::xml()
+            : \PhpCfdi\SatWsDescargaMasiva\Shared\RequestType::metadata();
+
+        return \PhpCfdi\SatWsDescargaMasiva\Services\Query\QueryParameters::create($period, $download_type, $request_type);
+    }
+
+    protected function package_exists($package_id)
+    {
+        return (bool) Model_Core_Sat_Package::query()
+            ->where('package_id', '=', (string) $package_id)
+            ->get_one();
+    }
+
+    protected function process_package(Model_Core_Sat_Package $package, $absolute_path)
+    {
+        if ($package->package_type === 'metadata') {
+            return $this->process_metadata_package($absolute_path);
+        }
+
+        $reader = \PhpCfdi\SatWsDescargaMasiva\PackageReader\CfdiPackageReader::createFromFile($absolute_path);
+        $importer = new Service_Core_Sat_Cfdi_Importer();
+        $count = 0;
+        foreach ($reader->cfdis() as $uuid => $xml) {
+            $xml_relative = 'fuel/app/storage/sat/xml/'.date('Y/m').'/'.strtoupper($uuid).'.xml';
+            $xml_absolute = $this->absolute_storage_path($xml_relative);
+            $this->ensure_dir(dirname($xml_absolute));
+            file_put_contents($xml_absolute, $xml);
+            $importer->import_file($xml_absolute, ['origin' => 'sat', 'xml_path' => $xml_relative]);
+            $count++;
+        }
+
+        return $count;
+    }
+
+    protected function process_metadata_package($absolute_path)
+    {
+        $reader = \PhpCfdi\SatWsDescargaMasiva\PackageReader\MetadataPackageReader::createFromFile($absolute_path);
+        $count = 0;
+        foreach ($reader->metadata() as $uuid => $item) {
+            $uuid = strtoupper((string) $uuid);
+            if ($uuid === '') {
+                continue;
+            }
+
+            $cfdi = Model_Core_Sat_Cfdi::query()->where('uuid', '=', $uuid)->get_one();
+            if (!$cfdi) {
+                $cfdi = Model_Core_Sat_Cfdi::forge(['uuid' => $uuid]);
+            }
+
+            $emitter_party = $this->party_by_rfc((string) $item->rfcEmisor);
+            $receiver_party = $this->party_by_rfc((string) $item->rfcReceptor);
+            $direction = $this->direction_from_rfc((string) $item->rfcEmisor);
+            $sat_status = strtolower((string) $item->estatus) === 'cancelado' ? 'cancelado' : 'vigente';
+
+            $cfdi->set([
+                'uuid' => $uuid,
+                'direction' => $direction,
+                'version' => (string) $cfdi->version,
+                'serie' => (string) $cfdi->serie,
+                'folio' => (string) $cfdi->folio,
+                'emitter_rfc' => strtoupper((string) $item->rfcEmisor),
+                'emitter_party_id' => $emitter_party ? (int) $emitter_party['id'] : 0,
+                'emitter_name' => (string) $item->nombreEmisor,
+                'receiver_rfc' => strtoupper((string) $item->rfcReceptor),
+                'receiver_party_id' => $receiver_party ? (int) $receiver_party['id'] : 0,
+                'customer_party_id' => $direction === 'issued' && $receiver_party ? (int) $receiver_party['id'] : 0,
+                'supplier_party_id' => $direction === 'received' && $emitter_party ? (int) $emitter_party['id'] : 0,
+                'receiver_name' => (string) $item->nombreReceptor,
+                'issued_at' => $this->datetime((string) $item->fechaEmision),
+                'stamped_at' => $this->nullable_datetime((string) $item->fechaCertificacionSat),
+                'total' => (float) $item->monto,
+                'subtotal' => (float) $cfdi->subtotal,
+                'discount' => (float) $cfdi->discount,
+                'tax_transferred_total' => (float) $cfdi->tax_transferred_total,
+                'tax_withheld_total' => (float) $cfdi->tax_withheld_total,
+                'currency' => (string) ($cfdi->currency ?: 'MXN'),
+                'voucher_type' => (string) $item->efectoComprobante,
+                'pac_rfc' => (string) $item->rfcPac,
+                'sat_status' => $sat_status,
+                'sat_status_code' => '',
+                'sat_status_message' => (string) $item->estatus,
+                'cancelled_at' => strtotime((string) $item->fechaCancelacion) ?: 0,
+                'last_validated_at' => time(),
+                'metadata_seen_at' => time(),
+                'missing_xml' => (string) $cfdi->xml_path === '' ? 1 : 0,
+                'origin' => (string) $cfdi->xml_path === '' ? 'metadata' : (string) $cfdi->origin,
+                'processed' => (int) $cfdi->processed,
+                'accounted' => (int) $cfdi->accounted,
+                'xml_path' => (string) $cfdi->xml_path,
+                'sales_status' => $direction === 'issued' ? ((int) ($receiver_party['id'] ?? 0) > 0 ? 'candidate' : 'unmatched') : (string) $cfdi->sales_status,
+                'purchase_status' => $direction === 'received' ? ((int) ($emitter_party['id'] ?? 0) > 0 ? 'candidate' : 'unmatched') : (string) $cfdi->purchase_status,
+                'portal_visible_customer' => $direction === 'issued' && $receiver_party ? 1 : (int) $cfdi->portal_visible_customer,
+                'portal_visible_supplier' => $direction === 'received' && $emitter_party ? 1 : (int) $cfdi->portal_visible_supplier,
+            ]);
+            $cfdi->save();
+            $count++;
+        }
+
+        return $count;
+    }
+
+    protected function package_relative_path(Model_Core_Sat_Sync_Request $request, Model_Core_Sat_Package $package)
+    {
+        $safe_package = preg_replace('/[^A-Za-z0-9_-]/', '_', (string) $package->package_id);
+        return 'fuel/app/storage/sat/packages/'.date('Y/m').'/'.$request->download_type.'_'.$request->direction.'_'.$safe_package.'.zip';
+    }
+
+    protected function absolute_storage_path($path)
+    {
+        $path = trim((string) $path);
+        if ($path === '') {
+            return '';
+        }
+        $normalized = str_replace('\\', '/', $path);
+        if (is_file($path) || is_dir($path)) {
+            return $path;
+        }
+        if (strpos($normalized, 'fuel/app/') === 0) {
+            return APPPATH.substr($normalized, strlen('fuel/app/'));
+        }
+        if (strpos($normalized, 'storage/') === 0) {
+            return APPPATH.$normalized;
+        }
+        return $path;
+    }
+
+    protected function ensure_dir($dir)
+    {
+        if (!is_dir($dir)) {
+            mkdir($dir, 0750, true);
+        }
+    }
+
+    protected function refresh_request_counts(Model_Core_Sat_Sync_Request $request)
+    {
+        $packages = Model_Core_Sat_Package::query()
+            ->where('sync_request_id', '=', (int) $request->id)
+            ->get();
+
+        $downloaded = 0;
+        $processed = 0;
+        foreach ($packages as $package) {
+            if (in_array($package->status, ['downloaded', 'processed'], true)) {
+                $downloaded++;
+            }
+            if ($package->status === 'processed') {
+                $processed += (int) $package->xml_count;
+            }
+        }
+
+        $request->downloaded_count = $downloaded;
+        $request->processed_count = $processed;
+        if ($request->package_count > 0 && $downloaded >= (int) $request->package_count) {
+            $request->status = 'completed';
+        }
+        $request->save();
+    }
+
+    protected function party_by_rfc($rfc)
+    {
+        $rfc = strtoupper(trim((string) $rfc));
+        if ($rfc === '') {
+            return null;
+        }
+
+        $row = \DB::select('id', 'party_type')
+            ->from('core_parties')
+            ->where('rfc', '=', $rfc)
+            ->where('active', '=', 1)
+            ->execute()
+            ->current();
+
+        return $row ?: null;
+    }
+
+    protected function direction_from_rfc($emitter_rfc)
+    {
+        $row = \DB::select('rfc')->from('core_companies')->order_by('id', 'asc')->execute()->current();
+        $company_rfc = strtoupper((string) \Arr::get($row ?: [], 'rfc', ''));
+        return $company_rfc !== '' && strtoupper((string) $emitter_rfc) === $company_rfc ? 'issued' : 'received';
+    }
+
+    protected function datetime($value)
+    {
+        $time = strtotime($value);
+        return $time ? date('Y-m-d H:i:s', $time) : date('Y-m-d H:i:s');
+    }
+
+    protected function nullable_datetime($value)
+    {
+        $time = strtotime($value);
+        return $time ? date('Y-m-d H:i:s', $time) : null;
     }
 
     protected function event(Model_Core_Sat_Sync_Request $request, $event_type, $summary)

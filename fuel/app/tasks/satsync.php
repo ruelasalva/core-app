@@ -11,6 +11,7 @@ namespace Fuel\Tasks;
  * php oil r satsync:request metadata received 2026-05-01 2026-05-12
  * php oil r satsync:submit
  * php oil r satsync:verify
+ * php oil r satsync:download
  * php oil r satsync:compare
  */
 class Satsync
@@ -67,6 +68,17 @@ class Satsync
         echo "\nSAT compare metadata\n";
         echo " - Marcados sin XML: ".$result['missing_marked']."\n";
         echo " - Cancelados actuales: ".$result['cancelled_count']."\n";
+    }
+
+    public function download($limit = 5)
+    {
+        $result = (new \Service_Core_Sat_Sync())->download_packages((int) $limit);
+        echo "\nSAT download\n";
+        echo " - Paquetes descargados: ".$result['downloaded']."\n";
+        echo " - CFDI/metadata procesados: ".$result['processed']."\n";
+        if (!empty($result['errors'])) {
+            echo " - Errores: ".implode(' | ', $result['errors'])."\n";
+        }
     }
 
     protected function count($table, $field, $value)

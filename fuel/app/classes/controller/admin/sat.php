@@ -77,6 +77,7 @@ class Controller_Admin_Sat extends Controller_Adminbase
                 'integrations' => $this->get_integration_status(),
                 'stats' => $this->get_stats(),
                 'requests' => $this->get_recent_requests(),
+                'packages' => $this->get_recent_packages(),
                 'cfdi_alerts' => $this->get_cfdi_alerts(),
             ]);
         } catch (\Exception $e) {
@@ -424,11 +425,78 @@ class Controller_Admin_Sat extends Controller_Adminbase
             return $this->json_response([
                 'status' => 'ok',
                 'requests' => $this->get_recent_requests(),
+                'packages' => $this->get_recent_packages(),
                 'stats' => $this->get_stats(),
             ]);
         } catch (\Exception $e) {
             \Log::error('Error creando solicitud SAT: '.$e->getMessage());
             return $this->json_response(['error' => 'No se pudo crear la solicitud SAT.'], 400);
+        }
+    }
+
+    /**
+     * SUBMIT REQUESTS
+     *
+     * ENVIA SOLICITUDES PENDIENTES AL SAT
+     *
+     * @access  public
+     * @return  Response
+     */
+    public function action_submit_requests()
+    {
+        $this->require_access('sat.access[edit]');
+
+        try {
+            $this->assert_schema_ready();
+            $result = (new Service_Core_Sat_Sync())->submit_pending(5);
+            return $this->json_response($this->operation_payload($result));
+        } catch (\Exception $e) {
+            \Log::error('Error enviando solicitudes SAT: '.$e->getMessage());
+            return $this->json_response(['error' => $e->getMessage()], 400);
+        }
+    }
+
+    /**
+     * VERIFY REQUESTS
+     *
+     * CONSULTA AL SAT SI LAS SOLICITUDES YA GENERARON PAQUETES
+     *
+     * @access  public
+     * @return  Response
+     */
+    public function action_verify_requests()
+    {
+        $this->require_access('sat.access[edit]');
+
+        try {
+            $this->assert_schema_ready();
+            $result = (new Service_Core_Sat_Sync())->verify_requests(10);
+            return $this->json_response($this->operation_payload($result));
+        } catch (\Exception $e) {
+            \Log::error('Error verificando solicitudes SAT: '.$e->getMessage());
+            return $this->json_response(['error' => $e->getMessage()], 400);
+        }
+    }
+
+    /**
+     * DOWNLOAD PACKAGES
+     *
+     * DESCARGA Y PROCESA PAQUETES DISPONIBLES
+     *
+     * @access  public
+     * @return  Response
+     */
+    public function action_download_packages()
+    {
+        $this->require_access('sat.access[edit]');
+
+        try {
+            $this->assert_schema_ready();
+            $result = (new Service_Core_Sat_Sync())->download_packages(5);
+            return $this->json_response($this->operation_payload($result));
+        } catch (\Exception $e) {
+            \Log::error('Error descargando paquetes SAT: '.$e->getMessage());
+            return $this->json_response(['error' => $e->getMessage()], 400);
         }
     }
 
@@ -688,11 +756,58 @@ class Controller_Admin_Sat extends Controller_Adminbase
                 'processed_count' => (int) $request->processed_count,
                 'missing_count' => isset($request->missing_count) ? (int) $request->missing_count : 0,
                 'cancelled_count' => isset($request->cancelled_count) ? (int) $request->cancelled_count : 0,
+                'sat_request_id' => (string) $request->sat_request_id,
+                'error_message' => (string) $request->error_message,
                 'created_at' => $request->created_at ? date('d/m/Y H:i', $request->created_at) : '',
             ];
         }
 
         return $items;
+    }
+
+    /**
+     * GET RECENT PACKAGES
+     *
+     * OBTIENE LOS ULTIMOS PAQUETES SAT
+     *
+     * @access  protected
+     * @return  Array
+     */
+    protected function get_recent_packages()
+    {
+        $packages = Model_Core_Sat_Package::query()
+            ->order_by('created_at', 'desc')
+            ->limit(10)
+            ->get();
+
+        $items = [];
+        foreach ($packages as $package) {
+            $items[] = [
+                'id' => (int) $package->id,
+                'sync_request_id' => (int) $package->sync_request_id,
+                'package_id' => (string) $package->package_id,
+                'package_type' => (string) $package->package_type,
+                'xml_count' => (int) $package->xml_count,
+                'status' => (string) $package->status,
+                'path' => (string) $package->path,
+                'sha256_hash' => (string) $package->sha256_hash,
+                'created_at' => $package->created_at ? date('d/m/Y H:i', $package->created_at) : '',
+            ];
+        }
+
+        return $items;
+    }
+
+    protected function operation_payload(array $result)
+    {
+        return [
+            'status' => 'ok',
+            'result' => $result,
+            'requests' => $this->get_recent_requests(),
+            'packages' => $this->get_recent_packages(),
+            'stats' => $this->get_stats(),
+            'cfdi_alerts' => $this->get_cfdi_alerts(),
+        ];
     }
 
     /**
