@@ -80,7 +80,11 @@ class Helper_Core_Cart
                 'portal_code' => 'frontend',
                 'status' => 'open',
                 'currency_code' => 'MXN',
+                'items_count' => 0,
+                'subtotal' => 0,
+                'total' => 0,
                 'expires_at' => time() + (60 * 60 * 24 * 60),
+                'converted_at' => 0,
             ]);
             $cart->save();
         }
@@ -135,7 +139,11 @@ class Helper_Core_Cart
                 'product_id' => (int) $product['id'],
                 'sku' => (string) $product['sku'],
                 'name' => (string) $product['name'],
+                'currency_code' => (string) $price['currency_code'],
+                'unit_price' => (float) $price['price'],
                 'quantity' => 0,
+                'line_total' => 0,
+                'price_list_id' => (int) $price['price_list_id'],
             ]);
         }
 
@@ -279,6 +287,7 @@ class Helper_Core_Cart
             'tax_total' => 0,
             'total' => (float) $cart->total,
             'customer_notes' => trim((string) $customer_notes),
+            'internal_notes' => '',
             'expires_at' => time() + (60 * 60 * 24 * 15),
         ]);
         $quote->save();
