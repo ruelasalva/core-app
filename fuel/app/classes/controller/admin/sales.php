@@ -58,10 +58,104 @@ class Controller_Admin_Sales extends Controller_Adminbase
             return $this->json_response([
                 'quotes' => $this->quotes(),
                 'stats' => $this->stats(),
+                'options' => $this->options(),
             ]);
         } catch (\Exception $e) {
             \Log::error('Error cargando ventas: '.$e->getMessage());
             return $this->json_response(['error' => 'No se pudo cargar ventas.'], 500);
+        }
+    }
+
+    /**
+     * CREATE QUOTE
+     *
+     * CREA UNA COTIZACION MANUAL DESDE ADMINISTRACION.
+     *
+     * @access  public
+     * @return  Response
+     */
+    public function post_create_quote()
+    {
+        # VALIDAR PERMISO PARA CREAR
+        $this->require_access('sales.access[create]');
+
+        try {
+            # SE OBTIENE PAYLOAD
+            $val = (array) \Input::json();
+            $party_id = (int) \Arr::get($val, 'party_id', 0);
+            $items = (array) \Arr::get($val, 'items', []);
+
+            if ($party_id < 1 || empty($items)) {
+                return $this->json_response(['error' => 'Selecciona cliente y al menos un producto.'], 422);
+            }
+
+            # SE CREA ENCABEZADO
+            $quote = Model_Core_Sales_Quote::forge([
+                'folio' => $this->next_quote_folio(),
+                'source' => 'admin_manual',
+                'cart_id' => 0,
+                'user_id' => $this->current_user_id(),
+                'party_id' => $party_id,
+                'status' => 'reviewed',
+                'currency_code' => 'MXN',
+                'subtotal' => 0,
+                'discount_total' => 0,
+                'tax_total' => 0,
+                'total' => 0,
+                'customer_notes' => trim((string) \Arr::get($val, 'customer_notes', '')),
+                'internal_notes' => trim((string) \Arr::get($val, 'internal_notes', '')),
+                'expires_at' => time() + (60 * 60 * 24 * 15),
+            ]);
+            $quote->save();
+
+            # SE AGREGAN PARTIDAS
+            $subtotal = 0;
+            $currency = 'MXN';
+            $sort = 10;
+            foreach ($items as $item) {
+                $product_id = (int) \Arr::get((array) $item, 'product_id', 0);
+                $quantity = max(1, (float) \Arr::get((array) $item, 'quantity', 1));
+                $product = $this->product_row($product_id);
+                if (!$product) {
+                    continue;
+                }
+
+                $price = $this->product_price($product, $party_id);
+                $currency = $price['currency_code'];
+                $line_total = round($price['price'] * $quantity, 2);
+                $subtotal += $line_total;
+
+                Model_Core_Sales_Quote_Item::forge([
+                    'quote_id' => (int) $quote->id,
+                    'product_id' => $product_id,
+                    'sku' => (string) $product['sku'],
+                    'name' => (string) $product['name'],
+                    'currency_code' => $currency,
+                    'unit_price' => $price['price'],
+                    'quantity' => $quantity,
+                    'line_subtotal' => $line_total,
+                    'line_total' => $line_total,
+                    'sort_order' => $sort,
+                ])->save();
+
+                $sort += 10;
+            }
+
+            if ($subtotal <= 0) {
+                $quote->delete();
+                return $this->json_response(['error' => 'No se pudo crear la cotizacion con esos productos.'], 422);
+            }
+
+            # SE ACTUALIZAN TOTALES
+            $quote->currency_code = $currency;
+            $quote->subtotal = round($subtotal, 2);
+            $quote->total = round($subtotal, 2);
+            $quote->save();
+
+            return $this->json_response(['status' => 'ok', 'quotes' => $this->quotes(), 'stats' => $this->stats()]);
+        } catch (\Exception $e) {
+            \Log::error('Error creando cotizacion manual: '.$e->getMessage());
+            return $this->json_response(['error' => 'No se pudo crear la cotizacion.'], 400);
         }
     }
 
@@ -205,6 +299,107 @@ class Controller_Admin_Sales extends Controller_Adminbase
             'approved' => (int) \DB::select()->from('core_sales_quotes')->where('status', '=', 'approved')->execute()->count(),
             'rejected' => (int) \DB::select()->from('core_sales_quotes')->where('status', '=', 'rejected')->execute()->count(),
         ];
+    }
+
+    /**
+     * OPTIONS
+     *
+     * OPCIONES PARA CREAR COTIZACION MANUAL.
+     *
+     * @access  protected
+     * @return  Array
+     */
+    protected function options()
+    {
+        # SE ENTREGAN CLIENTES Y PRODUCTOS ACTIVOS
+        return [
+            'customers' => $this->select_rows('core_parties', 'id', 'name', ['party_type' => 'customer']),
+            'products' => $this->product_options(),
+        ];
+    }
+
+    /**
+     * PRODUCT OPTIONS
+     *
+     * PRODUCTOS PUBLICADOS PARA COTIZACION.
+     *
+     * @access  protected
+     * @return  Array
+     */
+    protected function product_options()
+    {
+        # SE LISTAN PRODUCTOS ACTIVOS
+        $items = [];
+        $rows = \DB::select('id', 'sku', 'name', 'currency_code', 'price')
+            ->from('core_commerce_products')
+            ->where('active', '=', 1)
+            ->where('published', '=', 1)
+            ->order_by('name', 'asc')
+            ->limit(500)
+            ->execute();
+
+        foreach ($rows as $row) {
+            $items[] = [
+                'value' => (int) $row['id'],
+                'label' => trim($row['name'].' '.($row['sku'] ? '('.$row['sku'].')' : '')),
+                'currency_code' => (string) $row['currency_code'],
+                'price' => (float) $row['price'],
+            ];
+        }
+
+        return $items;
+    }
+
+    protected function select_rows($table, $value_field, $label_field, array $where = [])
+    {
+        $items = [];
+        $query = \DB::select($value_field, $label_field)->from($table)->where('active', '=', 1);
+        foreach ($where as $field => $value) {
+            $query->where($field, '=', $value);
+        }
+        foreach ($query->order_by($label_field, 'asc')->execute() as $row) {
+            $items[] = ['value' => (int) $row[$value_field], 'label' => (string) $row[$label_field]];
+        }
+        return $items;
+    }
+
+    protected function product_row($product_id)
+    {
+        $row = \DB::select('id', 'sku', 'name', 'currency_code', 'price')
+            ->from('core_commerce_products')
+            ->where('id', '=', (int) $product_id)
+            ->where('active', '=', 1)
+            ->execute()
+            ->current();
+
+        return $row ?: null;
+    }
+
+    protected function product_price(array $product, $party_id)
+    {
+        # POR AHORA USA PRECIO BASE; LISTAS ESPECIALES SE APLICARAN AL FLUJO COMERCIAL COMPLETO
+        return [
+            'price' => (float) $product['price'],
+            'currency_code' => (string) $product['currency_code'],
+        ];
+    }
+
+    protected function next_quote_folio()
+    {
+        $prefix = 'COT-'.date('Ymd').'-';
+        $row = \DB::select(\DB::expr('COUNT(*) as total'))
+            ->from('core_sales_quotes')
+            ->where('folio', 'like', $prefix.'%')
+            ->execute()
+            ->current();
+
+        return $prefix.str_pad(((int) $row['total']) + 1, 5, '0', STR_PAD_LEFT);
+    }
+
+    protected function current_user_id()
+    {
+        $user_id_data = \Auth::get_user_id();
+        return isset($user_id_data[1]) ? (int) $user_id_data[1] : 0;
     }
 
     /**

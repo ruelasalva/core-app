@@ -41,6 +41,11 @@
     <div class="card card-primary card-outline">
         <div class="card-header">
             <h3 class="card-title">Solicitudes de cotizacion</h3>
+            <div class="card-tools">
+                <button class="btn btn-primary btn-sm" @click="newQuote">
+                    <i class="bi bi-plus-lg"></i> Nueva cotizacion
+                </button>
+            </div>
         </div>
         <div class="card-body">
             <div v-if="loading" class="text-center p-5">
@@ -86,6 +91,83 @@
                     </tr>
                 </tbody>
             </table>
+        </div>
+    </div>
+
+    <div class="modal fade" id="modal-new-quote" tabindex="-1" role="dialog" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title">Nueva cotizacion</h5>
+                    <button type="button" class="close text-white" @click="hideModal('modal-new-quote')">
+                        <span>&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label>Cliente</label>
+                        <select class="form-control" v-model="quoteForm.party_id">
+                            <option value="">Selecciona cliente</option>
+                            <option v-for="customer in options.customers" :value="customer.value">{{ customer.label }}</option>
+                        </select>
+                    </div>
+
+                    <div class="border rounded p-3 mb-3">
+                        <div class="row">
+                            <div class="col-md-7">
+                                <div class="form-group">
+                                    <label>Producto</label>
+                                    <select class="form-control" v-model="lineForm.product_id">
+                                        <option value="">Selecciona producto</option>
+                                        <option v-for="product in options.products" :value="product.value">{{ product.label }}</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="form-group">
+                                    <label>Cantidad</label>
+                                    <input type="number" min="1" step="1" class="form-control" v-model.number="lineForm.quantity">
+                                </div>
+                            </div>
+                            <div class="col-md-2 d-flex align-items-end">
+                                <button class="btn btn-outline-primary btn-block mb-3" @click="addLine">Agregar</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <table class="table table-sm table-bordered" v-if="quoteForm.items.length">
+                        <thead>
+                            <tr>
+                                <th>Producto</th>
+                                <th>Cantidad</th>
+                                <th>Precio base</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="(item, index) in quoteForm.items" :key="index">
+                                <td>{{ productLabel(item.product_id) }}</td>
+                                <td>{{ item.quantity }}</td>
+                                <td>{{ productCurrency(item.product_id) }} {{ money(productPrice(item.product_id)) }}</td>
+                                <td class="text-center"><button class="btn btn-xs btn-danger" @click="removeLine(index)">Quitar</button></td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <div class="form-group">
+                        <label>Notas para el cliente</label>
+                        <textarea class="form-control" rows="2" v-model="quoteForm.customer_notes"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Notas internas</label>
+                        <textarea class="form-control" rows="2" v-model="quoteForm.internal_notes"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @click="hideModal('modal-new-quote')">Cerrar</button>
+                    <button class="btn btn-primary" @click="saveQuote">Guardar cotizacion</button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -173,7 +255,10 @@ window.onload = function() {
             loading: true,
             quotes: [],
             selected: null,
-            stats: { quotes: 0, requested: 0, reviewed: 0, approved: 0, rejected: 0 }
+            stats: { quotes: 0, requested: 0, reviewed: 0, approved: 0, rejected: 0 },
+            options: { customers: [], products: [] },
+            quoteForm: { party_id: '', items: [], customer_notes: '', internal_notes: '' },
+            lineForm: { product_id: '', quantity: 1 }
         },
         mounted() {
             this.loadData();
@@ -191,6 +276,7 @@ window.onload = function() {
                         }
                         this.quotes = data.quotes || [];
                         this.stats = data.stats || this.stats;
+                        this.options = data.options || this.options;
                     });
             },
             money(value) {
@@ -250,6 +336,47 @@ window.onload = function() {
                 if (window.jQuery) {
                     $('#' + id).modal('hide');
                 }
+            },
+            newQuote() {
+                this.quoteForm = { party_id: '', items: [], customer_notes: '', internal_notes: '' };
+                this.lineForm = { product_id: '', quantity: 1 };
+                this.showModal('modal-new-quote');
+            },
+            addLine() {
+                if (!this.lineForm.product_id) return;
+                this.quoteForm.items.push({
+                    product_id: this.lineForm.product_id,
+                    quantity: this.lineForm.quantity || 1
+                });
+                this.lineForm = { product_id: '', quantity: 1 };
+            },
+            removeLine(index) {
+                this.quoteForm.items.splice(index, 1);
+            },
+            productById(productId) {
+                return (this.options.products || []).find(product => Number(product.value) === Number(productId)) || {};
+            },
+            productLabel(productId) {
+                return this.productById(productId).label || '-';
+            },
+            productPrice(productId) {
+                return this.productById(productId).price || 0;
+            },
+            productCurrency(productId) {
+                return this.productById(productId).currency_code || 'MXN';
+            },
+            saveQuote() {
+                fetch('<?php echo Uri::create('admin/sales/create_quote'); ?>', window.coreAppFetchOptions(this.quoteForm))
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.error) {
+                            alert(data.error);
+                            return;
+                        }
+                        this.quotes = data.quotes || [];
+                        this.stats = data.stats || this.stats;
+                        this.hideModal('modal-new-quote');
+                    });
             }
         }
     });
