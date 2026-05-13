@@ -278,6 +278,7 @@ class Controller_Admin_Sat extends Controller_Adminbase
                 'cer_original_name' => trim((string) \Arr::get($val, 'cer_original_name', '')),
                 'key_path' => trim((string) \Arr::get($val, 'key_path', '')),
                 'key_original_name' => trim((string) \Arr::get($val, 'key_original_name', '')),
+                'password_encrypted' => '',
                 'certificate_serial' => trim((string) \Arr::get($val, 'certificate_serial', '')),
                 'certificate_subject' => trim((string) \Arr::get($val, 'certificate_subject', '')),
                 'certificate_issuer' => trim((string) \Arr::get($val, 'certificate_issuer', '')),
@@ -294,6 +295,7 @@ class Controller_Admin_Sat extends Controller_Adminbase
                 if (!$credential) {
                     return $this->json_response(['error' => 'Credencial no encontrada.'], 404);
                 }
+                unset($data['password_encrypted']);
                 $credential->set($data);
             } else {
                 $credential = Model_Core_Sat_Credential::forge($data);
