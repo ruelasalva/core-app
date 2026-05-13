@@ -195,6 +195,8 @@ class Helper_Core_Legal
 
         # SE PREPARA LA URL DEL ENDPOINT
         $endpoint = \Uri::create('legal/cookies/accept');
+        $csrf_key = \Config::get('security.csrf_token_key', 'fuel_csrf_token');
+        $csrf_token = \Security::fetch_token();
 
         # SE REGRESA HTML AUTOCONTENIDO PARA FRONTEND
         return <<<HTML
@@ -219,12 +221,17 @@ class Helper_Core_Legal
         var payload = mode === 'all'
             ? { analytics: 1, marketing: 1, personalization: 1 }
             : { analytics: 0, marketing: 0, personalization: 0 };
+        payload['{$csrf_key}'] = '{$csrf_token}';
 
         fetch('{$endpoint}', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        }).then(function() {
+            body: JSON.stringify(payload),
+            credentials: 'same-origin'
+        }).then(function(response) {
+            if (!response.ok) throw new Error('cookie_preferences_failed');
+            banner.parentNode.removeChild(banner);
+        }).catch(function() {
             banner.parentNode.removeChild(banner);
         });
     }

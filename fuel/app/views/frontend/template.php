@@ -57,6 +57,7 @@
     <link rel="icon" href="<?php echo e($theme_asset($theme->favicon_path)); ?>">
     <?php endif; ?>
     <?php echo Asset::css('bootstrap-icons.css'); ?>
+    <?php echo Asset::css('all.min.css'); ?>
     <?php echo class_exists('Helper_Core_Web') ? Helper_Core_Web::frontend_head() : ''; ?>
     <style>
         :root {
@@ -246,14 +247,14 @@
                 <?php endif; ?>
                 <div class="account-menu">
                     <?php $cart_count = isset($cart_count) ? (int) $cart_count : 0; ?>
-                    <a class="cart-link" data-cart-link href="<?php echo Uri::create('carrito'); ?>">Carrito<?php echo $cart_count > 0 ? ' ('.$cart_count.')' : ''; ?></a>
+                    <a class="cart-link" data-cart-link href="<?php echo Uri::create('carrito'); ?>"><i class="fas fa-shopping-cart"></i> Carrito<?php echo $cart_count > 0 ? ' ('.$cart_count.')' : ''; ?></a>
                     <?php $frontend_user = !empty($frontend_user) ? $frontend_user : ['logged_in' => false, 'name' => '']; ?>
                     <?php if (!empty($frontend_user['logged_in'])): ?>
-                    <a href="<?php echo Uri::create('mi-cuenta'); ?>">Mi cuenta</a>
-                    <a href="<?php echo Uri::create('salir-cuenta'); ?>">Salir</a>
+                    <a href="<?php echo Uri::create('mi-cuenta'); ?>"><i class="fas fa-user-circle"></i> Mi cuenta</a>
+                    <a href="<?php echo Uri::create('salir-cuenta'); ?>"><i class="fas fa-sign-out-alt"></i> Salir</a>
                     <?php else: ?>
-                    <a href="<?php echo Uri::create('acceso'); ?>">Entrar</a>
-                    <a class="primary" href="<?php echo Uri::create('registro'); ?>">Registrarse</a>
+                    <a href="<?php echo Uri::create('acceso'); ?>"><i class="fas fa-sign-in-alt"></i> Entrar</a>
+                    <a class="primary" href="<?php echo Uri::create('registro'); ?>"><i class="fas fa-user-plus"></i> Registrarse</a>
                     <?php endif; ?>
                 </div>
             </nav>
@@ -305,7 +306,7 @@
         function updateCartCount(count) {
             if (!cartLink) return;
             count = parseInt(count || 0, 10);
-            cartLink.textContent = count > 0 ? 'Carrito (' + count + ')' : 'Carrito';
+            cartLink.innerHTML = '<i class="fas fa-shopping-cart"></i> ' + (count > 0 ? 'Carrito (' + count + ')' : 'Carrito');
             cartLink.classList.remove('bump');
             void cartLink.offsetWidth;
             cartLink.classList.add('bump');

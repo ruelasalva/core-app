@@ -11,6 +11,8 @@ $media_url = function ($path) {
     return Uri::base(false).ltrim($path, '/');
 };
 
+$no_image_svg = 'data:image/svg+xml;charset=UTF-8,'.rawurlencode('<svg xmlns="http://www.w3.org/2000/svg" width="640" height="400" viewBox="0 0 640 400"><rect width="640" height="400" fill="#eef3f7"/><path d="M150 292h340l-96-124-72 88-52-66-120 102z" fill="#cbd5e1"/><text x="320" y="352" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="30" fill="#64748b">Sin imagen</text></svg>');
+
 $section_settings = function ($json) {
     $settings = json_decode((string) $json, true);
     return is_array($settings) ? $settings : array();
@@ -169,6 +171,62 @@ $section_settings = function ($json) {
         color: #0f766e;
         font-weight: 800;
     }
+    .contact-panel {
+        display: grid;
+        grid-template-columns: minmax(0, .95fr) minmax(300px, 1.05fr);
+        gap: 24px;
+        align-items: start;
+    }
+    .contact-card {
+        border: 1px solid #dde3ea;
+        border-radius: 8px;
+        background: #fff;
+        padding: 22px;
+    }
+    .contact-form .field {
+        margin-bottom: 14px;
+    }
+    .contact-form label {
+        display: block;
+        margin-bottom: 6px;
+        font-weight: 800;
+        color: #344052;
+        font-size: .9rem;
+    }
+    .contact-form input,
+    .contact-form textarea {
+        width: 100%;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        padding: 10px 12px;
+        font: inherit;
+    }
+    .contact-form button {
+        border: 1px solid #0f766e;
+        border-radius: 6px;
+        background: #0f766e;
+        color: #fff;
+        padding: 11px 16px;
+        font-weight: 800;
+        cursor: pointer;
+    }
+    .contact-map iframe {
+        width: 100%;
+        min-height: 360px;
+        border: 0;
+        border-radius: 8px;
+    }
+    .contact-alert {
+        margin-bottom: 14px;
+        border-radius: 6px;
+        padding: 10px 12px;
+        background: #ecfdf5;
+        color: #065f46;
+    }
+    .contact-alert.error {
+        background: #fff1f2;
+        color: #991b1b;
+    }
     .feature-item,
     .download-item,
     .brand-item {
@@ -200,6 +258,9 @@ $section_settings = function ($json) {
         }
         .front-hero {
             min-height: 360px;
+        }
+        .contact-panel {
+            grid-template-columns: 1fr;
         }
     }
 </style>
@@ -296,6 +357,43 @@ $section_settings = function ($json) {
                 <?php if (!empty($section->content)): ?>
                 <div class="content"><?php echo $section->content; ?></div>
                 <?php endif; ?>
+                <?php if ($section->section_type === 'contact_info' && !empty($contact_form_enabled)): ?>
+                <div class="contact-panel" style="margin-top: 24px;">
+                    <div class="contact-card">
+                        <?php if (!empty($contact_success)): ?>
+                        <div class="contact-alert"><?php echo e($contact_success); ?></div>
+                        <?php endif; ?>
+                        <?php if (!empty($contact_error)): ?>
+                        <div class="contact-alert error"><?php echo e($contact_error); ?></div>
+                        <?php endif; ?>
+                        <?php echo Form::open(['action' => 'contacto/enviar', 'method' => 'post', 'class' => 'contact-form']); ?>
+                            <div class="field">
+                                <label>Nombre</label>
+                                <input name="name" required maxlength="160">
+                            </div>
+                            <div class="field">
+                                <label>Correo</label>
+                                <input type="email" name="email" required maxlength="180">
+                            </div>
+                            <div class="field">
+                                <label>Telefono</label>
+                                <input name="phone" maxlength="60">
+                            </div>
+                            <div class="field">
+                                <label>Mensaje</label>
+                                <textarea name="message" rows="5" required maxlength="1800"></textarea>
+                            </div>
+                            <?php echo !empty($captcha_html) ? $captcha_html : ''; ?>
+                            <button type="submit"><i class="fas fa-paper-plane"></i> Enviar mensaje</button>
+                        <?php echo Form::close(); ?>
+                    </div>
+                    <?php if (!empty($google_maps_embed_url)): ?>
+                    <div class="contact-map">
+                        <iframe src="<?php echo e($google_maps_embed_url); ?>" loading="lazy" referrerpolicy="no-referrer-when-downgrade" allowfullscreen></iframe>
+                    </div>
+                    <?php endif; ?>
+                </div>
+                <?php endif; ?>
                 <?php if ($section->section_type === 'cta'): ?>
                 <?php $cta_settings = $section_settings($section->settings_json); ?>
                 <a class="section-link" href="<?php echo e(\Arr::get($cta_settings, 'button_url', Uri::create('pagina/contacto'))); ?>">
@@ -352,9 +450,7 @@ $section_settings = function ($json) {
         <div class="product-grid">
             <?php foreach ($featured_products as $product): ?>
             <a class="product-card" href="<?php echo e(Uri::create('producto/'.$product['slug'])); ?>">
-                <?php if (!empty($product['main_image_path'])): ?>
-                <img src="<?php echo e($media_url($product['main_image_path'])); ?>" alt="<?php echo e($product['name']); ?>">
-                <?php endif; ?>
+                <img src="<?php echo e(!empty($product['main_image_path']) ? $media_url($product['main_image_path']) : $no_image_svg); ?>" alt="<?php echo e($product['name']); ?>">
                 <div class="body">
                     <h3><?php echo e($product['name']); ?></h3>
                     <?php if (!empty($product['short_description'])): ?>

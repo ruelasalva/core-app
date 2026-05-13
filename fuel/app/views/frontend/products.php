@@ -11,6 +11,8 @@ $media_url = function ($path) {
     return Uri::base(false).ltrim($path, '/');
 };
 
+$no_image_svg = 'data:image/svg+xml;charset=UTF-8,'.rawurlencode('<svg xmlns="http://www.w3.org/2000/svg" width="640" height="480" viewBox="0 0 640 480"><rect width="640" height="480" fill="#eef3f7"/><path d="M160 330h320l-92-122-76 94-48-62-104 90z" fill="#cbd5e1"/><circle cx="230" cy="174" r="38" fill="#cbd5e1"/><text x="320" y="406" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="34" fill="#64748b">Sin imagen</text></svg>');
+
 $product_url = function ($slug) {
     return Uri::create('producto/'.$slug);
 };
@@ -333,9 +335,7 @@ $catalog_action = Uri::create(Uri::string());
         <div class="catalog-grid">
             <?php foreach ($products as $product): ?>
             <a class="catalog-card" href="<?php echo e($product_url($product['slug'])); ?>">
-                <?php if (!empty($product['main_image_path'])): ?>
-                <img src="<?php echo e($media_url($product['main_image_path'])); ?>" alt="<?php echo e($product['name']); ?>">
-                <?php endif; ?>
+                <img src="<?php echo e(!empty($product['main_image_path']) ? $media_url($product['main_image_path']) : $no_image_svg); ?>" alt="<?php echo e($product['name']); ?>">
                 <div class="body">
                     <?php if (!empty($product['category_name'])): ?>
                     <div class="catalog-meta"><?php echo e($product['category_name']); ?></div>

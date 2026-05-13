@@ -299,6 +299,7 @@ class Configsetup
             ['google_tag_manager', 'Google Tag Manager', 'Google', 'tag_manager', 'marketing', 20],
             ['meta_pixel', 'Meta Pixel', 'Meta', 'pixel', 'marketing', 30],
             ['google_recaptcha', 'Google reCAPTCHA', 'Google', 'captcha', 'necessary', 40],
+            ['google_maps', 'Google Maps', 'Google', 'map', 'necessary', 50],
         ];
 
         foreach ($integrations as $integration) {
@@ -404,6 +405,42 @@ class Configsetup
             'message_template' => '{{message}}',
             'url_template' => 'admin',
             'icon' => 'bi bi-bell',
+            'priority' => 1,
+            'notify_internal' => 1,
+            'notify_email' => 0,
+            'email_role' => 'system',
+            'email_template_code' => 'system_notification',
+            'active' => 1,
+            'created_at' => time(),
+            'updated_at' => time(),
+        ]);
+
+        $this->insert_if_missing('core_notification_events', 'code', 'contact.web.message', [
+            'code' => 'contact.web.message',
+            'name' => 'Mensaje de contacto web',
+            'description' => 'Evento generado cuando un visitante envia el formulario de contacto del frontend.',
+            'title_template' => 'Nuevo mensaje de contacto',
+            'message_template' => '{{name}} escribio desde el frontend.',
+            'url_template' => 'admin/communications',
+            'icon' => 'bi bi-envelope',
+            'priority' => 2,
+            'notify_internal' => 1,
+            'notify_email' => 0,
+            'email_role' => 'system',
+            'email_template_code' => 'system_notification',
+            'active' => 1,
+            'created_at' => time(),
+            'updated_at' => time(),
+        ]);
+
+        $this->insert_if_missing('core_notification_events', 'code', 'manual.admin.notification', [
+            'code' => 'manual.admin.notification',
+            'name' => 'Notificacion interna manual',
+            'description' => 'Evento usado para mensajes internos enviados desde Comunicaciones.',
+            'title_template' => '{{title}}',
+            'message_template' => '{{message}}',
+            'url_template' => 'admin',
+            'icon' => 'bi bi-megaphone',
             'priority' => 1,
             'notify_internal' => 1,
             'notify_email' => 0,

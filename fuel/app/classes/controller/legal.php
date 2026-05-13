@@ -51,6 +51,20 @@ class Controller_Legal extends Controller
     }
 
     /**
+     * COOKIES ACCEPT
+     *
+     * SOPORTE DE RUTA SIN PREFIJO POST PARA FUELPHP.
+     *
+     * @access  public
+     * @return  Response
+     */
+    public function action_cookies_accept()
+    {
+        # SE DELEGA AL FLUJO POST PARA EVITAR 404 EN RUTAS PUBLICAS
+        return $this->post_cookies_accept();
+    }
+
+    /**
      * JSON RESPONSE
      *
      * GENERA RESPUESTAS JSON PUBLICAS

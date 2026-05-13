@@ -77,6 +77,7 @@ return array(
     'empresa' => 'frontend/page/empresa',
     'distribucion' => 'frontend/page/distribucion',
     'contacto' => 'frontend/page/contacto',
+    'contacto/enviar' => 'frontend/contact_submit',
     'pagina/(:any)' => 'frontend/page/$1',
     'productos' => 'frontend/products',
     'producto/(:any)' => 'frontend/product/$1',

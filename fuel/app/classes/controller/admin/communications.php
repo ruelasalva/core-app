@@ -58,12 +58,64 @@ class Controller_Admin_Communications extends Controller_Adminbase
             # SE REGRESA LA INFORMACION PARA VUE
             return $this->json_response([
                 'events' => $this->get_events(),
+                'users' => $this->get_users(),
                 'stats' => $this->get_stats(),
             ]);
         } catch (\Exception $e) {
             \Log::error('Error cargando comunicaciones: '.$e->getMessage());
             return $this->json_response(['error' => 'No se pudo cargar comunicaciones.'], 500);
         }
+    }
+
+    /**
+     * SEND NOTIFICATION
+     *
+     * ENVIA UNA NOTIFICACION INTERNA MANUAL A USUARIOS SELECCIONADOS
+     *
+     * @access  public
+     * @return  Response
+     */
+    public function post_send_notification()
+    {
+        # VALIDAR PERMISO PARA CREAR
+        $this->require_access('communications.access[create]');
+
+        # SE OBTIENE PAYLOAD JSON
+        $val = (array) \Input::json();
+        $title = trim((string) \Arr::get($val, 'title', ''));
+        $message = trim((string) \Arr::get($val, 'message', ''));
+        $url = trim((string) \Arr::get($val, 'url', 'admin'));
+        $user_ids = (array) \Arr::get($val, 'user_ids', []);
+
+        # VALIDACIONES MINIMAS
+        if ($title === '' || $message === '') {
+            return $this->json_response(['error' => 'Titulo y mensaje son obligatorios.'], 422);
+        }
+
+        if (empty($user_ids)) {
+            return $this->json_response(['error' => 'Selecciona al menos un destinatario.'], 422);
+        }
+
+        # SE CREA LA NOTIFICACION
+        $notification = Helper_Core_Notification::create([
+            'event_code' => 'manual.admin.notification',
+            'notification_type' => 'manual',
+            'title' => $title,
+            'message' => $message,
+            'url' => $url,
+            'icon' => 'bi bi-megaphone',
+            'priority' => (int) \Arr::get($val, 'priority', 1),
+            'created_by' => $this->user_id,
+        ], $user_ids);
+
+        if (!$notification) {
+            return $this->json_response(['error' => 'No se pudo crear la notificacion.'], 400);
+        }
+
+        return $this->json_response([
+            'status' => 'ok',
+            'stats' => $this->get_stats(),
+        ]);
     }
 
     /**
@@ -113,6 +165,40 @@ class Controller_Admin_Communications extends Controller_Adminbase
             'emails_pending' => (int) \DB::select()->from('core_email_queue')->where('status', '=', 'pending')->execute()->count(),
             'emails_failed' => (int) \DB::select()->from('core_email_queue')->where('status', '=', 'failed')->execute()->count(),
         ];
+    }
+
+    /**
+     * GET USERS
+     *
+     * OBTIENE USUARIOS ACTIVOS PARA DESTINATARIOS INTERNOS.
+     *
+     * @access  protected
+     * @return  Array
+     */
+    protected function get_users()
+    {
+        # SE CONSULTAN USUARIOS DEL SISTEMA
+        if (!\DBUtil::table_exists('users')) {
+            return [];
+        }
+
+        $rows = \DB::select('id', 'username', 'email', 'group_id')
+            ->from('users')
+            ->order_by('username', 'asc')
+            ->execute()
+            ->as_array();
+
+        $users = [];
+        foreach ($rows as $row) {
+            $users[] = [
+                'id' => (int) $row['id'],
+                'label' => trim((string) ($row['username'] ?: $row['email'])),
+                'email' => (string) $row['email'],
+                'group_id' => (int) $row['group_id'],
+            ];
+        }
+
+        return $users;
     }
 
     /**

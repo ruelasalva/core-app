@@ -106,6 +106,39 @@ class Helper_Core_Web
     }
 
     /**
+     * GOOGLE MAPS EMBED URL
+     *
+     * OBTIENE URL SEGURA PARA MOSTRAR MAPA DE CONTACTO.
+     *
+     * @access  public
+     * @return  String
+     */
+    public static function google_maps_embed_url()
+    {
+        # SE BUSCA INTEGRACION ACTIVA
+        $maps = self::integration('google_maps');
+        if (!$maps) {
+            return '';
+        }
+
+        # PUBLIC_VALUE PUEDE CONTENER URL EMBED COMPLETA
+        $url = trim((string) $maps->public_value);
+
+        # SETTINGS_JSON PUEDE CONTENER embed_url PARA EVITAR PEGARLO EN VISTAS
+        $settings = json_decode((string) $maps->settings_json, true);
+        if (is_array($settings) && !empty($settings['embed_url'])) {
+            $url = trim((string) $settings['embed_url']);
+        }
+
+        # SOLO SE PERMITEN IFRAMES HTTPS DE GOOGLE MAPS
+        if ($url === '' || !preg_match('#^https://www\.google\.com/maps/embed#i', $url)) {
+            return '';
+        }
+
+        return $url;
+    }
+
+    /**
      * VERIFY CAPTCHA
      *
      * VALIDA EL TOKEN DE RECAPTCHA SOLO CUANDO ESTA CONFIGURADO.

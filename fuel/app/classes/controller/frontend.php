@@ -223,6 +223,11 @@ class Controller_Frontend extends Controller_Template
             'banners'           => $this->get_banners($location),
             'featured_products' => ($location === 'home') ? $this->get_featured_products() : array(),
             'featured_brands'   => $this->get_featured_brands(),
+            'contact_form_enabled' => $page->slug === 'contacto',
+            'contact_success' => \Session::get_flash('contact_success'),
+            'contact_error' => \Session::get_flash('contact_error'),
+            'google_maps_embed_url' => class_exists('Helper_Core_Web') ? Helper_Core_Web::google_maps_embed_url() : '',
+            'captcha_html' => class_exists('Helper_Core_Web') ? Helper_Core_Web::render_captcha() : '',
         );
 
         if (!empty($data['slider'])) {
@@ -231,6 +236,86 @@ class Controller_Frontend extends Controller_Template
 
         # SE CARGA LA VISTA PRINCIPAL DE PAGINA
         $this->template->set('content', View::forge('frontend/page', $data, false), false);
+        if ($page->slug === 'contacto') {
+            $this->template->set('frontend_extra_scripts', class_exists('Helper_Core_Web') ? Helper_Core_Web::captcha_script() : '', false);
+        }
+    }
+
+    /**
+     * CONTACT SUBMIT
+     *
+     * RECIBE FORMULARIO PUBLICO DE CONTACTO Y CREA NOTIFICACION INTERNA.
+     *
+     * @access  public
+     * @return  void
+     */
+    public function post_contact_submit()
+    {
+        # SE VALIDA CAPTCHA SI ESTA CONFIGURADO
+        try {
+            if (class_exists('Helper_Core_Web') && !Helper_Core_Web::verify_captcha((string) \Input::post('g-recaptcha-response', ''))) {
+                throw new \InvalidArgumentException('No se pudo validar el captcha. Intenta nuevamente.');
+            }
+
+            # SE VALIDA PAYLOAD PUBLICO
+            $name = trim((string) \Input::post('name', ''));
+            $email = strtolower(trim((string) \Input::post('email', '')));
+            $phone = trim((string) \Input::post('phone', ''));
+            $message = trim((string) \Input::post('message', ''));
+
+            if ($name === '' || $email === '' || $message === '') {
+                throw new \InvalidArgumentException('Nombre, correo y mensaje son obligatorios.');
+            }
+
+            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                throw new \InvalidArgumentException('Captura un correo valido.');
+            }
+
+            # SE CREA NOTIFICACION PARA ADMINISTRADORES
+            $recipients = $this->contact_notification_recipients();
+            if (!empty($recipients) && class_exists('Helper_Core_Notification')) {
+                Helper_Core_Notification::create([
+                    'event_code' => 'contact.web.message',
+                    'notification_type' => 'contact',
+                    'title' => 'Nuevo mensaje de contacto',
+                    'message' => $name.' escribio desde el frontend.',
+                    'url' => 'admin/communications',
+                    'icon' => 'bi bi-envelope',
+                    'priority' => 2,
+                    'payload' => [
+                        'name' => $name,
+                        'email' => $email,
+                        'phone' => $phone,
+                        'message' => $message,
+                        'ip' => \Input::real_ip(),
+                    ],
+                    'created_by' => 0,
+                ], $recipients);
+            }
+
+            \Session::set_flash('contact_success', 'Recibimos tu mensaje. Te contactaremos pronto.');
+        } catch (\InvalidArgumentException $e) {
+            \Session::set_flash('contact_error', $e->getMessage());
+        } catch (\Exception $e) {
+            \Log::error('Error procesando contacto frontend: '.$e->getMessage());
+            \Session::set_flash('contact_error', 'No se pudo enviar el mensaje. Intenta nuevamente.');
+        }
+
+        \Response::redirect('contacto');
+    }
+
+    /**
+     * CONTACT SUBMIT
+     *
+     * SOPORTE DE RUTA SIN PREFIJO POST.
+     *
+     * @access  public
+     * @return  void
+     */
+    public function action_contact_submit()
+    {
+        # SE DELEGA AL FLUJO POST
+        return $this->post_contact_submit();
     }
 
     /**
@@ -472,6 +557,32 @@ class Controller_Frontend extends Controller_Template
             ->limit(12)
             ->execute()
             ->as_array();
+    }
+
+    /**
+     * CONTACT NOTIFICATION RECIPIENTS
+     *
+     * OBTIENE USUARIOS ADMINISTRATIVOS PARA MENSAJES PUBLICOS DE CONTACTO.
+     *
+     * @access  protected
+     * @return  Array
+     */
+    protected function contact_notification_recipients()
+    {
+        # SE ENVIA A ADMINISTRADORES GENERALES Y CONFIGURACION/COMUNICACIONES
+        if (!\DBUtil::table_exists('users')) {
+            return [];
+        }
+
+        $rows = \DB::select('id')
+            ->from('users')
+            ->where('group_id', 'in', [100, 90, 50])
+            ->execute()
+            ->as_array();
+
+        return array_map(function ($row) {
+            return (int) $row['id'];
+        }, $rows);
     }
 
     /**

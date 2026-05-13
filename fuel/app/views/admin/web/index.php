@@ -170,6 +170,7 @@
                                     <option value="tag_manager">Tag manager</option>
                                     <option value="pixel">Pixel</option>
                                     <option value="captcha">Captcha</option>
+                                    <option value="map">Mapa</option>
                                     <option value="script">Script</option>
                                 </select>
                             </div>

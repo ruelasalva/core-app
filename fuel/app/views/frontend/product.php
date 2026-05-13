@@ -11,6 +11,8 @@ $media_url = function ($path) {
     return Uri::base(false).ltrim($path, '/');
 };
 
+$no_image_svg = 'data:image/svg+xml;charset=UTF-8,'.rawurlencode('<svg xmlns="http://www.w3.org/2000/svg" width="720" height="720" viewBox="0 0 720 720"><rect width="720" height="720" fill="#eef3f7"/><path d="M150 486h420L448 322l-96 120-68-88-134 132z" fill="#cbd5e1"/><circle cx="254" cy="250" r="46" fill="#cbd5e1"/><text x="360" y="604" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="42" fill="#64748b">Sin imagen</text></svg>');
+
 $category_url = function ($slug) {
     return Uri::create('categoria/'.$slug);
 };
@@ -162,9 +164,7 @@ $tag_url = function ($slug) {
 <section class="product-shell product-detail">
     <div>
         <div class="product-media">
-            <?php if (!empty($product['main_image_path'])): ?>
-            <img src="<?php echo e($media_url($product['main_image_path'])); ?>" alt="<?php echo e($product['name']); ?>">
-            <?php endif; ?>
+            <img src="<?php echo e(!empty($product['main_image_path']) ? $media_url($product['main_image_path']) : $no_image_svg); ?>" alt="<?php echo e($product['name']); ?>">
         </div>
         <?php if (!empty($images)): ?>
         <div class="product-thumbs">
@@ -199,7 +199,6 @@ $tag_url = function ($slug) {
             <?php echo e($product['currency_code']); ?> <?php echo number_format((float) $product['price'], 2); ?>
         </div>
         <?php echo Form::open(['action' => 'carrito/agregar', 'method' => 'post', 'class' => 'product-cart-form', 'data-cart-ajax' => '1']); ?>
-            <?php echo Form::csrf(); ?>
             <?php echo Form::hidden('product_id', (int) $product['id']); ?>
             <?php echo Form::input('quantity', 1, ['type' => 'number', 'min' => '1', 'step' => '1']); ?>
             <button type="submit">Agregar al carrito</button>
