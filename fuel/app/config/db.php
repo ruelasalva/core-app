@@ -21,5 +21,17 @@
  */
 
 return array(
+	'active' => 'default',
 
+	'default' => array(
+		'type'        => 'pdo',
+		'connection'  => array(
+			'persistent' => false,
+		),
+		'identifier'   => '`',
+		'table_prefix' => '',
+		'charset'      => 'utf8mb4',
+		'caching'      => false,
+		'profiling'    => false,
+	),
 );

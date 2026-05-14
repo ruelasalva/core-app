@@ -56,7 +56,7 @@ return array(
 
 	// 'index_file' => false,
 
-	// 'profiling' => false,
+	'profiling' => false,
 
 	/**
 	 * -------------------------------------------------------------------------
@@ -142,19 +142,19 @@ return array(
 	 *  The default language.
 	 */
 
-	// 'language' => 'en',
+	'language' => 'es',
 
 	/**
 	 *  Fallback language when file isn't available for default language.
 	 */
 
-	// 'language_fallback' => 'en',
+	'language_fallback' => 'en',
 
 	/**
 	 *  PHP set_locale() setting. Use null to not set.
 	 */
 
-	 'locale' => null,
+	'locale' => null,
 
 	/**
 	 * -------------------------------------------------------------------------
@@ -162,7 +162,7 @@ return array(
 	 * -------------------------------------------------------------------------
 	 */
 
-	// 'encoding' => 'UTF-8',
+	'encoding' => 'UTF-8',
 
 	/**
 	 * -------------------------------------------------------------------------
@@ -174,13 +174,13 @@ return array(
 	 *  The server offset in seconds from GMT timestamp when time() is used.
 	 */
 
-	// 'server_gmt_offset' => 0,
+	'server_gmt_offset' => -6,
 
 	/**
 	 *  Change the server's default timezone. This is optional.
 	 */
 
-	// 'default_timezone' => null,
+	'default_timezone' => 'America/Mexico_City',
 
 	/**
 	 * -------------------------------------------------------------------------
@@ -198,9 +198,9 @@ return array(
 	 *
 	 */
 
-	// 'log_threshold'   => Fuel::L_WARNING,
-	// 'log_path'        => APPPATH.'logs/',
-	// 'log_date_format' => 'Y-m-d H:i:s',
+	'log_threshold'   => Fuel::$env === Fuel::PRODUCTION ? Fuel::L_WARNING : Fuel::L_ALL,
+	'log_path'        => APPPATH.'logs/',
+	'log_date_format' => 'Y-m-d H:i:s',
 
 	/**
 	 * -------------------------------------------------------------------------
@@ -317,14 +317,14 @@ return array(
 	 * -------------------------------------------------------------------------
 	 */
 
-	// 'cookie' => array(
+	'cookie' => array(
 		/**
 		 * ---------------------------------------------------------------------
 		 *  Number of seconds before the cookie expires
 		 * ---------------------------------------------------------------------
 		 */
 
-		// 'expiration' => 0,
+		'expiration' => 0,
 
 		/**
 		 * ---------------------------------------------------------------------
@@ -332,7 +332,7 @@ return array(
 		 * ---------------------------------------------------------------------
 		 */
 
-		// 'path' => '/',
+		'path' => '/',
 
 		/**
 		 * ---------------------------------------------------------------------
@@ -340,7 +340,7 @@ return array(
 		 * ---------------------------------------------------------------------
 		 */
 
-		// 'domain' => null,
+		'domain' => null,
 
 		/**
 		 * ---------------------------------------------------------------------
@@ -348,7 +348,7 @@ return array(
 		 * ---------------------------------------------------------------------
 		 */
 
-		// 'secure' => false,
+		'secure' => Fuel::$env === Fuel::PRODUCTION,
 
 		/**
 		 * ---------------------------------------------------------------------
@@ -356,8 +356,9 @@ return array(
 		 * ---------------------------------------------------------------------
 		 */
 
-		// 'http_only' => false,
-	// ),
+		'http_only' => true,
+		'same_site' => 'Lax',
+	),
 
 	/**
 	 * -------------------------------------------------------------------------
