@@ -51,6 +51,11 @@
             </div>
             <button type="submit" class="btn btn-primary w-100 py-2">Ingresar</button>
         <?php echo Form::close(); ?>
+        <?php if ($portal->code === 'proveedores'): ?>
+            <div class="text-center mt-3">
+                <a href="<?php echo Uri::create('proveedores/registro'); ?>">Solicitar alta como proveedor</a>
+            </div>
+        <?php endif; ?>
     </div>
 </div>
 <?php echo Asset::js('bootstrap.bundle.min.js'); ?>

@@ -4,6 +4,126 @@ class Controller_Proveedores extends Controller_Portalbase
 {
     protected $portal_code = 'proveedores';
 
+    public function before()
+    {
+        $action = \Request::active() ? \Request::active()->action : '';
+        if (in_array($action, ['registro', 'registro_submit'], true)) {
+            $this->auto_render = false;
+            return;
+        }
+        parent::before();
+    }
+
+    public function action_registro()
+    {
+        return \Response::forge(View::forge('portal/supplier_register', [
+            'action' => Uri::create('proveedores/registro_submit'),
+            'error' => '',
+            'success' => '',
+            'values' => [],
+        ]));
+    }
+
+    public function post_registro_submit()
+    {
+        return $this->action_registro_submit();
+    }
+
+    public function action_registro_submit()
+    {
+        $values = [
+            'name' => trim((string) \Input::post('name', '')),
+            'legal_name' => trim((string) \Input::post('legal_name', '')),
+            'rfc' => strtoupper(trim((string) \Input::post('rfc', ''))),
+            'email' => trim((string) \Input::post('email', '')),
+            'phone' => trim((string) \Input::post('phone', '')),
+            'sat_tax_regime_code' => trim((string) \Input::post('sat_tax_regime_code', '')),
+            'business_line' => trim((string) \Input::post('business_line', '')),
+            'notes' => trim((string) \Input::post('notes', '')),
+        ];
+
+        try {
+            if ($values['name'] === '' || $values['legal_name'] === '' || $values['rfc'] === '' || $values['email'] === '') {
+                throw new \RuntimeException('Nombre, razon social, RFC y correo son obligatorios.');
+            }
+            if (!filter_var($values['email'], FILTER_VALIDATE_EMAIL)) {
+                throw new \RuntimeException('Captura un correo valido.');
+            }
+            if (\DB::select('id')->from('core_parties')->where('rfc', '=', $values['rfc'])->execute()->current()) {
+                throw new \RuntimeException('Ya existe un socio comercial con ese RFC.');
+            }
+            if (!\DBUtil::field_exists('core_parties', ['onboarding_status'])) {
+                throw new \RuntimeException('El alta de proveedores requiere ejecutar migraciones.');
+            }
+
+            $party = Model_Core_Party::forge([
+                'party_type' => 'supplier',
+                'code' => $this->codeify($values['rfc']),
+                'name' => $values['name'],
+                'legal_name' => $values['legal_name'],
+                'rfc' => $values['rfc'],
+                'email' => $values['email'],
+                'phone' => $values['phone'],
+                'department_id' => 0,
+                'sales_user_id' => 0,
+                'buyer_user_id' => 0,
+                'price_list_id' => 0,
+                'payment_term_id' => 0,
+                'sat_cfdi_use_code' => 'G03',
+                'sat_tax_regime_code' => $values['sat_tax_regime_code'] ?: '601',
+                'fiscal_operation_type_id' => 0,
+                'shipping_method_id' => 0,
+                'credit_limit' => 0,
+                'credit_days' => 0,
+                'notes' => 'Solicitud portal proveedor. Giro: '.$values['business_line']."\n".$values['notes'],
+                'onboarding_status' => 'pending',
+                'onboarding_notes' => 'Solicitud recibida desde portal proveedores.',
+                'reviewed_by' => 0,
+                'reviewed_at' => 0,
+                'active' => 0,
+            ]);
+            $party->save();
+
+            Helper_Core_Audit::log([
+                'module' => 'parties',
+                'action' => 'supplier_portal_request',
+                'business_event' => 'parties.supplier_portal_request',
+                'entity_type' => 'party',
+                'entity_id' => (int) $party->id,
+                'table_name' => 'core_parties',
+                'portal_code' => $this->portal_code,
+                'backend' => 'portal',
+                'summary' => 'Solicitud de proveedor '.$party->name,
+                'new_values' => $party->to_array(),
+            ]);
+
+            Helper_Core_Notification::create([
+                'event_code' => 'parties.supplier_portal_request',
+                'notification_type' => 'parties',
+                'title' => 'Nueva solicitud de proveedor',
+                'message' => $party->name.' solicito alta como proveedor.',
+                'url' => \Uri::create('admin/parties'),
+                'icon' => 'bi bi-building-add',
+                'priority' => 2,
+                'created_by' => 0,
+            ], $this->admin_user_ids());
+
+            return \Response::forge(View::forge('portal/supplier_register', [
+                'action' => Uri::create('proveedores/registro_submit'),
+                'error' => '',
+                'success' => 'Solicitud recibida. Nuestro equipo revisara tu informacion y activara el portal cuando sea aprobada.',
+                'values' => [],
+            ]));
+        } catch (\Exception $e) {
+            return \Response::forge(View::forge('portal/supplier_register', [
+                'action' => Uri::create('proveedores/registro_submit'),
+                'error' => $e->getMessage(),
+                'success' => '',
+                'values' => $values,
+            ]), 400);
+        }
+    }
+
     /**
      * INDEX
      *
@@ -456,5 +576,14 @@ class Controller_Proveedores extends Controller_Portalbase
         $base = $prefix.'-'.date('Ymd').'-';
         $row = \DB::select(\DB::expr('COUNT(*) as total'))->from($table)->where('folio', 'like', $base.'%')->execute()->current();
         return $base.str_pad(((int) $row['total']) + 1, 5, '0', STR_PAD_LEFT);
+    }
+
+    protected function admin_user_ids()
+    {
+        $ids = [];
+        foreach (\DB::select('id')->from('users')->where('group_id', '>=', 70)->execute() as $row) {
+            $ids[] = (int) $row['id'];
+        }
+        return $ids;
     }
 }

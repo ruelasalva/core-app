@@ -2005,6 +2005,18 @@ class Configsetup
             'updated_at' => time(),
         ]);
 
+        $this->upsert_seed('core_knowledge_articles', 'code', 'alta_proveedores_portal', [
+            'code' => 'alta_proveedores_portal',
+            'title' => 'Alta y validacion de proveedores',
+            'category' => 'Compras',
+            'summary' => 'Flujo para que un proveedor solicite alta desde su portal y Administracion apruebe o rechace antes de operar compras.',
+            'content' => '<h3>Objetivo</h3><p>Permitir que un proveedor solicite alta sin darle acceso operativo inmediato. La solicitud crea un socio comercial proveedor inactivo y queda pendiente de validacion por Administracion.</p><h4>Flujo</h4><ol><li>El proveedor entra a <code>/proveedores/registro</code> y captura razon social, RFC, regimen, giro, correo y telefono.</li><li>Core-App crea el registro en <strong>Socios comerciales &gt; Proveedores</strong> con <code>onboarding_status = pending</code> y <code>active = 0</code>.</li><li>Administracion revisa datos fiscales, documentos y notas internas.</li><li>Si procede, usa <strong>Aprobar</strong>; el proveedor queda activo para compras y portal.</li><li>Si no procede, usa <strong>Rechazar</strong>; la solicitud queda trazada con notas.</li><li>El acceso real al portal se entrega despues desde <strong>Portales</strong>, vinculando usuario y proveedor aprobado.</li></ol><h4>Reglas</h4><ul><li>No se debe crear acceso automatico al portal solo por llenar el formulario.</li><li>El RFC no debe duplicarse en socios comerciales.</li><li>Las altas pendientes deben revisarse desde Proveedores, no desde tablas sueltas.</li><li>La aprobacion o rechazo debe quedar en auditoria y con usuario responsable.</li><li>La validacion fiscal SAT y documentos soporte deben agregarse antes de liberar operaciones sensibles.</li></ul>',
+            'sort_order' => 57,
+            'active' => 1,
+            'created_at' => time(),
+            'updated_at' => time(),
+        ]);
+
         $this->upsert_seed('core_knowledge_articles', 'code', 'integraciones_pasarelas_seguras', [
             'code' => 'integraciones_pasarelas_seguras',
             'title' => 'Integraciones, pasarelas y proveedores externos',

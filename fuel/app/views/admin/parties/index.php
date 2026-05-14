@@ -14,8 +14,8 @@
         </div>
         <div class="col-lg-3">
             <div class="small-box bg-warning">
-                <div class="inner"><h3>{{ stats.addresses || 0 }}</h3><p>Direcciones</p></div>
-                <div class="icon"><i class="bi bi-geo-alt"></i></div>
+                <div class="inner"><h3>{{ stats.supplier_requests || 0 }}</h3><p>Solicitudes proveedor</p></div>
+                <div class="icon"><i class="bi bi-clipboard-check"></i></div>
             </div>
         </div>
         <div class="col-lg-3">
@@ -62,6 +62,12 @@
                         </td>
                         <td class="text-center">
                             <button class="btn btn-xs btn-warning" @click="editItem(item)"><i class="fas fa-edit"></i></button>
+                            <button v-if="currentSection === 'suppliers' && item.onboarding_status === 'pending'" class="btn btn-xs btn-success" @click="reviewSupplier(item, 'approve_supplier')">
+                                Aprobar
+                            </button>
+                            <button v-if="currentSection === 'suppliers' && item.onboarding_status === 'pending'" class="btn btn-xs btn-danger" @click="reviewSupplier(item, 'reject_supplier')">
+                                Rechazar
+                            </button>
                         </td>
                     </tr>
                     <tr v-if="currentItems.length === 0">
@@ -181,6 +187,21 @@ window.onload = function() {
                     this.options = data.options || {};
                     this.stats = data.stats || {};
                     this.hideModal('modal-party-item');
+                });
+            },
+            reviewSupplier(item, action) {
+                const label = action === 'approve_supplier' ? 'aprobar' : 'rechazar';
+                const notes = prompt('Notas para ' + label + ' proveedor', item.onboarding_notes || '');
+                if (notes === null) return;
+                fetch('<?php echo Uri::create('admin/parties'); ?>/' + action, {
+                    ...window.coreAppFetchOptions({ id: item.id, notes: notes })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.error) { alert(data.error); return; }
+                    this.items = data.items || {};
+                    this.options = data.options || {};
+                    this.stats = data.stats || {};
                 });
             },
             inputType(field) {

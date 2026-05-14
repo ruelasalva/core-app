@@ -63,6 +63,8 @@ return array(
     'socios/helpdesk_upload' => 'socios/helpdesk_upload',
     'proveedores/login' => 'portal/auth/login/proveedores',
     'proveedores/logout' => 'portal/auth/logout/proveedores',
+    'proveedores/registro' => 'proveedores/registro',
+    'proveedores/registro_submit' => 'proveedores/registro_submit',
     'proveedores/helpdesk' => 'proveedores/helpdesk',
     'proveedores/helpdesk_data' => 'proveedores/helpdesk_data',
     'proveedores/helpdesk_create' => 'proveedores/helpdesk_create',

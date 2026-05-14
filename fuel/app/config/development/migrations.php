@@ -35,6 +35,7 @@ return array (
         29 => '030_extend_core_sat_cfdi_audit_tables',
         30 => '031_add_cfdi_party_scope_controls',
         31 => '032_enhance_sat_credentials_cert_files',
+        32 => '033_add_supplier_onboarding_fields',
       ),
     ),
     'module' => array(    

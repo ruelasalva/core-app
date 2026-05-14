@@ -68,6 +68,16 @@ class Controller_Admin_Parties extends Controller_Adminbase
         }
     }
 
+    public function action_approve_supplier()
+    {
+        return $this->review_supplier('approved');
+    }
+
+    public function action_reject_supplier()
+    {
+        return $this->review_supplier('rejected');
+    }
+
     /**
      * SAVE
      *
@@ -268,6 +278,12 @@ class Controller_Admin_Parties extends Controller_Adminbase
             ['name' => 'credit_limit', 'label' => 'Limite credito', 'type' => 'number', 'default' => 0],
             ['name' => 'credit_days', 'label' => 'Dias credito', 'type' => 'integer', 'default' => 0],
             ['name' => 'notes', 'label' => 'Notas', 'type' => 'textarea', 'default' => ''],
+            ['name' => 'onboarding_status', 'label' => 'Validacion proveedor', 'type' => 'select_static', 'options' => [
+                ['value' => 'approved', 'label' => 'Aprobado'],
+                ['value' => 'pending', 'label' => 'Pendiente'],
+                ['value' => 'rejected', 'label' => 'Rechazado'],
+            ], 'default' => 'approved'],
+            ['name' => 'onboarding_notes', 'label' => 'Notas de validacion', 'type' => 'textarea', 'default' => ''],
             ['name' => 'active', 'label' => 'Activo', 'type' => 'checkbox', 'default' => 1],
         ];
     }
@@ -340,9 +356,56 @@ class Controller_Admin_Parties extends Controller_Adminbase
         return [
             'customers' => (int) \DB::select()->from('core_parties')->where('party_type', 'in', ['customer', 'both'])->execute()->count(),
             'suppliers' => (int) \DB::select()->from('core_parties')->where('party_type', 'in', ['supplier', 'both'])->execute()->count(),
+            'supplier_requests' => $this->field_exists('core_parties', 'onboarding_status') ? (int) \DB::select()->from('core_parties')->where('party_type', 'in', ['supplier', 'both'])->where('onboarding_status', '=', 'pending')->execute()->count() : 0,
             'addresses' => (int) \DB::count_records('core_party_addresses'),
             'contacts' => (int) \DB::count_records('core_party_contacts'),
         ];
+    }
+
+    protected function review_supplier($status)
+    {
+        $this->require_access('parties.access[edit]');
+        $val = (array) \Input::json();
+
+        try {
+            $this->assert_schema_ready();
+            if (!$this->field_exists('core_parties', 'onboarding_status')) {
+                return $this->json_response(['error' => 'Ejecuta migraciones de proveedores.'], 422);
+            }
+
+            $party = Model_Core_Party::find((int) \Arr::get($val, 'id', 0));
+            if (!$party || !in_array($party->party_type, ['supplier', 'both'], true)) {
+                return $this->json_response(['error' => 'Proveedor no encontrado.'], 404);
+            }
+
+            $party->onboarding_status = $status;
+            $party->onboarding_notes = trim((string) \Arr::get($val, 'notes', $party->onboarding_notes));
+            $party->reviewed_by = (int) $this->user_id;
+            $party->reviewed_at = time();
+            $party->active = $status === 'approved' ? 1 : 0;
+            $party->save();
+
+            Helper_Core_Audit::log([
+                'module' => 'parties',
+                'action' => 'supplier_'.$status,
+                'business_event' => 'parties.supplier_'.$status,
+                'entity_type' => 'party',
+                'entity_id' => (int) $party->id,
+                'table_name' => 'core_parties',
+                'summary' => 'Proveedor '.$party->name.' '.$status,
+                'new_values' => $party->to_array(),
+            ]);
+
+            return $this->json_response([
+                'status' => 'ok',
+                'items' => $this->get_all_items(),
+                'options' => $this->get_options(),
+                'stats' => $this->get_stats(),
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error validando proveedor: '.$e->getMessage());
+            return $this->json_response(['error' => 'No se pudo validar proveedor.'], 400);
+        }
     }
 
     /**
@@ -383,6 +446,11 @@ class Controller_Admin_Parties extends Controller_Adminbase
             $options[] = ['value' => (string) $row['id'], 'label' => $label];
         }
         return $options;
+    }
+
+    protected function field_exists($table, $field)
+    {
+        return \DBUtil::field_exists($table, [$field]);
     }
 
     /**
