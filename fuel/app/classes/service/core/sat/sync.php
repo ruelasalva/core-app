@@ -228,7 +228,7 @@ class Service_Core_Sat_Sync
     public function download_packages($limit = 5, array $package_ids = [], array $request_ids = [])
     {
         $query = Model_Core_Sat_Package::query()
-            ->where('status', 'in', ['ready', 'download_error'])
+            ->where('status', 'in', ['ready', 'download_error', 'download_limited'])
             ->order_by('id', 'asc');
         if (!empty($package_ids)) {
             $query->where('id', 'in', $this->clean_ids($package_ids));
@@ -245,6 +245,22 @@ class Service_Core_Sat_Sync
                 $request = Model_Core_Sat_Sync_Request::find((int) $package->sync_request_id);
                 if (!$request) {
                     throw new \RuntimeException('Solicitud SAT no encontrada para paquete '.$package->package_id.'.');
+                }
+
+                $local_path = $this->local_package_path($request, $package);
+                if ($local_path !== '') {
+                    $package->path = $package->path ?: $this->package_relative_path($request, $package);
+                    $package->status = 'downloaded';
+                    $package->xml_count = $this->process_package($package, $local_path);
+                    $package->status = 'processed';
+                    $package->save();
+
+                    $this->refresh_request_counts($request);
+                    $result['processed'] += (int) $package->xml_count;
+                    continue;
+                }
+                if ($package->status === 'download_limited') {
+                    throw new \RuntimeException('El SAT ya marco limite de descargas para el paquete '.$package->package_id.' y no hay ZIP local para reprocesar.');
                 }
 
                 $config = Model_Core_Sat_Config::get_current();
@@ -270,6 +286,7 @@ class Service_Core_Sat_Sync
                 $package->path = $relative_path;
                 $package->sha256_hash = hash('sha256', $zip_content);
                 $package->status = 'downloaded';
+                $package->save();
                 $package->xml_count = $this->process_package($package, $absolute_path);
                 $package->status = 'processed';
                 $package->save();
@@ -278,7 +295,7 @@ class Service_Core_Sat_Sync
                 $result['downloaded']++;
                 $result['processed'] += (int) $package->xml_count;
             } catch (\Exception $e) {
-                $package->status = 'download_error';
+                $package->status = $package->status === 'download_limited' || strpos($e->getMessage(), '5008') !== false ? 'download_limited' : 'download_error';
                 $package->save();
                 $result['errors'][] = $e->getMessage();
             }
@@ -555,6 +572,8 @@ class Service_Core_Sat_Sync
                 'purchase_status' => $direction === 'received' ? ((int) ($emitter_party['id'] ?? 0) > 0 ? 'candidate' : 'unmatched') : (string) $cfdi->purchase_status,
                 'portal_visible_customer' => $direction === 'issued' && $receiver_party ? 1 : (int) $cfdi->portal_visible_customer,
                 'portal_visible_supplier' => $direction === 'received' && $emitter_party ? 1 : (int) $cfdi->portal_visible_supplier,
+                'reviewed_by' => (int) $cfdi->reviewed_by,
+                'reviewed_at' => (int) $cfdi->reviewed_at,
             ]);
             $cfdi->save();
             $count++;
@@ -579,6 +598,24 @@ class Service_Core_Sat_Sync
     {
         $safe_package = preg_replace('/[^A-Za-z0-9_-]/', '_', (string) $package->package_id);
         return 'fuel/app/storage/sat/packages/'.date('Y/m').'/'.$request->download_type.'_'.$request->direction.'_'.$safe_package.'.zip';
+    }
+
+    protected function local_package_path(Model_Core_Sat_Sync_Request $request, Model_Core_Sat_Package $package)
+    {
+        $candidates = [];
+        if ((string) $package->path !== '') {
+            $candidates[] = (string) $package->path;
+        }
+        $candidates[] = $this->package_relative_path($request, $package);
+
+        foreach ($candidates as $candidate) {
+            $absolute = $this->absolute_storage_path($candidate);
+            if ($absolute !== '' && is_file($absolute)) {
+                return $absolute;
+            }
+        }
+
+        return '';
     }
 
     protected function absolute_storage_path($path)

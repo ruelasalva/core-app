@@ -120,6 +120,8 @@ class Service_Core_Sat_Cfdi_Importer
             'purchase_status' => $direction === 'received' ? ($supplier_party_id > 0 ? 'candidate' : 'unmatched') : '',
             'portal_visible_customer' => $customer_party_id > 0 ? 1 : 0,
             'portal_visible_supplier' => $supplier_party_id > 0 ? 1 : 0,
+            'reviewed_by' => (int) \Arr::get($data, 'reviewed_by', 0),
+            'reviewed_at' => (int) \Arr::get($data, 'reviewed_at', 0),
             'missing_xml' => 0,
         ]);
         $cfdi->save();
