@@ -65,14 +65,17 @@ class Service_Core_Sat_Sync
      * @access  public
      * @return  Array
      */
-    public function submit_pending($limit = 5)
+    public function submit_pending($limit = 5, array $request_ids = [])
     {
         # SE CONSULTAN SOLICITUDES PENDIENTES
-        $requests = Model_Core_Sat_Sync_Request::query()
-            ->where('status', '=', 'pending')
-            ->order_by('id', 'asc')
-            ->limit((int) $limit)
-            ->get();
+        $query = Model_Core_Sat_Sync_Request::query()->order_by('id', 'asc');
+        if (!empty($request_ids)) {
+            $query->where('id', 'in', $this->clean_ids($request_ids));
+            $query->where('status', 'in', ['pending', 'blocked']);
+        } else {
+            $query->where('status', '=', 'pending')->limit((int) $limit);
+        }
+        $requests = $query->get();
 
         # SE PROCESAN SOLICITUDES
         $result = ['processed' => 0, 'blocked' => 0, 'errors' => []];
@@ -125,14 +128,18 @@ class Service_Core_Sat_Sync
      * @access  public
      * @return  Array
      */
-    public function verify_requests($limit = 10)
+    public function verify_requests($limit = 10, array $request_ids = [])
     {
         # SE CONSULTAN SOLICITUDES ENVIADAS
-        $requests = Model_Core_Sat_Sync_Request::query()
-            ->where('status', 'in', ['requested', 'accepted', 'processing'])
-            ->order_by('id', 'asc')
-            ->limit((int) $limit)
-            ->get();
+        $query = Model_Core_Sat_Sync_Request::query()
+            ->where('status', 'in', ['requested', 'accepted', 'processing', 'ready_to_download'])
+            ->order_by('id', 'asc');
+        if (!empty($request_ids)) {
+            $query->where('id', 'in', $this->clean_ids($request_ids));
+        } else {
+            $query->limit((int) $limit);
+        }
+        $requests = $query->get();
 
         # SE PROCESAN SOLICITUDES
         $result = ['processed' => 0, 'completed' => 0, 'packages' => 0, 'errors' => []];
@@ -204,13 +211,19 @@ class Service_Core_Sat_Sync
      * @access  public
      * @return  Array
      */
-    public function download_packages($limit = 5)
+    public function download_packages($limit = 5, array $package_ids = [], array $request_ids = [])
     {
-        $packages = Model_Core_Sat_Package::query()
+        $query = Model_Core_Sat_Package::query()
             ->where('status', 'in', ['ready', 'download_error'])
-            ->order_by('id', 'asc')
-            ->limit((int) $limit)
-            ->get();
+            ->order_by('id', 'asc');
+        if (!empty($package_ids)) {
+            $query->where('id', 'in', $this->clean_ids($package_ids));
+        } elseif (!empty($request_ids)) {
+            $query->where('sync_request_id', 'in', $this->clean_ids($request_ids));
+        } else {
+            $query->limit((int) $limit);
+        }
+        $packages = $query->get();
 
         $result = ['downloaded' => 0, 'processed' => 0, 'errors' => []];
         foreach ($packages as $package) {
@@ -375,7 +388,12 @@ class Service_Core_Sat_Sync
             ? \PhpCfdi\SatWsDescargaMasiva\Shared\RequestType::xml()
             : \PhpCfdi\SatWsDescargaMasiva\Shared\RequestType::metadata();
 
-        return \PhpCfdi\SatWsDescargaMasiva\Services\Query\QueryParameters::create($period, $download_type, $request_type);
+        $parameters = \PhpCfdi\SatWsDescargaMasiva\Services\Query\QueryParameters::create($period, $download_type, $request_type);
+        if ($request->download_type === 'xml') {
+            $parameters = $parameters->withDocumentStatus(\PhpCfdi\SatWsDescargaMasiva\Shared\DocumentStatus::active());
+        }
+
+        return $parameters;
     }
 
     protected function package_exists($package_id)
@@ -435,11 +453,14 @@ class Service_Core_Sat_Sync
                 'emitter_rfc' => strtoupper((string) $item->rfcEmisor),
                 'emitter_party_id' => $emitter_party ? (int) $emitter_party['id'] : 0,
                 'emitter_name' => (string) $item->nombreEmisor,
+                'emitter_regime' => (string) $cfdi->emitter_regime,
                 'receiver_rfc' => strtoupper((string) $item->rfcReceptor),
                 'receiver_party_id' => $receiver_party ? (int) $receiver_party['id'] : 0,
                 'customer_party_id' => $direction === 'issued' && $receiver_party ? (int) $receiver_party['id'] : 0,
                 'supplier_party_id' => $direction === 'received' && $emitter_party ? (int) $emitter_party['id'] : 0,
                 'receiver_name' => (string) $item->nombreReceptor,
+                'receiver_regime' => (string) $cfdi->receiver_regime,
+                'receiver_zip' => (string) $cfdi->receiver_zip,
                 'issued_at' => $this->datetime((string) $item->fechaEmision),
                 'stamped_at' => $this->nullable_datetime((string) $item->fechaCertificacionSat),
                 'total' => (float) $item->monto,
@@ -449,7 +470,17 @@ class Service_Core_Sat_Sync
                 'tax_withheld_total' => (float) $cfdi->tax_withheld_total,
                 'currency' => (string) ($cfdi->currency ?: 'MXN'),
                 'voucher_type' => (string) $item->efectoComprobante,
+                'export_code' => (string) $cfdi->export_code,
+                'place_of_issue' => (string) $cfdi->place_of_issue,
+                'payment_method' => (string) $cfdi->payment_method,
+                'payment_form' => (string) $cfdi->payment_form,
+                'conditions_payment' => (string) $cfdi->conditions_payment,
+                'certificate_number' => (string) $cfdi->certificate_number,
+                'certificate_sat_number' => (string) $cfdi->certificate_sat_number,
                 'pac_rfc' => (string) $item->rfcPac,
+                'seal_cfdi' => (string) $cfdi->seal_cfdi,
+                'seal_sat' => (string) $cfdi->seal_sat,
+                'cfdi_use' => (string) $cfdi->cfdi_use,
                 'sat_status' => $sat_status,
                 'sat_status_code' => '',
                 'sat_status_message' => (string) $item->estatus,
@@ -457,6 +488,9 @@ class Service_Core_Sat_Sync
                 'last_validated_at' => time(),
                 'metadata_seen_at' => time(),
                 'missing_xml' => (string) $cfdi->xml_path === '' ? 1 : 0,
+                'complements_json' => $cfdi->complements_json ?: null,
+                'has_payment_complement' => (int) $cfdi->has_payment_complement,
+                'has_waybill' => (int) $cfdi->has_waybill,
                 'origin' => (string) $cfdi->xml_path === '' ? 'metadata' : (string) $cfdi->origin,
                 'processed' => (int) $cfdi->processed,
                 'accounted' => (int) $cfdi->accounted,
@@ -471,6 +505,18 @@ class Service_Core_Sat_Sync
         }
 
         return $count;
+    }
+
+    protected function clean_ids(array $ids)
+    {
+        $clean = [];
+        foreach ($ids as $id) {
+            $id = (int) $id;
+            if ($id > 0) {
+                $clean[] = $id;
+            }
+        }
+        return array_values(array_unique($clean));
     }
 
     protected function package_relative_path(Model_Core_Sat_Sync_Request $request, Model_Core_Sat_Package $package)

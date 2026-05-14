@@ -184,13 +184,13 @@
                         <h5 class="mb-0">Ultimas solicitudes</h5>
                         <div class="btn-group btn-group-sm">
                             <button class="btn btn-outline-primary" @click="runSatOperation('submit_requests')" :disabled="operating">
-                                <i class="bi bi-send"></i> Enviar
+                                <i class="bi bi-send"></i> Enviar seleccionadas
                             </button>
                             <button class="btn btn-outline-info" @click="runSatOperation('verify_requests')" :disabled="operating">
-                                <i class="bi bi-search"></i> Verificar
+                                <i class="bi bi-search"></i> Verificar seleccionadas
                             </button>
                             <button class="btn btn-outline-success" @click="runSatOperation('download_packages')" :disabled="operating">
-                                <i class="bi bi-download"></i> Descargar
+                                <i class="bi bi-download"></i> Descargar seleccionadas
                             </button>
                             <button class="btn btn-primary" @click="newRequest" :disabled="operating">
                                 <i class="bi bi-plus-circle"></i> Nueva solicitud
@@ -204,6 +204,7 @@
                         <thead>
                             <tr>
                                 <th>ID</th>
+                                <th></th>
                                 <th>Tipo</th>
                                 <th>Descarga</th>
                                 <th>Direccion</th>
@@ -220,6 +221,9 @@
                         <tbody>
                             <tr v-for="request in requests" :key="request.id">
                                 <td>{{ request.id }}</td>
+                                <td class="text-center">
+                                    <input type="checkbox" :value="request.id" v-model="selectedRequests">
+                                </td>
                                 <td>{{ request.request_type }}</td>
                                 <td>{{ request.download_type }}</td>
                                 <td>{{ request.direction }}</td>
@@ -236,7 +240,7 @@
                                 <td>{{ request.created_at }}</td>
                             </tr>
                             <tr v-if="requests.length === 0">
-                                <td colspan="12" class="text-muted">Sin solicitudes SAT.</td>
+                                <td colspan="13" class="text-muted">Sin solicitudes SAT.</td>
                             </tr>
                         </tbody>
                     </table>
@@ -246,6 +250,7 @@
                         <thead>
                             <tr>
                                 <th>ID</th>
+                                <th></th>
                                 <th>Solicitud</th>
                                 <th>Paquete SAT</th>
                                 <th>Tipo</th>
@@ -258,6 +263,9 @@
                         <tbody>
                             <tr v-for="packageItem in packages" :key="packageItem.id">
                                 <td>{{ packageItem.id }}</td>
+                                <td class="text-center">
+                                    <input type="checkbox" :value="packageItem.id" v-model="selectedPackages">
+                                </td>
                                 <td>{{ packageItem.sync_request_id }}</td>
                                 <td><code>{{ packageItem.package_id }}</code></td>
                                 <td>{{ packageItem.package_type }}</td>
@@ -267,7 +275,7 @@
                                 <td>{{ packageItem.created_at }}</td>
                             </tr>
                             <tr v-if="packages.length === 0">
-                                <td colspan="8" class="text-muted">Sin paquetes SAT descargados o pendientes.</td>
+                                <td colspan="9" class="text-muted">Sin paquetes SAT descargados o pendientes.</td>
                             </tr>
                         </tbody>
                     </table>
@@ -459,6 +467,7 @@
                     </div>
                     <div class="alert alert-info mb-0">
                         Esta accion registra la solicitud local. Despues usa Enviar, Verificar y Descargar para probar el ciclo completo con SAT.
+                        Para XML el SAT solo permite descarga masiva de vigentes; los cancelados se detectan por metadata/validacion.
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -487,7 +496,9 @@ window.onload = function() {
             requestForm: {},
             operating: false,
             operationMessage: '',
-            operationError: false
+            operationError: false,
+            selectedRequests: [],
+            selectedPackages: []
         },
         mounted() {
             this.loadData();
@@ -627,11 +638,23 @@ window.onload = function() {
                 });
             },
             runSatOperation(action) {
+                if ((action === 'submit_requests' || action === 'verify_requests') && this.selectedRequests.length === 0) {
+                    alert('Selecciona al menos una solicitud SAT.');
+                    return;
+                }
+                if (action === 'download_packages' && this.selectedRequests.length === 0 && this.selectedPackages.length === 0) {
+                    alert('Selecciona al menos una solicitud o paquete SAT.');
+                    return;
+                }
                 this.operating = true;
                 this.operationMessage = 'Procesando operacion SAT...';
                 this.operationError = false;
+                const payload = {
+                    request_ids: this.selectedRequests,
+                    package_ids: this.selectedPackages
+                };
                 fetch('<?php echo Uri::create('admin/sat'); ?>/' + action, {
-                    ...window.coreAppFetchOptions({})
+                    ...window.coreAppFetchOptions(payload)
                 })
                 .then(res => res.json())
                 .then(data => {

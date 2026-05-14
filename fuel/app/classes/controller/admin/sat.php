@@ -448,7 +448,8 @@ class Controller_Admin_Sat extends Controller_Adminbase
 
         try {
             $this->assert_schema_ready();
-            $result = (new Service_Core_Sat_Sync())->submit_pending(5);
+            $payload = (array) \Input::json();
+            $result = (new Service_Core_Sat_Sync())->submit_pending(5, (array) \Arr::get($payload, 'request_ids', []));
             return $this->json_response($this->operation_payload($result));
         } catch (\Exception $e) {
             \Log::error('Error enviando solicitudes SAT: '.$e->getMessage());
@@ -470,7 +471,8 @@ class Controller_Admin_Sat extends Controller_Adminbase
 
         try {
             $this->assert_schema_ready();
-            $result = (new Service_Core_Sat_Sync())->verify_requests(10);
+            $payload = (array) \Input::json();
+            $result = (new Service_Core_Sat_Sync())->verify_requests(10, (array) \Arr::get($payload, 'request_ids', []));
             return $this->json_response($this->operation_payload($result));
         } catch (\Exception $e) {
             \Log::error('Error verificando solicitudes SAT: '.$e->getMessage());
@@ -492,7 +494,12 @@ class Controller_Admin_Sat extends Controller_Adminbase
 
         try {
             $this->assert_schema_ready();
-            $result = (new Service_Core_Sat_Sync())->download_packages(5);
+            $payload = (array) \Input::json();
+            $result = (new Service_Core_Sat_Sync())->download_packages(
+                5,
+                (array) \Arr::get($payload, 'package_ids', []),
+                (array) \Arr::get($payload, 'request_ids', [])
+            );
             return $this->json_response($this->operation_payload($result));
         } catch (\Exception $e) {
             \Log::error('Error descargando paquetes SAT: '.$e->getMessage());
