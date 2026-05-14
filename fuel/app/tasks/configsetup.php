@@ -223,7 +223,7 @@ class Configsetup
             }
         }
 
-        foreach (['core_purchase_orders', 'core_purchase_order_items', 'core_purchase_invoices', 'core_purchase_receipts', 'core_purchase_receipt_items'] as $table) {
+        foreach (['core_purchase_orders', 'core_purchase_order_items', 'core_purchase_invoices', 'core_purchase_receipts', 'core_purchase_receipt_items', 'core_purchase_approval_rules'] as $table) {
             if (!\DBUtil::table_exists($table)) {
                 throw new \Exception('Primero ejecuta: php oil refine migrate');
             }
@@ -1364,6 +1364,7 @@ class Configsetup
     {
         $events = [
             ['purchases.order_saved', 'Orden de compra guardada', 'Se creo o actualizo una orden de compra.', 'Orden {{folio}}', '{{message}}'],
+            ['purchases.order_authorization_requested', 'OC pendiente de autorizacion', 'Una orden de compra requiere autorizacion.', 'OC {{folio}} pendiente', '{{message}}'],
             ['purchases.portal_create_invoice', 'Factura recibida de proveedor', 'Un proveedor registro una factura desde portal.', 'Factura de proveedor {{folio}}', '{{message}}'],
             ['purchases.portal_upload_document', 'Evidencia de proveedor', 'Un proveedor adjunto evidencia o documento.', 'Evidencia de proveedor', '{{message}}'],
             ['purchases.receipt_created', 'Contrarecibo creado', 'Se creo un contrarecibo de proveedor.', 'Contrarecibo {{folio}}', '{{message}}'],
@@ -1383,6 +1384,28 @@ class Configsetup
                 'notify_email' => 0,
                 'email_role' => 'system',
                 'email_template_code' => 'system_notification',
+                'active' => 1,
+                'created_at' => time(),
+                'updated_at' => time(),
+            ]);
+        }
+
+        $rules = [
+            ['Compras menores automaticas', 0, 0, 5000, 0, 70, 1, 0, 10],
+            ['Compras operativas', 0, 5000.01, 50000, 0, 70, 0, 0, 20],
+            ['Compras directivas', 0, 50000.01, 0, 0, 90, 0, 1, 30],
+        ];
+        foreach ($rules as $rule) {
+            $this->insert_if_missing('core_purchase_approval_rules', 'name', $rule[0], [
+                'name' => $rule[0],
+                'department_id' => $rule[1],
+                'min_amount' => $rule[2],
+                'max_amount' => $rule[3],
+                'approver_user_id' => $rule[4],
+                'approver_group_id' => $rule[5],
+                'auto_approve' => $rule[6],
+                'requires_document' => $rule[7],
+                'sort_order' => $rule[8],
                 'active' => 1,
                 'created_at' => time(),
                 'updated_at' => time(),
@@ -2017,6 +2040,18 @@ class Configsetup
             'updated_at' => time(),
         ]);
 
+        $this->upsert_seed('core_knowledge_articles', 'code', 'compras_autorizaciones_relaciones', [
+            'code' => 'compras_autorizaciones_relaciones',
+            'title' => 'Compras: autorizaciones y mapa fiscal',
+            'category' => 'Compras',
+            'summary' => 'Reglas para solicitar, autorizar y relacionar ordenes de compra con CFDI, contrarecibos y pagos.',
+            'content' => '<h3>Objetivo</h3><p>Compras debe controlar quien solicita, quien autoriza y como se liga cada documento operativo con su comprobante fiscal y pago.</p><h4>Estados de OC</h4><ul><li><strong>Borrador</strong>: captura interna, aun no obliga al proveedor.</li><li><strong>Por autorizar</strong>: la OC ya fue solicitada y espera autorizador segun monto/departamento.</li><li><strong>Autorizada</strong>: puede recibir factura de proveedor.</li><li><strong>Parcial</strong>: ya tiene facturas pero no esta cerrada.</li><li><strong>Cerrada</strong>: compra completada o cerrada manualmente.</li><li><strong>Rechazada/Cancelada</strong>: no debe seguir a factura o pago.</li></ul><h4>Reglas de autorizacion</h4><p>Las reglas viven en <code>core_purchase_approval_rules</code>. Se evalua departamento, monto minimo, monto maximo, grupo autorizador y usuario autorizador opcional. Las compras menores pueden autoaprobarse; montos altos deben requerir grupo directivo y documentos soporte.</p><h4>Flujo recomendado</h4><ol><li>Capturar OC en borrador con proveedor, departamento, solicitante, condiciones y partidas.</li><li>Usar <strong>Solicitar</strong> para evaluar regla por monto.</li><li>Autorizador revisa y usa <strong>Autorizar</strong> o <strong>Rechazar</strong>.</li><li>Solo OC autorizada puede recibir factura.</li><li>La factura debe ligarse al CFDI por UUID o <code>cfdi_id</code> cuando exista en Auditoria SAT.</li><li>Contrarecibo agrupa facturas validadas.</li><li>Pago se liga al contrarecibo mediante <code>payment_id</code>; el mapa visible queda CFDI &gt; OC &gt; Contrarecibo &gt; Pago.</li></ol><h4>Seguridad</h4><ul><li>Los compradores ven proveedores de su departamento o asignados.</li><li>Autorizar requiere permiso <code>purchases.access[authorize]</code>, grupo administrativo o super administrador.</li><li>Cada cambio de estado queda en auditoria.</li></ul>',
+            'sort_order' => 58,
+            'active' => 1,
+            'created_at' => time(),
+            'updated_at' => time(),
+        ]);
+
         $this->upsert_seed('core_knowledge_articles', 'code', 'integraciones_pasarelas_seguras', [
             'code' => 'integraciones_pasarelas_seguras',
             'title' => 'Integraciones, pasarelas y proveedores externos',
@@ -2124,7 +2159,7 @@ class Configsetup
 
     protected function sync_permissions()
     {
-        $actions = ['view', 'create', 'edit', 'delete', 'import', 'export'];
+        $actions = ['view', 'create', 'edit', 'delete', 'import', 'export', 'authorize'];
         $permissions = [
             'admin_dashboard' => 'Panel de control principal',
             'user' => 'Gestion de usuarios',

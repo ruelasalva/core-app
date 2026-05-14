@@ -88,6 +88,23 @@ class Controller_Admin_Purchases extends Controller_Adminbase
                 return $this->json_response(['error' => 'Selecciona proveedor y al menos un concepto.'], 422);
             }
 
+            $order = null;
+            if ($id > 0) {
+                $order = Model_Core_Purchase_Order::find($id);
+                if (!$order) {
+                    return $this->json_response(['error' => 'Orden no encontrada.'], 404);
+                }
+            }
+
+            $requested_status = $this->codeify(\Arr::get($val, 'status', 'draft'));
+            $editable_statuses = ['draft', 'rejected'];
+            if ($id > 0 && !in_array((string) $order->status, $editable_statuses, true) && !$this->can_authorize_purchase()) {
+                return $this->json_response(['error' => 'Solo autorizadores pueden modificar ordenes solicitadas, autorizadas o cerradas.'], 422);
+            }
+            if (!in_array($requested_status, ['draft', 'rejected', 'cancelled'], true) && !$this->can_authorize_purchase()) {
+                $requested_status = 'draft';
+            }
+
             $data = [
                 'source' => 'admin',
                 'portal_code' => '',
@@ -99,18 +116,15 @@ class Controller_Admin_Purchases extends Controller_Adminbase
                 'payment_term_id' => (int) \Arr::get($val, 'payment_term_id', 0),
                 'currency_code' => trim((string) \Arr::get($val, 'currency_code', 'MXN')) ?: 'MXN',
                 'exchange_rate' => max(0.000001, (float) \Arr::get($val, 'exchange_rate', 1)),
-                'status' => $this->codeify(\Arr::get($val, 'status', 'draft')),
+                'status' => $requested_status,
                 'notes' => trim((string) \Arr::get($val, 'notes', '')),
                 'internal_notes' => trim((string) \Arr::get($val, 'internal_notes', '')),
+                'approval_notes' => trim((string) \Arr::get($val, 'approval_notes', '')),
                 'external_reference' => trim((string) \Arr::get($val, 'external_reference', '')),
                 'active' => 1,
             ];
 
             if ($id > 0) {
-                $order = Model_Core_Purchase_Order::find($id);
-                if (!$order) {
-                    return $this->json_response(['error' => 'Orden no encontrada.'], 404);
-                }
                 $old = $order->to_array();
                 $order->set($data);
             } else {
@@ -173,6 +187,34 @@ class Controller_Admin_Purchases extends Controller_Adminbase
         return $this->post_save_order();
     }
 
+    public function action_submit_order()
+    {
+        $this->require_access('purchases.access[edit]');
+        return $this->change_order_approval('submit');
+    }
+
+    public function action_authorize_order()
+    {
+        return $this->change_order_approval('authorize');
+    }
+
+    public function action_reject_order()
+    {
+        return $this->change_order_approval('reject');
+    }
+
+    public function action_cancel_order()
+    {
+        $this->require_access('purchases.access[edit]');
+        return $this->change_order_approval('cancel');
+    }
+
+    public function action_close_order()
+    {
+        $this->require_access('purchases.access[edit]');
+        return $this->change_order_approval('close');
+    }
+
     /**
      * SAVE INVOICE
      *
@@ -196,13 +238,35 @@ class Controller_Admin_Purchases extends Controller_Adminbase
             if ($party_id < 1) {
                 return $this->json_response(['error' => 'Selecciona proveedor.'], 422);
             }
+            $order_id = (int) \Arr::get($val, 'order_id', 0);
+            if ($order_id > 0) {
+                $order = Model_Core_Purchase_Order::find($order_id);
+                if (!$order || !in_array((string) $order->status, ['authorized', 'partial', 'closed'], true)) {
+                    return $this->json_response(['error' => 'La factura solo puede ligarse a una OC autorizada.'], 422);
+                }
+            }
+            $uuid = strtoupper(trim((string) \Arr::get($val, 'uuid', '')));
+            $cfdi_id = (int) \Arr::get($val, 'cfdi_id', 0);
+            if ($cfdi_id < 1 && $uuid !== '' && \DBUtil::table_exists('core_sat_cfdi')) {
+                $cfdi_row = \DB::select('id', 'sat_status')
+                    ->from('core_sat_cfdi')
+                    ->where('uuid', '=', $uuid)
+                    ->execute()
+                    ->current();
+                if ($cfdi_row) {
+                    $cfdi_id = (int) $cfdi_row['id'];
+                    if ((string) $cfdi_row['sat_status'] === 'cancelado') {
+                        return $this->json_response(['error' => 'No se puede registrar compra con CFDI cancelado.'], 422);
+                    }
+                }
+            }
 
             $data = [
                 'party_id' => $party_id,
-                'order_id' => (int) \Arr::get($val, 'order_id', 0),
+                'order_id' => $order_id,
                 'billing_invoice_id' => (int) \Arr::get($val, 'billing_invoice_id', 0),
-                'cfdi_id' => (int) \Arr::get($val, 'cfdi_id', 0),
-                'uuid' => strtoupper(trim((string) \Arr::get($val, 'uuid', ''))),
+                'cfdi_id' => $cfdi_id,
+                'uuid' => $uuid,
                 'invoice_date' => trim((string) \Arr::get($val, 'invoice_date', date('Y-m-d'))),
                 'due_date' => trim((string) \Arr::get($val, 'due_date', '')),
                 'currency_code' => trim((string) \Arr::get($val, 'currency_code', 'MXN')) ?: 'MXN',
@@ -232,6 +296,12 @@ class Controller_Admin_Purchases extends Controller_Adminbase
                 $invoice = Model_Core_Purchase_Invoice::forge($data);
             }
             $invoice->save();
+            if ((int) $invoice->cfdi_id > 0 && \DBUtil::table_exists('core_sat_cfdi')) {
+                \DB::update('core_sat_cfdi')
+                    ->set(['purchase_status' => 'linked', 'reviewed_by' => (int) $this->user_id, 'reviewed_at' => time()])
+                    ->where('id', '=', (int) $invoice->cfdi_id)
+                    ->execute();
+            }
             if ((int) $invoice->order_id > 0) {
                 $this->recalculate_order((int) $invoice->order_id);
             }
@@ -276,6 +346,7 @@ class Controller_Admin_Purchases extends Controller_Adminbase
                 'scheduled_payment_date' => trim((string) \Arr::get($val, 'scheduled_payment_date', '')),
                 'currency_code' => trim((string) \Arr::get($val, 'currency_code', 'MXN')) ?: 'MXN',
                 'total' => 0,
+                'payment_id' => (int) \Arr::get($val, 'payment_id', 0),
                 'status' => $this->codeify(\Arr::get($val, 'status', 'draft')),
                 'notes' => trim((string) \Arr::get($val, 'notes', '')),
                 'created_by' => $this->user_id,
@@ -287,6 +358,9 @@ class Controller_Admin_Purchases extends Controller_Adminbase
             foreach ($invoice_ids as $invoice_id) {
                 $invoice = Model_Core_Purchase_Invoice::find($invoice_id);
                 if (!$invoice || (int) $invoice->party_id !== $party_id) {
+                    continue;
+                }
+                if ((string) $invoice->validation_status !== 'validated') {
                     continue;
                 }
                 $amount = (float) $invoice->balance_due;
@@ -301,14 +375,27 @@ class Controller_Admin_Purchases extends Controller_Adminbase
                 $invoice->save();
             }
 
+            if ($total <= 0) {
+                $receipt->active = 0;
+                $receipt->save();
+                throw new \RuntimeException('No hay facturas validadas para generar contrarecibo.');
+            }
+
             $receipt->total = round($total, 2);
+            if ((int) $receipt->payment_id > 0) {
+                $receipt->status = 'paid';
+                \DB::update('core_purchase_invoices')
+                    ->set(['status' => 'paid', 'balance_due' => 0])
+                    ->where('id', 'in', $invoice_ids)
+                    ->execute();
+            }
             $receipt->save();
             $this->audit('create_receipt', 'purchase_receipt', $receipt, []);
 
             return $this->action_data();
         } catch (\Exception $e) {
             \Log::error('Error creando contrarecibo: '.$e->getMessage());
-            return $this->json_response(['error' => 'No se pudo crear el contrarecibo.'], 400);
+            return $this->json_response(['error' => $e->getMessage()], 400);
         }
     }
 
@@ -352,9 +439,12 @@ class Controller_Admin_Purchases extends Controller_Adminbase
 
     protected function orders()
     {
-        $rows = \DB::select(['o.id', 'id'], ['o.folio', 'folio'], ['o.party_id', 'party_id'], ['p.name', 'party_name'], ['p.rfc', 'party_rfc'], ['o.order_date', 'order_date'], ['o.expected_date', 'expected_date'], ['o.status', 'status'], ['o.currency_code', 'currency_code'], ['o.subtotal', 'subtotal'], ['o.tax_total', 'tax_total'], ['o.retention_total', 'retention_total'], ['o.total', 'total'], ['o.invoiced_total', 'invoiced_total'], ['o.balance_total', 'balance_total'], ['o.notes', 'notes'], ['o.internal_notes', 'internal_notes'], ['o.created_at', 'created_at'])
+        $rows = \DB::select(['o.id', 'id'], ['o.folio', 'folio'], ['o.party_id', 'party_id'], ['p.name', 'party_name'], ['p.rfc', 'party_rfc'], ['o.department_id', 'department_id'], ['d.name', 'department_name'], ['o.requested_by', 'requested_by'], ['ur.username', 'requested_by_name'], ['o.requested_at', 'requested_at'], ['o.authorized_by', 'authorized_by'], ['ua.username', 'authorized_by_name'], ['o.authorized_at', 'authorized_at'], ['o.order_date', 'order_date'], ['o.expected_date', 'expected_date'], ['o.payment_term_id', 'payment_term_id'], ['o.status', 'status'], ['o.approval_status', 'approval_status'], ['o.approval_required', 'approval_required'], ['o.approval_rule_id', 'approval_rule_id'], ['o.currency_code', 'currency_code'], ['o.exchange_rate', 'exchange_rate'], ['o.subtotal', 'subtotal'], ['o.tax_total', 'tax_total'], ['o.retention_total', 'retention_total'], ['o.total', 'total'], ['o.invoiced_total', 'invoiced_total'], ['o.balance_total', 'balance_total'], ['o.notes', 'notes'], ['o.internal_notes', 'internal_notes'], ['o.approval_notes', 'approval_notes'], ['o.external_reference', 'external_reference'], ['o.created_at', 'created_at'])
             ->from(['core_purchase_orders', 'o'])
             ->join(['core_parties', 'p'], 'left')->on('o.party_id', '=', 'p.id')
+            ->join(['core_departments', 'd'], 'left')->on('o.department_id', '=', 'd.id')
+            ->join(['users', 'ur'], 'left')->on('o.requested_by', '=', 'ur.id')
+            ->join(['users', 'ua'], 'left')->on('o.authorized_by', '=', 'ua.id')
             ->where('o.active', '=', 1);
         $this->apply_purchase_scope($rows, 'o', 'p');
 
@@ -367,6 +457,9 @@ class Controller_Admin_Purchases extends Controller_Adminbase
         foreach ($rows as &$row) {
             $row['items'] = $this->order_items((int) $row['id']);
             $row['created_label'] = $row['created_at'] ? date('d/m/Y H:i', (int) $row['created_at']) : '';
+            $row['requested_label'] = $row['requested_at'] ? date('d/m/Y H:i', (int) $row['requested_at']) : '';
+            $row['authorized_label'] = $row['authorized_at'] ? date('d/m/Y H:i', (int) $row['authorized_at']) : '';
+            $row['can_authorize'] = $this->can_authorize_order_row($row) ? 1 : 0;
         }
         return $rows;
     }
@@ -384,10 +477,11 @@ class Controller_Admin_Purchases extends Controller_Adminbase
 
     protected function invoices()
     {
-        $rows = \DB::select(['i.id', 'id'], ['i.folio', 'folio'], ['i.party_id', 'party_id'], ['p.name', 'party_name'], ['i.order_id', 'order_id'], ['o.folio', 'order_folio'], ['i.uuid', 'uuid'], ['i.invoice_date', 'invoice_date'], ['i.due_date', 'due_date'], ['i.currency_code', 'currency_code'], ['i.total', 'total'], ['i.balance_due', 'balance_due'], ['i.status', 'status'], ['i.validation_status', 'validation_status'], ['i.sat_status', 'sat_status'], ['i.message', 'message'], ['i.created_at', 'created_at'])
+        $rows = \DB::select(['i.id', 'id'], ['i.folio', 'folio'], ['i.party_id', 'party_id'], ['p.name', 'party_name'], ['i.order_id', 'order_id'], ['o.folio', 'order_folio'], ['o.status', 'order_status'], ['i.cfdi_id', 'cfdi_id'], ['i.uuid', 'uuid'], ['c.sat_status', 'cfdi_sat_status'], ['c.voucher_type', 'cfdi_type'], ['i.invoice_date', 'invoice_date'], ['i.due_date', 'due_date'], ['i.currency_code', 'currency_code'], ['i.subtotal', 'subtotal'], ['i.tax_total', 'tax_total'], ['i.retention_total', 'retention_total'], ['i.total', 'total'], ['i.balance_due', 'balance_due'], ['i.status', 'status'], ['i.validation_status', 'validation_status'], ['i.sat_status', 'sat_status'], ['i.message', 'message'], ['i.created_at', 'created_at'])
             ->from(['core_purchase_invoices', 'i'])
             ->join(['core_parties', 'p'], 'left')->on('i.party_id', '=', 'p.id')
             ->join(['core_purchase_orders', 'o'], 'left')->on('i.order_id', '=', 'o.id')
+            ->join(['core_sat_cfdi', 'c'], 'left')->on('i.cfdi_id', '=', 'c.id')
             ->where('i.active', '=', 1);
         $this->apply_purchase_scope($rows, 'o', 'p');
 
@@ -398,15 +492,17 @@ class Controller_Admin_Purchases extends Controller_Adminbase
             ->as_array();
         foreach ($rows as &$row) {
             $row['created_label'] = $row['created_at'] ? date('d/m/Y H:i', (int) $row['created_at']) : '';
+            $row['flow'] = $this->purchase_flow((int) $row['id']);
         }
         return $rows;
     }
 
     protected function receipts()
     {
-        $rows = \DB::select(['r.id', 'id'], ['r.folio', 'folio'], ['r.party_id', 'party_id'], ['p.name', 'party_name'], ['r.issue_date', 'issue_date'], ['r.scheduled_payment_date', 'scheduled_payment_date'], ['r.currency_code', 'currency_code'], ['r.total', 'total'], ['r.status', 'status'], ['r.notes', 'notes'], ['r.created_at', 'created_at'])
+        $rows = \DB::select(['r.id', 'id'], ['r.folio', 'folio'], ['r.party_id', 'party_id'], ['p.name', 'party_name'], ['r.issue_date', 'issue_date'], ['r.scheduled_payment_date', 'scheduled_payment_date'], ['r.currency_code', 'currency_code'], ['r.total', 'total'], ['r.payment_id', 'payment_id'], ['pay.folio', 'payment_folio'], ['pay.status', 'payment_status'], ['r.status', 'status'], ['r.notes', 'notes'], ['r.created_at', 'created_at'])
             ->from(['core_purchase_receipts', 'r'])
             ->join(['core_parties', 'p'], 'left')->on('r.party_id', '=', 'p.id')
+            ->join(['core_payments', 'pay'], 'left')->on('r.payment_id', '=', 'pay.id')
             ->where('r.active', '=', 1);
         $this->apply_party_scope($rows, 'p', 'purchases');
 
@@ -456,7 +552,10 @@ class Controller_Admin_Purchases extends Controller_Adminbase
         return [
             'suppliers' => $this->select_options('core_parties', 'id', 'name', ['party_type' => 'supplier']),
             'departments' => $this->select_options('core_departments', 'id', 'name'),
+            'users' => $this->user_options(),
             'payment_terms' => $this->select_options('core_catalog_payment_terms', 'id', 'name'),
+            'payments' => $this->payment_options(),
+            'approval_rules' => $this->approval_rule_options(),
             'currencies' => $this->select_options('core_catalog_currencies', 'code', 'name'),
             'taxes' => $this->select_rate_options('core_catalog_taxes', 'code', 'name'),
             'retentions' => $this->select_rate_options('core_catalog_retentions', 'code', 'name'),
@@ -467,7 +566,8 @@ class Controller_Admin_Purchases extends Controller_Adminbase
     {
         return [
             'orders' => (int) \DB::count_records('core_purchase_orders'),
-            'open_orders' => (int) \DB::select()->from('core_purchase_orders')->where('status', 'in', ['draft', 'authorized', 'partial'])->where('active', '=', 1)->execute()->count(),
+            'open_orders' => (int) \DB::select()->from('core_purchase_orders')->where('status', 'in', ['draft', 'pending_authorization', 'authorized', 'partial'])->where('active', '=', 1)->execute()->count(),
+            'pending_authorizations' => (int) \DB::select()->from('core_purchase_orders')->where('approval_status', '=', 'pending')->where('active', '=', 1)->execute()->count(),
             'invoices' => (int) \DB::count_records('core_purchase_invoices'),
             'pending_invoices' => (int) \DB::select()->from('core_purchase_invoices')->where('validation_status', '=', 'pending')->where('active', '=', 1)->execute()->count(),
             'receipts' => (int) \DB::count_records('core_purchase_receipts'),
@@ -504,6 +604,217 @@ class Controller_Admin_Purchases extends Controller_Adminbase
         $order->save();
 
         return $order;
+    }
+
+    protected function change_order_approval($action)
+    {
+        $val = (array) \Input::json();
+        $order = Model_Core_Purchase_Order::find((int) \Arr::get($val, 'id', 0));
+        if (!$order) {
+            return $this->json_response(['error' => 'Orden no encontrada.'], 404);
+        }
+
+        try {
+            $old = $order->to_array();
+            $notes = trim((string) \Arr::get($val, 'notes', ''));
+
+            if ($action === 'submit') {
+                if (!in_array((string) $order->status, ['draft', 'rejected'], true)) {
+                    return $this->json_response(['error' => 'Solo ordenes en borrador o rechazadas se pueden solicitar.'], 422);
+                }
+                $rule = $this->approval_rule_for_order($order);
+                $order->approval_rule_id = $rule ? (int) $rule['id'] : 0;
+                $order->approval_required = $rule && (int) $rule['auto_approve'] === 0 ? 1 : 0;
+                $order->requested_at = time();
+                $order->approval_notes = $notes;
+                if (!$rule || (int) $rule['auto_approve'] === 1) {
+                    $order->status = 'authorized';
+                    $order->approval_status = 'approved';
+                    $order->authorized_by = (int) $this->user_id;
+                    $order->authorized_at = time();
+                } else {
+                    $order->status = 'pending_authorization';
+                    $order->approval_status = 'pending';
+                    $this->notify_authorizers($order, $rule);
+                }
+            } elseif ($action === 'authorize') {
+                if (!$this->can_authorize_order($order)) {
+                    return $this->json_response(['error' => 'No tienes permiso o regla de monto para autorizar esta orden.'], 403);
+                }
+                if (!in_array((string) $order->status, ['pending_authorization', 'draft', 'rejected'], true)) {
+                    return $this->json_response(['error' => 'La orden no esta pendiente de autorizacion.'], 422);
+                }
+                $order->status = 'authorized';
+                $order->approval_status = 'approved';
+                $order->approval_required = 1;
+                $order->authorized_by = (int) $this->user_id;
+                $order->authorized_at = time();
+                $order->approval_notes = $notes ?: $order->approval_notes;
+            } elseif ($action === 'reject') {
+                if (!$this->can_authorize_order($order)) {
+                    return $this->json_response(['error' => 'No tienes permiso para rechazar esta orden.'], 403);
+                }
+                $order->status = 'rejected';
+                $order->approval_status = 'rejected';
+                $order->rejected_by = (int) $this->user_id;
+                $order->rejected_at = time();
+                $order->approval_notes = $notes ?: $order->approval_notes;
+            } elseif ($action === 'cancel') {
+                if ((float) $order->invoiced_total > 0) {
+                    return $this->json_response(['error' => 'No se puede cancelar una OC con facturas relacionadas.'], 422);
+                }
+                $order->status = 'cancelled';
+                $order->approval_status = 'cancelled';
+                $order->approval_notes = $notes ?: $order->approval_notes;
+            } elseif ($action === 'close') {
+                if (!in_array((string) $order->status, ['authorized', 'partial'], true)) {
+                    return $this->json_response(['error' => 'Solo ordenes autorizadas o parciales se pueden cerrar.'], 422);
+                }
+                $order->status = 'closed';
+                $order->approval_notes = $notes ?: $order->approval_notes;
+            }
+
+            $order->save();
+            $this->audit($action.'_order', 'purchase_order', $order, $old);
+            return $this->action_data();
+        } catch (\Exception $e) {
+            \Log::error('Error actualizando autorizacion de compra: '.$e->getMessage());
+            return $this->json_response(['error' => 'No se pudo actualizar la autorizacion.'], 400);
+        }
+    }
+
+    protected function approval_rule_for_order(Model_Core_Purchase_Order $order)
+    {
+        if (!\DBUtil::table_exists('core_purchase_approval_rules')) {
+            return null;
+        }
+
+        $query = \DB::select()
+            ->from('core_purchase_approval_rules')
+            ->where('active', '=', 1)
+            ->where('min_amount', '<=', (float) $order->total)
+            ->where_open()
+                ->where('max_amount', '=', 0)
+                ->or_where('max_amount', '>=', (float) $order->total)
+            ->where_close()
+            ->where('department_id', 'in', [0, (int) $order->department_id])
+            ->order_by('department_id', 'desc')
+            ->order_by('sort_order', 'asc')
+            ->limit(1)
+            ->execute()
+            ->current();
+
+        return $query ?: null;
+    }
+
+    protected function can_authorize_order(Model_Core_Purchase_Order $order)
+    {
+        if ($this->is_super_admin) {
+            return true;
+        }
+        if (!$this->can_authorize_purchase()) {
+            return false;
+        }
+        $rule = $this->approval_rule_for_order($order);
+        if (!$rule) {
+            return $this->user_group >= 70;
+        }
+        if ((int) $rule['approver_user_id'] > 0 && (int) $rule['approver_user_id'] !== (int) $this->user_id) {
+            return false;
+        }
+        return $this->user_group >= (int) $rule['approver_group_id'];
+    }
+
+    protected function can_authorize_order_row(array $row)
+    {
+        $order = Model_Core_Purchase_Order::find((int) $row['id']);
+        if (!$order) {
+            return false;
+        }
+        return $this->can_authorize_order($order);
+    }
+
+    protected function can_authorize_purchase()
+    {
+        return $this->is_super_admin
+            || \Auth::has_access('purchases.access[authorize]')
+            || in_array($this->user_group, [70, 90, 100], true);
+    }
+
+    protected function notify_authorizers(Model_Core_Purchase_Order $order, array $rule)
+    {
+        $ids = [];
+        if ((int) $rule['approver_user_id'] > 0) {
+            $ids[] = (int) $rule['approver_user_id'];
+        } else {
+            foreach (\DB::select('id')->from('users')->where('group_id', '>=', (int) $rule['approver_group_id'])->execute() as $row) {
+                $ids[] = (int) $row['id'];
+            }
+        }
+        Helper_Core_Notification::create([
+            'event_code' => 'purchases.order_authorization_requested',
+            'notification_type' => 'purchases',
+            'title' => 'OC pendiente de autorizacion',
+            'message' => $order->folio.' requiere autorizacion por '.number_format((float) $order->total, 2),
+            'url' => \Uri::create('admin/purchases'),
+            'icon' => 'bi bi-shield-check',
+            'priority' => 2,
+            'created_by' => $this->user_id,
+        ], $ids);
+    }
+
+    protected function purchase_flow($invoice_id)
+    {
+        $flow = ['cfdi' => null, 'order' => null, 'receipts' => [], 'payments' => []];
+        $invoice = \DB::select()
+            ->from('core_purchase_invoices')
+            ->where('id', '=', (int) $invoice_id)
+            ->execute()
+            ->current();
+        if (!$invoice) {
+            return $flow;
+        }
+
+        if ((int) $invoice['cfdi_id'] > 0 && \DBUtil::table_exists('core_sat_cfdi')) {
+            $flow['cfdi'] = \DB::select('id', 'uuid', 'sat_status', 'voucher_type', 'total')
+                ->from('core_sat_cfdi')
+                ->where('id', '=', (int) $invoice['cfdi_id'])
+                ->execute()
+                ->current();
+        }
+        if ((int) $invoice['order_id'] > 0) {
+            $flow['order'] = \DB::select('id', 'folio', 'status', 'approval_status', 'total')
+                ->from('core_purchase_orders')
+                ->where('id', '=', (int) $invoice['order_id'])
+                ->execute()
+                ->current();
+        }
+
+        $receipts = \DB::select(['r.id', 'id'], ['r.folio', 'folio'], ['r.status', 'status'], ['r.payment_id', 'payment_id'], ['ri.amount', 'amount'])
+            ->from(['core_purchase_receipt_items', 'ri'])
+            ->join(['core_purchase_receipts', 'r'], 'inner')->on('r.id', '=', 'ri.receipt_id')
+            ->where('ri.invoice_id', '=', (int) $invoice_id)
+            ->where('ri.active', '=', 1)
+            ->where('r.active', '=', 1)
+            ->execute()
+            ->as_array();
+        $flow['receipts'] = $receipts;
+
+        $payment_ids = [];
+        foreach ($receipts as $receipt) {
+            if ((int) $receipt['payment_id'] > 0) {
+                $payment_ids[] = (int) $receipt['payment_id'];
+            }
+        }
+        if (!empty($payment_ids)) {
+            $flow['payments'] = \DB::select('id', 'folio', 'payment_date', 'amount', 'status', 'reference')
+                ->from('core_payments')
+                ->where('id', 'in', array_unique($payment_ids))
+                ->execute()
+                ->as_array();
+        }
+
+        return $flow;
     }
 
     protected function store_document($entity_type, $entity_id, $visibility)
@@ -579,6 +890,59 @@ class Controller_Admin_Purchases extends Controller_Adminbase
         $items = [];
         foreach ($query->order_by($label_field, 'asc')->execute() as $row) {
             $items[] = ['value' => (string) $row[$value_field], 'label' => (string) $row[$label_field]];
+        }
+        return $items;
+    }
+
+    protected function user_options()
+    {
+        $items = [];
+        foreach (\DB::select('id', 'username', 'email')->from('users')->order_by('username', 'asc')->execute() as $row) {
+            $label = (string) $row['username'];
+            if (!empty($row['email'])) {
+                $label .= ' - '.$row['email'];
+            }
+            $items[] = ['value' => (string) $row['id'], 'label' => $label];
+        }
+        return $items;
+    }
+
+    protected function payment_options()
+    {
+        if (!\DBUtil::table_exists('core_payments')) {
+            return [];
+        }
+        $items = [];
+        foreach (\DB::select('id', 'folio', 'amount', 'currency_code', 'status')->from('core_payments')->where('payment_type', '=', 'outgoing')->where('active', '=', 1)->order_by('id', 'desc')->limit(100)->execute() as $row) {
+            $items[] = [
+                'value' => (string) $row['id'],
+                'label' => $row['folio'].' - '.$row['currency_code'].' '.number_format((float) $row['amount'], 2).' - '.$row['status'],
+            ];
+        }
+        return $items;
+    }
+
+    protected function approval_rule_options()
+    {
+        if (!\DBUtil::table_exists('core_purchase_approval_rules')) {
+            return [];
+        }
+        $items = [];
+        foreach (\DB::select(['r.id', 'id'], ['r.name', 'name'], ['r.department_id', 'department_id'], ['d.name', 'department_name'], ['r.min_amount', 'min_amount'], ['r.max_amount', 'max_amount'], ['r.approver_group_id', 'approver_group_id'], ['r.auto_approve', 'auto_approve'])
+            ->from(['core_purchase_approval_rules', 'r'])
+            ->join(['core_departments', 'd'], 'left')->on('r.department_id', '=', 'd.id')
+            ->where('r.active', '=', 1)
+            ->order_by('r.sort_order', 'asc')
+            ->execute() as $row) {
+            $items[] = [
+                'id' => (int) $row['id'],
+                'name' => (string) $row['name'],
+                'department' => (string) ($row['department_name'] ?: 'Todos'),
+                'min_amount' => (float) $row['min_amount'],
+                'max_amount' => (float) $row['max_amount'],
+                'approver_group_id' => (int) $row['approver_group_id'],
+                'auto_approve' => (int) $row['auto_approve'],
+            ];
         }
         return $items;
     }
@@ -677,7 +1041,7 @@ class Controller_Admin_Purchases extends Controller_Adminbase
 
     protected function assert_schema_ready()
     {
-        foreach (['core_purchase_orders', 'core_purchase_order_items', 'core_purchase_invoices', 'core_purchase_receipts', 'core_purchase_receipt_items', 'core_documents', 'core_document_links'] as $table) {
+        foreach (['core_purchase_orders', 'core_purchase_order_items', 'core_purchase_invoices', 'core_purchase_receipts', 'core_purchase_receipt_items', 'core_purchase_approval_rules', 'core_documents', 'core_document_links'] as $table) {
             if (!\DBUtil::table_exists($table)) {
                 throw new \RuntimeException('Falta ejecutar migraciones de compras.');
             }
