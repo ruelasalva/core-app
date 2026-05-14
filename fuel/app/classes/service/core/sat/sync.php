@@ -22,8 +22,20 @@ class Service_Core_Sat_Sync
         # SE NORMALIZAN DATOS
         $download_type = \Arr::get($data, 'download_type', 'xml') === 'metadata' ? 'metadata' : 'xml';
         $direction = \Arr::get($data, 'direction', 'received') === 'issued' ? 'issued' : 'received';
-        $date_from = trim((string) \Arr::get($data, 'date_from', date('Y-m-d')));
+        $date_from = $this->normalize_sat_date(\Arr::get($data, 'date_from', $this->sat_today()));
         $date_to = trim((string) \Arr::get($data, 'date_to', $date_from));
+        $date_to = $this->normalize_sat_date($date_to ?: $date_from);
+        $today = $this->sat_today();
+
+        if ($date_from > $today) {
+            throw new \RuntimeException('La fecha inicial no puede ser futura para el SAT. Hoy SAT: '.$today.'.');
+        }
+        if ($date_to > $today) {
+            $date_to = $today;
+        }
+        if ($date_to < $date_from) {
+            throw new \RuntimeException('La fecha final no puede ser menor que la inicial.');
+        }
 
         # SE CREA REGISTRO LOCAL
         $request = Model_Core_Sat_Sync_Request::forge([
@@ -84,7 +96,9 @@ class Service_Core_Sat_Sync
                 $config = Model_Core_Sat_Config::get_current();
                 if ($config->mode === 'production') {
                     $service = $this->sat_service();
-                    $query = $service->query($this->query_parameters($request));
+                    $query = $this->with_sat_timezone(function () use ($service, $request) {
+                        return $service->query($this->query_parameters($request));
+                    });
                     $message = $query->getStatus()->getCode().' '.$query->getStatus()->getMessage();
 
                     if ($query->getStatus()->isAccepted()) {
@@ -377,9 +391,18 @@ class Service_Core_Sat_Sync
 
     protected function query_parameters(Model_Core_Sat_Sync_Request $request)
     {
+        $date_from = $this->normalize_sat_date($request->date_from);
+        $date_to = $this->normalize_sat_date($request->date_to ?: $date_from);
+        if ($date_from > $this->sat_today()) {
+            throw new \RuntimeException('La fecha inicial '.$date_from.' es futura para el SAT.');
+        }
+        if ($date_to > $this->sat_today()) {
+            $date_to = $this->sat_today();
+        }
+
         $period = \PhpCfdi\SatWsDescargaMasiva\Shared\DateTimePeriod::createFromValues(
-            $request->date_from.' 00:00:00',
-            $request->date_to.' 23:59:59'
+            new \DateTimeImmutable($date_from.' 00:00:00', new \DateTimeZone('America/Mexico_City')),
+            new \DateTimeImmutable($date_to.' 23:59:59', new \DateTimeZone('America/Mexico_City'))
         );
         $download_type = $request->direction === 'issued'
             ? \PhpCfdi\SatWsDescargaMasiva\Shared\DownloadType::issued()
@@ -394,6 +417,39 @@ class Service_Core_Sat_Sync
         }
 
         return $parameters;
+    }
+
+    protected function with_sat_timezone($callback)
+    {
+        $previous = date_default_timezone_get();
+        date_default_timezone_set('America/Mexico_City');
+        try {
+            return $callback();
+        } finally {
+            date_default_timezone_set($previous);
+        }
+    }
+
+    protected function sat_today()
+    {
+        return (new \DateTimeImmutable('now', new \DateTimeZone('America/Mexico_City')))->format('Y-m-d');
+    }
+
+    protected function normalize_sat_date($value)
+    {
+        $value = trim((string) $value);
+        $timezone = new \DateTimeZone('America/Mexico_City');
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) {
+            return $value;
+        }
+
+        try {
+            $date = new \DateTimeImmutable($value, $timezone);
+        } catch (\Exception $e) {
+            throw new \RuntimeException('Fecha SAT invalida: '.$value);
+        }
+
+        return $date->setTimezone($timezone)->format('Y-m-d');
     }
 
     protected function package_exists($package_id)
