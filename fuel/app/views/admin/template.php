@@ -3,7 +3,9 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#0d6efd">
     <title>Core-App ERP | Dashboard</title>
+    <link rel="manifest" href="<?php echo Uri::base(false); ?>manifest.json">
 
     <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,400i,700&display=fallback">
 
@@ -387,6 +389,7 @@
 
 <?php echo Asset::js('adminlte.min.js'); ?>
 <?php echo Asset::js('chart.umd.js'); ?>
+<?php echo Asset::js('core-offline.js'); ?>
 <?php if (in_array((string) Uri::segment(2), ['', 'calendar'])): ?>
 <script src="<?php echo Uri::base(false); ?>assets/vendor/admin/fullcalendar/index.global.min.js"></script>
 <?php endif; ?>
@@ -414,6 +417,12 @@ window.coreAppFetchOptions = function(data) {
         body: JSON.stringify(data)
     };
 };
+
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function() {
+        navigator.serviceWorker.register('<?php echo Uri::base(false); ?>sw.js').catch(function() {});
+    });
+}
 
 new Vue({
     el: '#app-notifications',

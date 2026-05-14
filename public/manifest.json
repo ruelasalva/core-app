@@ -1,0 +1,17 @@
+{
+  "name": "Core-App ERP",
+  "short_name": "Core-App",
+  "description": "ERP Core-App con soporte base para trabajo sin conexion.",
+  "start_url": "./admin",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f4f6f9",
+  "theme_color": "#0d6efd",
+  "icons": [
+    {
+      "src": "favicon.ico",
+      "sizes": "64x64",
+      "type": "image/x-icon"
+    }
+  ]
+}

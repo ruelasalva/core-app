@@ -84,15 +84,36 @@ class Controller_Admin_Sales extends Controller_Adminbase
             $val = (array) \Input::json();
             $party_id = (int) \Arr::get($val, 'party_id', 0);
             $items = (array) \Arr::get($val, 'items', []);
+            $offline_uuid = $this->offline_uuid((string) \Arr::get($val, 'offline_uuid', ''));
 
             if ($party_id < 1 || empty($items)) {
                 return $this->json_response(['error' => 'Selecciona cliente y al menos un producto.'], 422);
+            }
+            if ($offline_uuid !== '') {
+                $existing = \DB::select('id', 'folio')
+                    ->from('core_sales_quotes')
+                    ->where('offline_uuid', '=', $offline_uuid)
+                    ->execute()
+                    ->current();
+                if ($existing) {
+                    return $this->json_response([
+                        'status' => 'ok',
+                        'duplicate' => 1,
+                        'offline_uuid' => $offline_uuid,
+                        'folio' => (string) $existing['folio'],
+                        'quotes' => $this->quotes(),
+                        'stats' => $this->stats(),
+                    ]);
+                }
             }
 
             # SE CREA ENCABEZADO
             $quote = Model_Core_Sales_Quote::forge([
                 'folio' => $this->next_quote_folio(),
-                'source' => 'admin_manual',
+                'source' => $offline_uuid !== '' ? 'admin_offline' : 'admin_manual',
+                'offline_uuid' => $offline_uuid,
+                'synced_from_offline' => $offline_uuid !== '' ? 1 : 0,
+                'offline_synced_at' => $offline_uuid !== '' ? time() : 0,
                 'cart_id' => 0,
                 'user_id' => $this->current_user_id(),
                 'party_id' => $party_id,
@@ -151,8 +172,9 @@ class Controller_Admin_Sales extends Controller_Adminbase
             $quote->subtotal = round($subtotal, 2);
             $quote->total = round($subtotal, 2);
             $quote->save();
+            $this->log_offline_sync($offline_uuid, 'sales_quote', (int) $quote->id, $val);
 
-            return $this->json_response(['status' => 'ok', 'quotes' => $this->quotes(), 'stats' => $this->stats()]);
+            return $this->json_response(['status' => 'ok', 'offline_uuid' => $offline_uuid, 'folio' => $quote->folio, 'quotes' => $this->quotes(), 'stats' => $this->stats()]);
         } catch (\Exception $e) {
             \Log::error('Error creando cotizacion manual: '.$e->getMessage());
             return $this->json_response(['error' => 'No se pudo crear la cotizacion.'], 400);
@@ -229,6 +251,8 @@ class Controller_Admin_Sales extends Controller_Adminbase
                 array('q.id', 'id'),
                 array('q.folio', 'folio'),
                 array('q.source', 'source'),
+                array('q.offline_uuid', 'offline_uuid'),
+                array('q.synced_from_offline', 'synced_from_offline'),
                 array('q.status', 'status'),
                 array('q.currency_code', 'currency_code'),
                 array('q.subtotal', 'subtotal'),
@@ -424,5 +448,39 @@ class Controller_Admin_Sales extends Controller_Adminbase
                 throw new \RuntimeException('Falta ejecutar migraciones de ventas.');
             }
         }
+        if (!\DBUtil::field_exists('core_sales_quotes', ['offline_uuid'])) {
+            throw new \RuntimeException('Falta ejecutar migraciones offline.');
+        }
+    }
+
+    protected function offline_uuid($value)
+    {
+        $value = trim((string) $value);
+        if ($value === '') {
+            return '';
+        }
+        $value = preg_replace('/[^a-zA-Z0-9_\-]/', '', $value);
+        return substr($value, 0, 64);
+    }
+
+    protected function log_offline_sync($offline_uuid, $entity_type, $entity_id, array $payload)
+    {
+        if ($offline_uuid === '' || !\DBUtil::table_exists('core_offline_sync_logs')) {
+            return;
+        }
+
+        \DB::insert('core_offline_sync_logs')->set([
+            'offline_uuid' => $offline_uuid,
+            'module' => 'sales',
+            'entity_type' => $entity_type,
+            'entity_id' => $entity_id,
+            'status' => 'synced',
+            'device_label' => trim((string) \Arr::get($payload, 'device_label', '')),
+            'user_id' => $this->current_user_id(),
+            'payload_hash' => hash('sha256', json_encode($payload)),
+            'message' => 'Cotizacion sincronizada desde borrador offline.',
+            'created_at' => time(),
+            'updated_at' => time(),
+        ])->execute();
     }
 }

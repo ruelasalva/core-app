@@ -42,12 +42,26 @@
         <div class="card-header">
             <h3 class="card-title">Solicitudes de cotizacion</h3>
             <div class="card-tools">
+                <span class="badge mr-2" :class="offline.online ? 'badge-success' : 'badge-warning'">
+                    {{ offline.online ? 'En linea' : 'Sin conexion' }}
+                </span>
+                <button class="btn btn-outline-info btn-sm mr-2" @click="syncDrafts" :disabled="offline.syncing || offline.drafts.length === 0">
+                    <i class="bi bi-arrow-repeat"></i> Sincronizar {{ offline.drafts.length || '' }}
+                </button>
                 <button class="btn btn-primary btn-sm" @click="newQuote">
                     <i class="bi bi-plus-lg"></i> Nueva cotizacion
                 </button>
             </div>
         </div>
         <div class="card-body">
+            <div v-if="offline.drafts.length" class="alert alert-warning">
+                <strong>Borradores en este equipo:</strong>
+                <span v-for="draft in offline.drafts" :key="draft.key" class="badge badge-light border ml-2">
+                    {{ draft.value.label || 'Cotizacion local' }}
+                    <a href="#" @click.prevent="recoverDraft(draft)">abrir</a>
+                    <a href="#" class="text-danger" @click.prevent="discardDraft(draft)">quitar</a>
+                </span>
+            </div>
             <div v-if="loading" class="text-center p-5">
                 <div class="spinner-border text-primary" role="status"></div>
                 <p class="mt-2">Cargando ventas...</p>
@@ -104,6 +118,10 @@
                     </button>
                 </div>
                 <div class="modal-body">
+                    <div class="alert alert-light border py-2">
+                        <span :class="offline.online ? 'text-success' : 'text-warning'">{{ offline.online ? 'Con conexion' : 'Sin conexion' }}</span>
+                        <span v-if="offline.lastSaved" class="text-muted ml-2">Borrador local guardado {{ offline.lastSaved }}</span>
+                    </div>
                     <div class="form-group">
                         <label>Cliente</label>
                         <select class="form-control" v-model="quoteForm.party_id">
@@ -257,11 +275,23 @@ window.onload = function() {
             selected: null,
             stats: { quotes: 0, requested: 0, reviewed: 0, approved: 0, rejected: 0 },
             options: { customers: [], products: [] },
-            quoteForm: { party_id: '', items: [], customer_notes: '', internal_notes: '' },
-            lineForm: { product_id: '', quantity: 1 }
+            quoteForm: { party_id: '', items: [], customer_notes: '', internal_notes: '', offline_uuid: '' },
+            lineForm: { product_id: '', quantity: 1 },
+            offline: { online: navigator.onLine, drafts: [], syncing: false, saveTimer: null, lastSaved: '' }
         },
         mounted() {
             this.loadData();
+            this.loadDrafts();
+            window.addEventListener('online', this.onOnline);
+            window.addEventListener('offline', this.onOffline);
+        },
+        watch: {
+            quoteForm: {
+                deep: true,
+                handler: function() {
+                    this.scheduleDraftSave();
+                }
+            }
         },
         methods: {
             loadData() {
@@ -277,7 +307,31 @@ window.onload = function() {
                         this.quotes = data.quotes || [];
                         this.stats = data.stats || this.stats;
                         this.options = data.options || this.options;
+                        this.cacheCatalogs();
+                    })
+                    .catch(() => {
+                        this.loading = false;
+                        this.offline.online = false;
+                        this.hydrateOptionsFromCache();
                     });
+            },
+            onOnline() {
+                this.offline.online = true;
+            },
+            onOffline() {
+                this.offline.online = false;
+            },
+            cacheCatalogs() {
+                if (!window.CoreOffline) return;
+                window.CoreOffline.put('catalog:sales:options', this.options);
+            },
+            hydrateOptionsFromCache() {
+                if (!window.CoreOffline) return Promise.resolve();
+                return window.CoreOffline.get('catalog:sales:options').then(options => {
+                    if (options && (!this.options.products || this.options.products.length === 0)) {
+                        this.options = options;
+                    }
+                });
             },
             money(value) {
                 return Number(value || 0).toFixed(2);
@@ -338,8 +392,9 @@ window.onload = function() {
                 }
             },
             newQuote() {
-                this.quoteForm = { party_id: '', items: [], customer_notes: '', internal_notes: '' };
+                this.quoteForm = { party_id: '', items: [], customer_notes: '', internal_notes: '', offline_uuid: this.newOfflineUuid() };
                 this.lineForm = { product_id: '', quantity: 1 };
+                this.hydrateOptionsFromCache();
                 this.showModal('modal-new-quote');
             },
             addLine() {
@@ -366,6 +421,7 @@ window.onload = function() {
                 return this.productById(productId).currency_code || 'MXN';
             },
             saveQuote() {
+                this.ensureOfflineUuid();
                 fetch('<?php echo Uri::create('admin/sales/create_quote'); ?>', window.coreAppFetchOptions(this.quoteForm))
                     .then(res => res.json())
                     .then(data => {
@@ -375,8 +431,90 @@ window.onload = function() {
                         }
                         this.quotes = data.quotes || [];
                         this.stats = data.stats || this.stats;
+                        this.removeDraftByUuid(this.quoteForm.offline_uuid);
                         this.hideModal('modal-new-quote');
+                    })
+                    .catch(() => {
+                        this.saveDraftNow();
+                        alert('Sin conexion. La cotizacion quedo guardada como borrador en este equipo.');
                     });
+            },
+            newOfflineUuid() {
+                return window.CoreOffline ? window.CoreOffline.uuid('quote') : ('quote_' + Date.now());
+            },
+            ensureOfflineUuid() {
+                if (!this.quoteForm.offline_uuid) {
+                    this.quoteForm.offline_uuid = this.newOfflineUuid();
+                }
+            },
+            draftKey(uuid) {
+                return 'draft:sales_quote:' + uuid;
+            },
+            scheduleDraftSave() {
+                if (!this.quoteForm || (!this.quoteForm.party_id && (!this.quoteForm.items || this.quoteForm.items.length === 0))) return;
+                clearTimeout(this.offline.saveTimer);
+                this.offline.saveTimer = setTimeout(this.saveDraftNow, 800);
+            },
+            saveDraftNow() {
+                if (!window.CoreOffline || !this.quoteForm) return;
+                this.ensureOfflineUuid();
+                const customer = (this.options.customers || []).find(c => Number(c.value) === Number(this.quoteForm.party_id));
+                const payload = {
+                    module: 'sales',
+                    type: 'sales_quote',
+                    label: customer ? customer.label : 'Cotizacion local',
+                    data: JSON.parse(JSON.stringify(this.quoteForm)),
+                    created_at: Date.now(),
+                    updated_at: Date.now()
+                };
+                window.CoreOffline.put(this.draftKey(this.quoteForm.offline_uuid), payload).then(() => {
+                    this.offline.lastSaved = new Date().toLocaleTimeString('es-MX');
+                    this.loadDrafts();
+                });
+            },
+            loadDrafts() {
+                if (!window.CoreOffline) return;
+                window.CoreOffline.list('draft:sales_quote:').then(items => {
+                    this.offline.drafts = items.sort((a, b) => (b.updated_at || 0) - (a.updated_at || 0));
+                });
+            },
+            recoverDraft(draft) {
+                this.quoteForm = JSON.parse(JSON.stringify(draft.value.data || {}));
+                this.lineForm = { product_id: '', quantity: 1 };
+                this.hydrateOptionsFromCache();
+                this.showModal('modal-new-quote');
+            },
+            discardDraft(draft) {
+                if (!window.CoreOffline) return;
+                window.CoreOffline.remove(draft.key).then(() => this.loadDrafts());
+            },
+            removeDraftByUuid(uuid) {
+                if (!window.CoreOffline || !uuid) return;
+                window.CoreOffline.remove(this.draftKey(uuid)).then(() => this.loadDrafts());
+            },
+            syncDrafts() {
+                if (!this.offline.online || !this.offline.drafts.length) return;
+                this.offline.syncing = true;
+                const drafts = this.offline.drafts.slice();
+                const syncOne = index => {
+                    if (index >= drafts.length) {
+                        this.offline.syncing = false;
+                        this.loadData();
+                        this.loadDrafts();
+                        return;
+                    }
+                    const draft = drafts[index];
+                    fetch('<?php echo Uri::create('admin/sales/create_quote'); ?>', window.coreAppFetchOptions(draft.value.data))
+                        .then(res => res.json())
+                        .then(data => {
+                            if (!data.error) {
+                                return window.CoreOffline.remove(draft.key);
+                            }
+                        })
+                        .catch(() => null)
+                        .then(() => syncOne(index + 1));
+                };
+                syncOne(0);
             }
         }
     });

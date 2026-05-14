@@ -37,6 +37,7 @@ return array (
         31 => '032_enhance_sat_credentials_cert_files',
         32 => '033_add_supplier_onboarding_fields',
         33 => '034_enhance_purchase_approval_flow',
+        34 => '035_add_offline_sales_support',
       ),
     ),
     'module' => array(    

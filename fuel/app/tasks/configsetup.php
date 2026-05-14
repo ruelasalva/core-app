@@ -194,6 +194,9 @@ class Configsetup
                 throw new \Exception('Primero ejecuta: php oil refine migrate');
             }
         }
+        if (!\DBUtil::field_exists('core_sales_quotes', ['offline_uuid']) || !\DBUtil::table_exists('core_offline_sync_logs')) {
+            throw new \Exception('Primero ejecuta: php oil refine migrate');
+        }
 
         foreach (['core_parties', 'core_party_addresses', 'core_party_contacts'] as $table) {
             if (!\DBUtil::table_exists($table)) {
@@ -1927,6 +1930,18 @@ class Configsetup
             'summary' => 'Como se cargan analytics, pixeles, tags y captcha desde el modulo Web sin pegarlos manualmente en plantillas.',
             'content' => '<h3>Objetivo</h3><p>El frontend no debe tener codigos de analytics, pixeles, tags o captcha pegados manualmente en las vistas. Todo debe venir del modulo <strong>Web</strong> y cargarse solo cuando la integracion este activa, configurada y permitida por consentimiento.</p><h4>Regla general</h4><ul><li><strong>Analytics</strong> y <strong>Tag Manager</strong> se cargan en el head si estan activos y el visitante acepto la categoria requerida.</li><li><strong>Pixeles</strong> y scripts publicos se cargan al inicio/cierre del body segun corresponda.</li><li><strong>reCAPTCHA</strong> solo aparece en registro si existe integracion activa con llave publica y secreto guardado.</li><li>Si no hay datos capturados o la integracion esta inactiva, el frontend no carga nada.</li></ul><h4>Como configurarlo</h4><ol><li>Entra a <strong>Admin &gt; Web</strong>.</li><li>Abre la integracion correspondiente: Google Analytics, Google Tag Manager, Meta Pixel o Google reCAPTCHA.</li><li>Captura la llave publica o ID en <strong>Llave publica / ID</strong>.</li><li>Para reCAPTCHA captura tambien el secreto en <strong>Valor secreto</strong>.</li><li>Activa <strong>Frontend</strong> y define si requiere consentimiento.</li><li>Guarda y prueba el sitio publico.</li></ol><h4>Privacidad</h4><p>Las integraciones con categorias <code>analytics</code>, <code>marketing</code> o <code>personalization</code> no deben cargarse hasta que el visitante acepte esa categoria en cookies. Las necesarias pueden cargarse sin consentimiento adicional cuando sean indispensables para seguridad, como captcha.</p><h4>Productos y tags</h4><p>Los productos pueden tener tags comerciales para navegacion y filtros. Eso no significa que carguen pixeles por si solos. Si mas adelante se requieren eventos de ecommerce, deben emitirse desde un helper o servicio de tracking que respete consentimiento y configuracion Web.</p>',
             'sort_order' => 14,
+            'active' => 1,
+            'created_at' => time(),
+            'updated_at' => time(),
+        ]);
+
+        $this->upsert_seed('core_knowledge_articles', 'code', 'offline_cotizaciones_admin', [
+            'code' => 'offline_cotizaciones_admin',
+            'title' => 'Trabajo sin conexion y borradores locales',
+            'category' => 'Ventas',
+            'summary' => 'Base PWA para no perder cotizaciones cuando falla internet, usando borradores locales y offline_uuid.',
+            'content' => '<h3>Objetivo</h3><p>Evitar que una cotizacion grande se pierda si el equipo, celular o tablet pierde conexion. Core-App guarda borradores locales en el navegador y los sincroniza cuando vuelve internet.</p><h4>Conceptos</h4><ul><li><strong>offline_uuid</strong>: identificador tecnico del borrador local. No es UUID fiscal SAT y nunca debe usarse como UUID de CFDI.</li><li><strong>Borrador local</strong>: informacion guardada en IndexedDB o localStorage del dispositivo.</li><li><strong>Sincronizacion</strong>: envio posterior al servidor cuando hay conexion.</li><li><strong>PWA</strong>: instalacion ligera desde navegador con cache de archivos base.</li></ul><h4>Flujo en Ventas</h4><ol><li>Entra a <strong>Admin &gt; Ventas</strong>.</li><li>Crea una cotizacion. Mientras capturas cliente, partidas y notas, el navegador guarda borrador local.</li><li>Si se pierde internet, la pantalla muestra estado sin conexion y conserva el borrador.</li><li>Cuando vuelve la conexion, usa <strong>Sincronizar</strong>.</li><li>El servidor revisa <code>offline_uuid</code> para no duplicar cotizaciones ya enviadas.</li></ol><h4>Reglas</h4><ul><li>No guardar certificados SAT, claves ni secretos en cache local.</li><li>Solo cachear catalogos que el usuario ya puede ver por permisos.</li><li>Los borradores viven en el dispositivo; si se borra el navegador se pierden.</li><li>Los modulos nuevos deben usar nombres <code>offline_uuid</code> o <code>client_draft_uuid</code>, nunca solo <code>uuid</code> para evitar confusion con SAT.</li></ul>',
+            'sort_order' => 59,
             'active' => 1,
             'created_at' => time(),
             'updated_at' => time(),

@@ -6,7 +6,8 @@ class Model_Core_Sales_Quote extends \Orm\Model
     protected static $_primary_key = ['id'];
 
     protected static $_properties = [
-        'id', 'folio', 'source', 'cart_id', 'user_id', 'party_id', 'status', 'currency_code',
+        'id', 'folio', 'source', 'offline_uuid', 'synced_from_offline', 'offline_synced_at',
+        'cart_id', 'user_id', 'party_id', 'status', 'currency_code',
         'subtotal', 'discount_total', 'tax_total', 'total', 'customer_notes', 'internal_notes',
         'expires_at', 'created_at', 'updated_at',
     ];
