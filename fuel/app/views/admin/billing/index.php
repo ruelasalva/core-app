@@ -1,3 +1,6 @@
+<?php
+    $no_image_svg = 'data:image/svg+xml;charset=UTF-8,'.rawurlencode('<svg xmlns="http://www.w3.org/2000/svg" width="360" height="260" viewBox="0 0 360 260"><rect width="360" height="260" fill="#eef3f7"/><path d="M72 178h216l-64-82-48 60-34-44-70 66z" fill="#cbd5e1"/><circle cx="130" cy="86" r="24" fill="#cbd5e1"/><text x="180" y="226" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="20" fill="#64748b">Sin imagen</text></svg>');
+?>
 <div id="app-billing" class="card card-outline card-primary">
     <div class="card-header d-flex align-items-center">
         <h3 class="card-title mb-0">Facturacion CFDI</h3>
@@ -227,7 +230,7 @@
     </div>
 
     <div class="modal fade" id="item-modal" tabindex="-1" role="dialog">
-        <div class="modal-dialog" role="document">
+        <div class="modal-dialog modal-lg" role="document">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">{{ itemForm.id ? 'Editar concepto' : 'Nuevo concepto' }}</h5>
@@ -235,11 +238,42 @@
                 </div>
                 <div class="modal-body">
                     <div class="form-group">
-                        <label>Producto</label>
-                        <select v-model="itemForm.product_id" class="form-control">
-                            <option value="0">Concepto manual</option>
-                            <option v-for="option in options.products" :value="option.value">{{ option.label }}</option>
-                        </select>
+                        <label>Buscar producto</label>
+                        <input v-model="productSearch" class="form-control" placeholder="Escribe SKU o nombre del producto">
+                    </div>
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="border rounded bg-light d-flex align-items-center justify-content-center mb-3" style="height: 190px; overflow: hidden;">
+                                <img :src="selectedProduct.image_url || noImage" :alt="selectedProduct.label || 'Sin imagen'" style="max-width: 100%; max-height: 100%;">
+                            </div>
+                            <div class="small text-muted" v-if="selectedProduct.value">
+                                <div><strong>SKU:</strong> {{ selectedProduct.sku || 'Sin SKU' }}</div>
+                                <div><strong>Existencia:</strong> {{ selectedProduct.available_stock || 0 }}</div>
+                                <div><strong>Precio:</strong> {{ money(selectedProduct.price || 0, selectedProduct.currency_code || selectedInvoice.currency_code) }}</div>
+                            </div>
+                        </div>
+                        <div class="col-md-8">
+                            <label>Selecciona producto</label>
+                            <div class="list-group mb-3" style="max-height: 230px; overflow-y: auto;">
+                                <button type="button" class="list-group-item list-group-item-action" @click="chooseManualConcept">
+                                    Concepto manual
+                                </button>
+                                <button type="button" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
+                                    v-for="option in filteredProducts" :key="option.value" @click="chooseProduct(option)"
+                                    :class="{ active: parseInt(itemForm.product_id || 0) === parseInt(option.value) }">
+                                    <span>
+                                        <strong>{{ option.name }}</strong>
+                                        <span class="d-block small" :class="parseInt(itemForm.product_id || 0) === parseInt(option.value) ? 'text-white' : 'text-muted'">
+                                            {{ option.sku || 'Sin SKU' }} - Disponible {{ option.available_stock || 0 }}
+                                        </span>
+                                    </span>
+                                    <span>{{ money(option.price || 0, option.currency_code || 'MXN') }}</span>
+                                </button>
+                                <div class="list-group-item text-muted" v-if="filteredProducts.length === 0">
+                                    Sin coincidencias en productos.
+                                </div>
+                            </div>
+                        </div>
                     </div>
                     <div class="form-group">
                         <label>Descripcion</label>
@@ -355,6 +389,8 @@ new Vue({
         selectedInvoice: null,
         stats: {},
         options: { parties: [], products: [], currencies: [], payment_terms: [], sat_cfdi_uses: [], sat_payment_forms: [], sat_payment_methods: [], units: [], taxes: [], retentions: [], pac_connections: [] },
+        noImage: '<?php echo $no_image_svg; ?>',
+        productSearch: '',
         invoiceForm: {},
         itemForm: {},
         cancelForm: {},
@@ -364,6 +400,21 @@ new Vue({
             { key: 'ready', label: 'Listas', icon: 'bi bi-check2-circle', className: 'bg-warning' },
             { key: 'stamped', label: 'Timbradas', icon: 'bi bi-patch-check', className: 'bg-success' }
         ]
+    },
+    computed: {
+        filteredProducts: function() {
+            const q = (this.productSearch || '').toLowerCase().trim();
+            const products = this.options.products || [];
+            if (!q) return products.slice(0, 40);
+            return products.filter(product => {
+                const text = [product.label, product.name, product.sku].join(' ').toLowerCase();
+                return text.indexOf(q) !== -1;
+            }).slice(0, 40);
+        },
+        selectedProduct: function() {
+            const productId = parseInt(this.itemForm.product_id || 0);
+            return (this.options.products || []).find(product => parseInt(product.value) === productId) || {};
+        }
     },
     mounted: function() {
         this.load();
@@ -446,11 +497,28 @@ new Vue({
                 sat_product_service_code: '01010101',
                 active: true
             };
+            this.productSearch = '';
             $('#item-modal').modal('show');
         },
         editItem: function(item) {
             this.itemForm = Object.assign({}, item);
+            const product = (this.options.products || []).find(option => parseInt(option.value) === parseInt(this.itemForm.product_id || 0));
+            this.productSearch = product ? product.label : '';
             $('#item-modal').modal('show');
+        },
+        chooseManualConcept: function() {
+            this.itemForm.product_id = 0;
+            this.productSearch = '';
+        },
+        chooseProduct: function(product) {
+            this.itemForm.product_id = product.value;
+            this.itemForm.description = product.name || product.label || '';
+            this.itemForm.unit_code = product.unit_code || 'H87';
+            this.itemForm.unit_price = parseFloat(product.price || 0);
+            this.itemForm.tax_code = product.tax_code || 'iva_16';
+            this.itemForm.tax_rate = parseFloat(product.tax_rate || 0);
+            this.itemForm.sat_object_tax_code = this.itemForm.tax_rate > 0 ? '02' : '01';
+            this.productSearch = product.label || product.name || '';
         },
         saveItem: function() {
             fetch('<?php echo Uri::create('admin/billing/save_item'); ?>', window.coreAppFetchOptions(this.itemForm))

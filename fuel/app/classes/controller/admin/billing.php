@@ -519,7 +519,7 @@ class Controller_Admin_Billing extends Controller_Adminbase
         # SE REGRESAN CATALOGOS RELACIONADOS
         return [
             'parties' => $this->select_options('core_parties', 'id', 'name'),
-            'products' => $this->select_options('core_commerce_products', 'id', 'name'),
+            'products' => $this->product_options(),
             'currencies' => $this->select_options('core_catalog_currencies', 'code', 'name'),
             'payment_terms' => $this->select_options('core_catalog_payment_terms', 'id', 'name'),
             'sat_cfdi_uses' => $this->select_options('core_sat_cfdi_uses', 'code', 'name'),
@@ -530,6 +530,74 @@ class Controller_Admin_Billing extends Controller_Adminbase
             'retentions' => $this->select_options('core_catalog_retentions', 'code', 'name'),
             'pac_connections' => $this->pac_connection_options(),
         ];
+    }
+
+    /**
+     * PRODUCT OPTIONS
+     *
+     * ENTREGA PRODUCTOS CON DATOS UTILES PARA CAPTURAR CONCEPTOS.
+     *
+     * @access  protected
+     * @return  Array
+     */
+    protected function product_options()
+    {
+        if (!\DBUtil::table_exists('core_commerce_products')) {
+            return [];
+        }
+
+        $items = [];
+        $rows = \DB::select(
+                'id',
+                'sku',
+                'name',
+                'unit_code',
+                'currency_code',
+                'price',
+                'tax_code',
+                'stock_quantity',
+                'stock_reserved',
+                'main_image_path'
+            )
+            ->from('core_commerce_products')
+            ->where('active', '=', 1)
+            ->order_by('name', 'asc')
+            ->limit(300)
+            ->execute();
+
+        foreach ($rows as $row) {
+            $stock = (float) $row['stock_quantity'];
+            $reserved = (float) $row['stock_reserved'];
+            $items[] = [
+                'value' => (int) $row['id'],
+                'sku' => (string) $row['sku'],
+                'label' => trim((string) $row['name'].' '.($row['sku'] ? '('.$row['sku'].')' : '')),
+                'name' => (string) $row['name'],
+                'unit_code' => (string) $row['unit_code'],
+                'currency_code' => (string) $row['currency_code'],
+                'price' => (float) $row['price'],
+                'tax_code' => (string) $row['tax_code'],
+                'tax_rate' => $this->tax_rate((string) $row['tax_code']),
+                'stock_quantity' => $stock,
+                'stock_reserved' => $reserved,
+                'available_stock' => max(0, $stock - $reserved),
+                'image_url' => $this->media_url((string) $row['main_image_path']),
+            ];
+        }
+
+        return $items;
+    }
+
+    protected function media_url($path)
+    {
+        $path = trim((string) $path);
+        if ($path === '') {
+            return '';
+        }
+        if (preg_match('/^https?:\/\//i', $path)) {
+            return $path;
+        }
+        return \Uri::base(false).ltrim($path, '/');
     }
 
     /**

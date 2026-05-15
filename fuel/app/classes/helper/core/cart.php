@@ -277,6 +277,9 @@ class Helper_Core_Cart
         $quote = Model_Core_Sales_Quote::forge([
             'folio' => self::next_quote_folio(),
             'source' => 'frontend_cart',
+            'offline_uuid' => '',
+            'synced_from_offline' => 0,
+            'offline_synced_at' => 0,
             'cart_id' => (int) $cart->id,
             'user_id' => self::current_user_id(),
             'party_id' => (int) $party->id,
