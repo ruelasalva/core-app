@@ -372,6 +372,85 @@ class Controller_Admin_Billing extends Controller_Adminbase
         }
     }
 
+    public function action_create_from_delivery()
+    {
+        $this->require_access('billing.access[edit]');
+
+        try {
+            $val = (array) \Input::json();
+            $delivery_id = (int) \Arr::get($val, 'delivery_id', 0);
+            $delivery = \DB::select()->from('core_sales_deliveries')->where('id', '=', $delivery_id)->where('active', '=', 1)->execute()->current();
+            if (!$delivery) {
+                return $this->json_response(['error' => 'Entrega no encontrada.'], 404);
+            }
+            if ((int) $delivery['billing_invoice_id'] > 0) {
+                return $this->json_response(['error' => 'La entrega ya tiene factura.'], 422);
+            }
+
+            $party = Model_Core_Party::find((int) $delivery['party_id']);
+            $invoice = Model_Core_Billing_Invoice::forge([
+                'folio' => $this->next_invoice_folio(),
+                'invoice_type' => 'sale',
+                'party_id' => (int) $delivery['party_id'],
+                'source_module' => 'sales',
+                'source_entity_type' => 'sales_delivery',
+                'source_entity_id' => $delivery_id,
+                'issue_date' => date('Y-m-d'),
+                'due_date' => '',
+                'currency_code' => (string) $delivery['currency_code'],
+                'exchange_rate' => 1,
+                'payment_term_id' => $party ? (int) $party->payment_term_id : 0,
+                'sat_cfdi_use_code' => $party && $party->sat_cfdi_use_code ? (string) $party->sat_cfdi_use_code : 'G03',
+                'sat_payment_form_code' => '99',
+                'sat_payment_method_code' => 'PPD',
+                'pac_provider_code' => 'factura_com',
+                'status' => 'draft',
+                'notes' => 'Factura creada desde entrega '.$delivery['folio'],
+                'created_by' => (int) $this->user_id,
+                'active' => 1,
+            ]);
+            $invoice->save();
+
+            $sort = 10;
+            foreach (\DB::select()->from('core_sales_delivery_items')->where('delivery_id', '=', $delivery_id)->order_by('sort_order', 'asc')->execute() as $item) {
+                $product = $item['product_id'] ? Model_Core_Commerce_Product::find((int) $item['product_id']) : null;
+                $tax_rate = $this->tax_rate($product ? (string) $product->tax_code : 'iva_16');
+                $base = (float) $item['quantity'] * (float) $item['unit_price'];
+                $tax_amount = round($base * $tax_rate, 2);
+                Model_Core_Billing_Invoice_Item::forge([
+                    'invoice_id' => (int) $invoice->id,
+                    'product_id' => (int) $item['product_id'],
+                    'sat_product_service_code' => '01010101',
+                    'description' => (string) $item['name'],
+                    'quantity' => (float) $item['quantity'],
+                    'unit_code' => $product ? (string) $product->unit_code : 'H87',
+                    'sat_object_tax_code' => '02',
+                    'unit_price' => (float) $item['unit_price'],
+                    'discount_amount' => 0,
+                    'tax_code' => $product ? (string) $product->tax_code : 'iva_16',
+                    'tax_factor_type' => 'Tasa',
+                    'tax_rate' => $tax_rate,
+                    'tax_amount' => $tax_amount,
+                    'retention_amount' => 0,
+                    'line_total' => round($base + $tax_amount, 2),
+                    'sort_order' => $sort,
+                    'active' => 1,
+                ])->save();
+                $sort += 10;
+            }
+
+            $this->recalculate_invoice((int) $invoice->id);
+            \DB::update('core_sales_deliveries')->set(['billing_invoice_id' => (int) $invoice->id, 'updated_at' => time()])->where('id', '=', $delivery_id)->execute();
+            \DB::update('core_sales_orders')->set(['status' => 'billed', 'billed_total' => (float) $delivery['total'], 'updated_at' => time()])->where('id', '=', (int) $delivery['order_id'])->execute();
+
+            $this->log_invoice_event((int) $invoice->id, 'create_from_delivery', 'Factura creada desde entrega '.$delivery['folio'], $delivery);
+            return $this->json_response(['status' => 'ok', 'folio' => $invoice->folio, 'invoice_id' => (int) $invoice->id]);
+        } catch (\Exception $e) {
+            \Log::error('Error creando factura desde entrega: '.$e->getMessage());
+            return $this->json_response(['error' => 'No se pudo crear la factura desde entrega.'], 400);
+        }
+    }
+
     /**
      * GET INVOICES
      *
@@ -795,6 +874,12 @@ class Controller_Admin_Billing extends Controller_Adminbase
         }
         $row = \DB::select('name')->from('core_catalog_payment_terms')->where('id', '=', $id)->execute()->current();
         return $row ? (string) $row['name'] : '';
+    }
+
+    protected function tax_rate($tax_code)
+    {
+        $row = \DB::select('rate')->from('core_catalog_taxes')->where('code', '=', $tax_code)->execute()->current();
+        return $row ? (float) $row['rate'] : 0.16;
     }
 
     protected function select_options($table, $value_field, $label_field)

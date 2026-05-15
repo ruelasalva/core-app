@@ -41,6 +41,7 @@ return array (
         35 => '036_enhance_frontend_footer_cms',
         36 => '037_add_commerce_stock_quote_fields',
         37 => '038_enhance_billing_pac_cfdi',
+        38 => '039_create_sales_delivery_inventory_flow',
       ),
     ),
     'module' => array(    

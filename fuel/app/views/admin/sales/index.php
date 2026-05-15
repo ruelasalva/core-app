@@ -435,6 +435,32 @@
                             <option value="converted">Convertida</option>
                         </select>
                     </div>
+                    <div class="border rounded p-3 mb-3 bg-light">
+                        <div class="d-flex align-items-center mb-2">
+                            <h6 class="mb-0">Flujo comercial</h6>
+                            <button class="btn btn-sm btn-outline-primary ml-auto" @click="createOrderFromQuote" :disabled="selected.status === 'prequote' || (selected.orders && selected.orders.length)">
+                                Crear pedido
+                            </button>
+                        </div>
+                        <div v-if="!selected.orders || selected.orders.length === 0" class="text-muted small">Sin pedido relacionado.</div>
+                        <div v-for="order in selected.orders" :key="order.id" class="border rounded p-2 mb-2 bg-white">
+                            <div class="d-flex align-items-center">
+                                <strong>{{ order.folio }}</strong>
+                                <span class="badge badge-info ml-2">{{ order.status }}</span>
+                                <button class="btn btn-xs btn-outline-success ml-auto" @click="createDeliveryFromOrder(order)" :disabled="order.status === 'delivered' || order.status === 'closed'">
+                                    Crear entrega
+                                </button>
+                            </div>
+                            <div v-if="!order.deliveries || order.deliveries.length === 0" class="text-muted small mt-1">Sin entrega.</div>
+                            <div v-for="delivery in order.deliveries" :key="delivery.id" class="small mt-1">
+                                Entrega <strong>{{ delivery.folio }}</strong>
+                                <span class="badge badge-secondary">{{ delivery.status }}</span>
+                                <button class="btn btn-xs btn-outline-primary ml-2" @click="invoiceDelivery(delivery)" :disabled="delivery.billing_invoice_id > 0">
+                                    Facturar entrega
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                     <div v-if="selected.status === 'prequote'" class="border rounded p-3 bg-light">
                         <h6>Cerrar con precios</h6>
                         <div class="row">
@@ -628,6 +654,46 @@ window.onload = function() {
                         }
                         this.quotes = data.quotes || [];
                         this.stats = data.stats || this.stats;
+                        this.hideModal('modal-quote');
+                    });
+            },
+            createOrderFromQuote() {
+                if (!this.selected) return;
+                fetch('<?php echo Uri::create('admin/sales/create_order_from_quote'); ?>', window.coreAppFetchOptions({ id: this.selected.id }))
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.error) {
+                            alert(data.error);
+                            return;
+                        }
+                        this.quotes = data.quotes || [];
+                        this.stats = data.stats || this.stats;
+                        this.selected = this.quotes.find(item => Number(item.id) === Number(this.selected.id)) || this.selected;
+                    });
+            },
+            createDeliveryFromOrder(order) {
+                fetch('<?php echo Uri::create('admin/sales/create_delivery_from_order'); ?>', window.coreAppFetchOptions({ id: order.id }))
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.error) {
+                            alert(data.error);
+                            return;
+                        }
+                        this.quotes = data.quotes || [];
+                        this.stats = data.stats || this.stats;
+                        this.selected = this.quotes.find(item => Number(item.id) === Number(this.selected.id)) || this.selected;
+                    });
+            },
+            invoiceDelivery(delivery) {
+                fetch('<?php echo Uri::create('admin/billing/create_from_delivery'); ?>', window.coreAppFetchOptions({ delivery_id: delivery.id }))
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.error) {
+                            alert(data.error);
+                            return;
+                        }
+                        alert('Factura creada: ' + data.folio);
+                        this.loadData();
                         this.hideModal('modal-quote');
                     });
             },

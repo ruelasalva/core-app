@@ -97,6 +97,14 @@
             </a>
         </li>
         <?php endif; ?>
+        <?php if ($menu['inventory']): ?>
+        <li class="nav-item">
+            <a href="<?php echo Uri::create('admin/inventory'); ?>" class="nav-link <?php echo (Uri::segment(2) == 'inventory') ? 'active' : ''; ?>">
+                <i class="nav-icon bi bi-boxes"></i>
+                <p>Inventario</p>
+            </a>
+        </li>
+        <?php endif; ?>
         <?php if ($menu['purchases']): ?>
         <li class="nav-item">
             <a href="<?php echo Uri::create('admin/purchases'); ?>" class="nav-link <?php echo (Uri::segment(2) == 'purchases') ? 'active' : ''; ?>">

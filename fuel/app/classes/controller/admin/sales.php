@@ -366,6 +366,124 @@ class Controller_Admin_Sales extends Controller_Adminbase
         }
     }
 
+    public function post_create_order_from_quote()
+    {
+        $this->require_access('sales.access[edit]');
+
+        try {
+            $quote = Model_Core_Sales_Quote::find((int) \Arr::get((array) \Input::json(), 'id', 0));
+            if (!$quote) {
+                return $this->json_response(['error' => 'Cotizacion no encontrada.'], 404);
+            }
+            if ((int) $quote->party_id < 1 || (float) $quote->total <= 0) {
+                return $this->json_response(['error' => 'La cotizacion debe tener cliente y total para pasar a pedido.'], 422);
+            }
+            $existing = \DB::select('id')->from('core_sales_orders')->where('source_quote_id', '=', (int) $quote->id)->execute()->current();
+            if ($existing) {
+                return $this->json_response(['error' => 'Esta cotizacion ya tiene pedido.'], 422);
+            }
+
+            $order = Model_Core_Sales_Order::forge([
+                'folio' => $this->next_flow_folio('PED', 'core_sales_orders'),
+                'source_quote_id' => (int) $quote->id,
+                'party_id' => (int) $quote->party_id,
+                'status' => 'open',
+                'order_date' => date('Y-m-d'),
+                'currency_code' => (string) $quote->currency_code,
+                'subtotal' => (float) $quote->subtotal,
+                'discount_total' => (float) $quote->discount_total,
+                'tax_total' => (float) $quote->tax_total,
+                'total' => (float) $quote->total,
+                'notes' => 'Pedido creado desde cotizacion '.$quote->folio,
+                'created_by' => $this->current_user_id(),
+            ]);
+            $order->save();
+
+            foreach (\DB::select()->from('core_sales_quote_items')->where('quote_id', '=', (int) $quote->id)->order_by('sort_order', 'asc')->execute() as $row) {
+                Model_Core_Sales_Order_Item::forge([
+                    'order_id' => (int) $order->id,
+                    'quote_item_id' => (int) $row['id'],
+                    'product_id' => (int) $row['product_id'],
+                    'sku' => (string) $row['sku'],
+                    'name' => (string) $row['name'],
+                    'currency_code' => (string) $row['currency_code'],
+                    'unit_price' => (float) $row['unit_price'],
+                    'quantity' => (float) $row['quantity'],
+                    'line_total' => (float) $row['line_total'],
+                    'sort_order' => (int) $row['sort_order'],
+                ])->save();
+            }
+
+            $quote->status = 'converted';
+            $quote->save();
+            $this->audit_flow('create_order_from_quote', 'Pedido '.$order->folio.' creado desde cotizacion '.$quote->folio, 'sales_order', (int) $order->id, $order->to_array());
+
+            return $this->json_response(['status' => 'ok', 'folio' => $order->folio, 'quotes' => $this->quotes(), 'stats' => $this->stats()]);
+        } catch (\Exception $e) {
+            \Log::error('Error creando pedido desde cotizacion: '.$e->getMessage());
+            return $this->json_response(['error' => 'No se pudo crear el pedido.'], 400);
+        }
+    }
+
+    public function post_create_delivery_from_order()
+    {
+        $this->require_access('sales.access[edit]');
+
+        try {
+            $order = Model_Core_Sales_Order::find((int) \Arr::get((array) \Input::json(), 'id', 0));
+            if (!$order) {
+                return $this->json_response(['error' => 'Pedido no encontrado.'], 404);
+            }
+            if ($order->status === 'closed') {
+                return $this->json_response(['error' => 'El pedido ya esta cerrado.'], 422);
+            }
+            $warehouse_id = $this->default_warehouse_id();
+            $delivery = Model_Core_Sales_Delivery::forge([
+                'folio' => $this->next_flow_folio('ENT', 'core_sales_deliveries'),
+                'order_id' => (int) $order->id,
+                'party_id' => (int) $order->party_id,
+                'warehouse_id' => $warehouse_id,
+                'status' => 'delivered',
+                'delivery_date' => date('Y-m-d'),
+                'currency_code' => (string) $order->currency_code,
+                'total' => (float) $order->total,
+                'notes' => 'Entrega creada desde pedido '.$order->folio,
+                'created_by' => $this->current_user_id(),
+            ]);
+            $delivery->save();
+
+            foreach (\DB::select()->from('core_sales_order_items')->where('order_id', '=', (int) $order->id)->order_by('sort_order', 'asc')->execute() as $row) {
+                $pending = max(0, (float) $row['quantity'] - (float) $row['delivered_quantity']);
+                if ($pending <= 0) {
+                    continue;
+                }
+                Model_Core_Sales_Delivery_Item::forge([
+                    'delivery_id' => (int) $delivery->id,
+                    'order_item_id' => (int) $row['id'],
+                    'product_id' => (int) $row['product_id'],
+                    'sku' => (string) $row['sku'],
+                    'name' => (string) $row['name'],
+                    'quantity' => $pending,
+                    'unit_price' => (float) $row['unit_price'],
+                    'line_total' => round($pending * (float) $row['unit_price'], 2),
+                    'sort_order' => (int) $row['sort_order'],
+                ])->save();
+                \DB::update('core_sales_order_items')->set(['delivered_quantity' => (float) $row['delivered_quantity'] + $pending, 'updated_at' => time()])->where('id', '=', (int) $row['id'])->execute();
+                $this->inventory_out((int) $row['product_id'], $warehouse_id, $pending, 'sales_delivery', (int) $delivery->id, 'Salida por entrega '.$delivery->folio);
+            }
+
+            $order->status = 'delivered';
+            $order->delivered_total = (float) $order->total;
+            $order->save();
+            $this->audit_flow('create_delivery_from_order', 'Entrega '.$delivery->folio.' creada desde pedido '.$order->folio, 'sales_delivery', (int) $delivery->id, $delivery->to_array());
+
+            return $this->json_response(['status' => 'ok', 'folio' => $delivery->folio, 'quotes' => $this->quotes(), 'stats' => $this->stats()]);
+        } catch (\Exception $e) {
+            \Log::error('Error creando entrega desde pedido: '.$e->getMessage());
+            return $this->json_response(['error' => 'No se pudo crear la entrega.'], 400);
+        }
+    }
+
     /**
      * QUOTES
      *
@@ -412,11 +530,34 @@ class Controller_Admin_Sales extends Controller_Adminbase
 
         foreach ($rows as &$row) {
             $row['items'] = $this->quote_items((int) $row['id']);
+            $row['orders'] = $this->quote_orders((int) $row['id']);
             $row['created_label'] = !empty($row['created_at']) ? date('Y-m-d H:i', (int) $row['created_at']) : '';
             $row['expires_label'] = !empty($row['expires_at']) ? date('Y-m-d', (int) $row['expires_at']) : '';
         }
 
         return $rows;
+    }
+
+    protected function quote_orders($quote_id)
+    {
+        $orders = [];
+        if (!\DBUtil::table_exists('core_sales_orders')) {
+            return $orders;
+        }
+        foreach (\DB::select('id', 'folio', 'status', 'total')->from('core_sales_orders')->where('source_quote_id', '=', (int) $quote_id)->where('active', '=', 1)->execute() as $order) {
+            $order['deliveries'] = $this->order_deliveries((int) $order['id']);
+            $orders[] = $order;
+        }
+        return $orders;
+    }
+
+    protected function order_deliveries($order_id)
+    {
+        $deliveries = [];
+        foreach (\DB::select('id', 'folio', 'status', 'billing_invoice_id', 'total')->from('core_sales_deliveries')->where('order_id', '=', (int) $order_id)->where('active', '=', 1)->execute() as $delivery) {
+            $deliveries[] = $delivery;
+        }
+        return $deliveries;
     }
 
     /**
@@ -700,6 +841,83 @@ class Controller_Admin_Sales extends Controller_Adminbase
         return $prefix.str_pad(((int) $row['total']) + 1, 5, '0', STR_PAD_LEFT);
     }
 
+    protected function next_flow_folio($prefix, $table)
+    {
+        $prefix = strtoupper($prefix).'-'.date('Ymd').'-';
+        $row = \DB::select(\DB::expr('COUNT(*) as total'))
+            ->from($table)
+            ->where('folio', 'like', $prefix.'%')
+            ->execute()
+            ->current();
+        return $prefix.str_pad(((int) $row['total']) + 1, 5, '0', STR_PAD_LEFT);
+    }
+
+    protected function default_warehouse_id()
+    {
+        $row = \DB::select('id')->from('core_inventory_warehouses')->where('is_default', '=', 1)->where('active', '=', 1)->execute()->current();
+        if ($row) {
+            return (int) $row['id'];
+        }
+        $row = \DB::select('id')->from('core_inventory_warehouses')->where('active', '=', 1)->order_by('id', 'asc')->execute()->current();
+        if ($row) {
+            return (int) $row['id'];
+        }
+        $warehouse = Model_Core_Inventory_Warehouse::forge([
+            'code' => 'GENERAL',
+            'name' => 'Almacen general',
+            'is_default' => 1,
+            'active' => 1,
+        ]);
+        $warehouse->save();
+        return (int) $warehouse->id;
+    }
+
+    protected function inventory_out($product_id, $warehouse_id, $quantity, $entity_type, $entity_id, $notes)
+    {
+        if ($product_id < 1 || $quantity <= 0) {
+            return;
+        }
+        Model_Core_Inventory_Movement::forge([
+            'warehouse_id' => (int) $warehouse_id,
+            'product_id' => (int) $product_id,
+            'movement_type' => 'out',
+            'quantity' => -abs((float) $quantity),
+            'related_module' => 'sales',
+            'related_entity_type' => $entity_type,
+            'related_entity_id' => (int) $entity_id,
+            'notes' => $notes,
+            'created_by' => $this->current_user_id(),
+        ])->save();
+
+        $product = Model_Core_Commerce_Product::find((int) $product_id);
+        if ($product && property_exists($product, 'stock_quantity')) {
+            $product->stock_quantity = max(0, (float) $product->stock_quantity - abs((float) $quantity));
+            $product->stock_updated_at = time();
+            $product->save();
+        } else {
+            \DB::update('core_commerce_products')
+                ->value('stock_quantity', \DB::expr('GREATEST(0, stock_quantity - '.(float) abs($quantity).')'))
+                ->value('stock_updated_at', time())
+                ->where('id', '=', (int) $product_id)
+                ->execute();
+        }
+    }
+
+    protected function audit_flow($action, $summary, $entity_type, $entity_id, array $values)
+    {
+        if (!class_exists('Helper_Core_Audit')) {
+            return;
+        }
+        Helper_Core_Audit::log([
+            'module' => 'sales',
+            'action' => $action,
+            'entity_type' => $entity_type,
+            'entity_id' => (int) $entity_id,
+            'summary' => $summary,
+            'new_values' => $values,
+        ]);
+    }
+
     protected function current_user_id()
     {
         $user_id_data = \Auth::get_user_id();
@@ -720,6 +938,11 @@ class Controller_Admin_Sales extends Controller_Adminbase
         foreach (['core_sales_quotes', 'core_sales_quote_items'] as $table) {
             if (!\DBUtil::table_exists($table)) {
                 throw new \RuntimeException('Falta ejecutar migraciones de ventas.');
+            }
+        }
+        foreach (['core_sales_orders', 'core_sales_order_items', 'core_sales_deliveries', 'core_sales_delivery_items', 'core_inventory_warehouses', 'core_inventory_movements'] as $table) {
+            if (!\DBUtil::table_exists($table)) {
+                throw new \RuntimeException('Falta ejecutar migraciones de pedido, entrega e inventario.');
             }
         }
         if (!\DBUtil::field_exists('core_sales_quotes', ['offline_uuid'])) {
