@@ -1807,14 +1807,52 @@ class Configsetup
                 ->execute();
         }
 
-        $this->insert_if_missing('core_frontend_footer_columns', 'title', 'Core-App', [
-            'title' => 'Core-App',
-            'content' => 'Footer administrable desde Core-App.',
-            'sort_order' => 10,
-            'active' => 1,
-            'created_at' => time(),
-            'updated_at' => time(),
-        ]);
+        $footer_has_cms = \DBUtil::field_exists('core_frontend_footer_columns', ['column_type', 'settings_json']);
+        if ($footer_has_cms) {
+            $this->upsert_seed('core_frontend_footer_columns', 'title', 'Core-App', [
+                'title' => 'Core-App',
+                'column_type' => 'brand',
+                'icon' => '',
+                'url' => '',
+                'content' => '<p>Catalogo, portales y operacion comercial administrable desde Core-App.</p>',
+                'settings_json' => '',
+                'sort_order' => 10,
+                'active' => 1,
+                'created_at' => time(),
+                'updated_at' => time(),
+            ]);
+
+            $footer_columns = [
+                ['Atencion a clientes', 'contact', '<p>Horarios y medios de atencion editables.</p>', '{"items":[{"label":"Tel: 33 0000 0000","url":"tel:3300000000","icon":"bi bi-telephone"},{"label":"contacto@empresa.com","url":"mailto:contacto@empresa.com","icon":"bi bi-envelope"},{"label":"Guadalajara, Jalisco","url":"","icon":"bi bi-geo-alt"}]}', 20],
+                ['Mapa del sitio', 'links', '', '{"items":[{"label":"Productos","url":"productos","icon":""},{"label":"Empresa","url":"empresa","icon":""},{"label":"Distribucion","url":"distribucion","icon":""},{"label":"Contacto","url":"contacto","icon":""}]}', 30],
+                ['Documentos legales', 'legal', '', '{"items":[{"label":"Aviso de privacidad","url":"pagina/aviso-de-privacidad","icon":""},{"label":"Terminos y condiciones","url":"pagina/terminos-condiciones","icon":""}]}', 40],
+                ['Redes y distintivos', 'social', '<p>Tambien puedes usar tipo distintivos para sellos, certificaciones o asociaciones.</p>', '{"items":[{"label":"Facebook","url":"https://facebook.com/","icon":"bi bi-facebook"},{"label":"Instagram","url":"https://instagram.com/","icon":"bi bi-instagram"},{"label":"WhatsApp","url":"https://wa.me/520000000000","icon":"bi bi-whatsapp"}]}', 50],
+            ];
+
+            foreach ($footer_columns as $footer_column) {
+                $this->upsert_seed('core_frontend_footer_columns', 'title', $footer_column[0], [
+                    'title' => $footer_column[0],
+                    'column_type' => $footer_column[1],
+                    'icon' => '',
+                    'url' => '',
+                    'content' => $footer_column[2],
+                    'settings_json' => $footer_column[3],
+                    'sort_order' => $footer_column[4],
+                    'active' => 1,
+                    'created_at' => time(),
+                    'updated_at' => time(),
+                ]);
+            }
+        } else {
+            $this->insert_if_missing('core_frontend_footer_columns', 'title', 'Core-App', [
+                'title' => 'Core-App',
+                'content' => 'Footer administrable desde Core-App.',
+                'sort_order' => 10,
+                'active' => 1,
+                'created_at' => time(),
+                'updated_at' => time(),
+            ]);
+        }
 
         $this->insert_if_missing('core_frontend_blocks', 'code', 'home_products', [
             'code' => 'home_products',
@@ -1912,6 +1950,18 @@ class Configsetup
             'summary' => 'Manual operativo para crear paginas, agregar secciones, publicarlas en menu y validar que aparezcan en el sitio publico.',
             'content' => '<h3>Objetivo</h3><p>Este manual explica como crear o editar una pagina administrable y hacer que se vea en el frontend publico. La idea no es editar archivos PHP para cada pagina, sino administrar contenido desde el panel.</p><h4>Conceptos base</h4><ul><li><strong>Apariencia</strong>: define tema activo, nombre del sitio, logo, favicon, colores, tipografias, SEO default, imagen social, robots y CSS controlado.</li><li><strong>Pagina</strong>: define URL, titulo, SEO y estado publicado.</li><li><strong>Seccion</strong>: cada bloque visual dentro de una pagina, por ejemplo hero, texto con imagen, productos, marcas, descargas o contacto.</li><li><strong>Menu</strong>: permite que una pagina aparezca en la navegacion publica.</li><li><strong>Bloque reutilizable</strong>: contenido que puede usarse en varias paginas sin duplicarlo manualmente.</li></ul><h4>Crear o editar una pagina</h4><ol><li>Entra a <strong>Admin &gt; Frontend</strong>.</li><li>Abre el apartado <strong>Paginas</strong>.</li><li>Para una pagina nueva usa <strong>Nuevo</strong>; para modificar una existente usa el boton de editar.</li><li>Captura <strong>Titulo</strong>. El <strong>slug</strong> sera la URL publica, por ejemplo <code>empresa</code> se vera como <code>/empresa</code> o <code>/pagina/empresa</code> segun la ruta configurada.</li><li>Activa la pagina con <strong>Publicado</strong> o <strong>Activo</strong>. Si queda inactiva no debe mostrarse publicamente.</li><li>Captura SEO: titulo, descripcion y palabras clave cuando aplique.</li><li>Guarda la pagina.</li></ol><h4>Configurar branding y SEO global</h4><ol><li>Entra a <strong>Frontend &gt; Apariencia</strong>.</li><li>Captura <strong>Nombre sitio</strong>, logo y favicon. El frontend los usara automaticamente en encabezado y metadatos.</li><li>Define <strong>Sufijo SEO</strong> para completar titulos, por ejemplo <code>Mi empresa</code>.</li><li>Captura <strong>Descripcion SEO default</strong> para paginas que no tengan descripcion propia.</li><li>Configura <strong>Imagen social</strong> para compartir en redes y <strong>Robots</strong> segun si el sitio debe indexarse.</li><li>Guarda y revisa el codigo fuente del frontend para confirmar title, description, canonical y etiquetas Open Graph.</li></ol><h4>Agregar contenido con secciones</h4><ol><li>Entra a <strong>Frontend &gt; Secciones</strong>.</li><li>Crea una seccion y selecciona la pagina a la que pertenece.</li><li>Define <strong>section_key</strong> con un codigo unico, por ejemplo <code>empresa_historia</code>.</li><li>Elige el <strong>tipo de seccion</strong>. Los mas utiles al inicio son contenido, contenido con imagen, CTA, productos, marcas, descargas y contacto.</li><li>Captura titulo, subtitulo, contenido e imagen si aplica.</li><li>Usa <strong>Orden</strong> para acomodar la seccion. Numeros menores aparecen primero.</li><li>Cuando el tipo de seccion tenga opciones especiales, usa <strong>Configuracion del componente</strong> en vez de escribir JSON manualmente.</li><li>Guarda y revisa el frontend.</li></ol><h4>Publicar en el menu</h4><ol><li>Entra a <strong>Frontend &gt; Menus</strong> y confirma que exista el menu principal.</li><li>Entra a <strong>Items menu</strong>.</li><li>Crea un item con la etiqueta visible, por ejemplo <code>Empresa</code>.</li><li>Selecciona el destino. Si es pagina interna, apunta al slug de la pagina; si es URL personalizada, captura la ruta.</li><li>Activa el item y define orden.</li><li>Guarda y revisa que aparezca en la navegacion publica.</li></ol><h4>Ver la pagina en el frontend</h4><ul><li>Pagina de inicio: abre <code>/</code>.</li><li>Pagina por slug: abre <code>/pagina/slug</code>.</li><li>Alias principales: si existe ruta dedicada como <code>/empresa</code>, tambien puede abrirse directo.</li><li>Productos: abre <code>/productos</code> y revisa que productos activos se vean con precio publico base.</li></ul><h4>Checklist antes de darla por lista</h4><ul><li>La pagina esta activa.</li><li>Tiene slug limpio y sin espacios.</li><li>Tiene al menos una seccion activa.</li><li>Las secciones tienen orden correcto.</li><li>Las imagenes cargan desde una ruta publica valida.</li><li>El menu apunta a la pagina correcta.</li><li>Title, description, canonical, robots y Open Graph se ven correctamente.</li><li>La vista publica no muestra textos de prueba.</li></ul>',
             'sort_order' => 10,
+            'active' => 1,
+            'created_at' => time(),
+            'updated_at' => time(),
+        ]);
+
+        $this->upsert_seed('core_knowledge_articles', 'code', 'frontend_footer_cms', [
+            'code' => 'frontend_footer_cms',
+            'title' => 'Frontend: footer editable tipo CMS',
+            'category' => 'Frontend',
+            'summary' => 'Como administrar el footer publico con bloques de marca, contacto, links, legales, redes y distintivos sin tocar codigo.',
+            'content' => '<h3>Objetivo</h3><p>El footer del sitio publico funciona como una pieza CMS: se administra desde <strong>Admin &gt; Frontend &gt; Footer</strong> y no requiere programador para cambiar textos, enlaces, datos de contacto o redes.</p><h4>Tipos disponibles</h4><ul><li><strong>Marca / resumen</strong>: descripcion corta de la empresa o sitio.</li><li><strong>Contacto</strong>: telefono, correo, direccion, horarios o WhatsApp con iconos.</li><li><strong>Links</strong>: enlaces del mapa del sitio.</li><li><strong>Legales</strong>: aviso de privacidad, terminos, cookies u otros documentos.</li><li><strong>Redes sociales</strong>: botones circulares con iconos.</li><li><strong>Distintivos</strong>: sellos, certificaciones o mensajes de confianza.</li><li><strong>Texto libre</strong>: contenido administrable con editor enriquecido.</li></ul><h4>Como editarlo</h4><ol><li>Entra a <strong>Admin &gt; Frontend</strong>.</li><li>Selecciona <strong>Footer</strong>.</li><li>Crea o edita una columna.</li><li>Elige el <strong>Tipo</strong>.</li><li>Usa el constructor visual para agregar items con etiqueta, URL e icono.</li><li>Guarda y abre el sitio publico con <strong>Ver sitio</strong>.</li></ol><h4>Iconos</h4><p>Los iconos usan clases de Bootstrap Icons, por ejemplo <code>bi bi-telephone</code>, <code>bi bi-envelope</code>, <code>bi bi-facebook</code> o <code>bi bi-whatsapp</code>.</p><h4>Regla de crecimiento</h4><p>Si hace falta una pieza nueva del footer, primero intenta resolverla como tipo, item o bloque editable. Solo se debe tocar plantilla cuando se agrega una capacidad nueva reutilizable.</p>',
+            'sort_order' => 16,
             'active' => 1,
             'created_at' => time(),
             'updated_at' => time(),

@@ -491,11 +491,28 @@ class Controller_Frontend extends Controller_Template
     protected function get_footer_columns()
     {
         # SE BUSCAN LAS COLUMNAS ACTIVAS
-        return Model_Core_Frontend_Footer_Column::query()
+        $columns = Model_Core_Frontend_Footer_Column::query()
             ->where('active', 1)
             ->order_by('sort_order', 'asc')
             ->order_by('id', 'asc')
             ->get();
+
+        foreach ($columns as $column) {
+            $column->settings = $this->decode_settings(isset($column->settings_json) ? (string) $column->settings_json : '');
+        }
+
+        return $columns;
+    }
+
+    protected function decode_settings($json)
+    {
+        $json = trim((string) $json);
+        if ($json === '') {
+            return [];
+        }
+
+        $decoded = json_decode($json, true);
+        return is_array($decoded) ? $decoded : [];
     }
 
     /**

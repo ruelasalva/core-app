@@ -47,6 +47,7 @@
             <div class="d-flex justify-content-between align-items-center">
                 <h3 class="card-title">{{ currentDefinition.title || 'Frontend' }}</h3>
                 <div class="d-flex align-items-center">
+                    <a class="btn btn-outline-secondary btn-sm mr-2" href="<?php echo Uri::base(false); ?>" target="_blank"><i class="bi bi-eye"></i> Ver sitio</a>
                     <select class="form-control form-control-sm mr-2" v-model="currentSection">
                         <option v-for="key in sectionKeys" :key="key" :value="key">{{ definitions[key].title }}</option>
                     </select>
@@ -201,6 +202,46 @@
                         <div v-else class="text-muted">
                             Este tipo de seccion usa los campos principales. Puedes usar configuracion avanzada solo cuando el componente la necesite.
                         </div>
+                    </div>
+
+                    <div v-if="currentSection === 'footer_columns'" class="settings-card mt-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <div>
+                                <strong>Constructor visual de footer</strong>
+                                <div class="text-muted small">Usa items para links, contacto, redes, legales o distintivos sin editar JSON manual.</div>
+                            </div>
+                            <span class="badge badge-light">{{ form.column_type || 'text' }}</span>
+                        </div>
+                        <div class="btn-group btn-group-sm mb-3">
+                            <button class="btn btn-outline-secondary" @click="applyFooterPreset('contact')">Contacto</button>
+                            <button class="btn btn-outline-secondary" @click="applyFooterPreset('links')">Links</button>
+                            <button class="btn btn-outline-secondary" @click="applyFooterPreset('social')">Redes</button>
+                            <button class="btn btn-outline-secondary" @click="applyFooterPreset('legal')">Legales</button>
+                        </div>
+                        <div class="row" v-for="(item, index) in componentSettings.items" :key="'footer-' + index">
+                            <div class="col-md-3">
+                                <div class="form-group">
+                                    <label>Etiqueta</label>
+                                    <input class="form-control" v-model="item.label" @input="syncComponentSettings">
+                                </div>
+                            </div>
+                            <div class="col-md-5">
+                                <div class="form-group">
+                                    <label>URL o dato</label>
+                                    <input class="form-control" v-model="item.url" @input="syncComponentSettings">
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="form-group">
+                                    <label>Icono</label>
+                                    <input class="form-control" v-model="item.icon" placeholder="bi bi-telephone" @input="syncComponentSettings">
+                                </div>
+                            </div>
+                            <div class="col-md-1 d-flex align-items-end">
+                                <button class="btn btn-outline-danger btn-block mb-3" @click="removeSettingItem(index)"><i class="bi bi-trash"></i></button>
+                            </div>
+                        </div>
+                        <button class="btn btn-outline-primary btn-sm" @click="addFooterItem"><i class="bi bi-plus"></i> Agregar item</button>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -386,7 +427,6 @@ window.onload = function() {
                 }
             },
             syncComponentSettings() {
-                if (this.currentSection !== 'sections') return;
                 if (!this.hasVisualSettings()) return;
                 const json = Object.keys(this.componentSettings || {}).length ? JSON.stringify(this.componentSettings) : '';
                 this.$set(this.form, 'settings_json', json);
@@ -395,7 +435,7 @@ window.onload = function() {
                 }
             },
             hasVisualSettings() {
-                return this.currentSection === 'sections' && ['download_cards', 'products', 'brands', 'categories', 'cta'].includes(this.form.section_type);
+                return (this.currentSection === 'sections' && ['download_cards', 'products', 'brands', 'categories', 'cta'].includes(this.form.section_type)) || this.currentSection === 'footer_columns';
             },
             addDownloadItem() {
                 if (!this.componentSettings.items) this.$set(this.componentSettings, 'items', []);
@@ -405,6 +445,37 @@ window.onload = function() {
             removeSettingItem(index) {
                 if (!this.componentSettings.items) return;
                 this.componentSettings.items.splice(index, 1);
+                this.syncComponentSettings();
+            },
+            addFooterItem() {
+                if (!this.componentSettings.items) this.$set(this.componentSettings, 'items', []);
+                this.componentSettings.items.push({ label: '', url: '', icon: '' });
+                this.syncComponentSettings();
+            },
+            applyFooterPreset(type) {
+                this.$set(this.form, 'column_type', type);
+                const presets = {
+                    contact: [
+                        { label: 'Tel: 33 0000 0000', url: 'tel:3300000000', icon: 'bi bi-telephone' },
+                        { label: 'contacto@empresa.com', url: 'mailto:contacto@empresa.com', icon: 'bi bi-envelope' },
+                        { label: 'Guadalajara, Jalisco', url: '', icon: 'bi bi-geo-alt' }
+                    ],
+                    links: [
+                        { label: 'Productos', url: 'productos', icon: '' },
+                        { label: 'Empresa', url: 'empresa', icon: '' },
+                        { label: 'Contacto', url: 'contacto', icon: '' }
+                    ],
+                    social: [
+                        { label: 'Facebook', url: 'https://facebook.com/', icon: 'bi bi-facebook' },
+                        { label: 'Instagram', url: 'https://instagram.com/', icon: 'bi bi-instagram' },
+                        { label: 'WhatsApp', url: 'https://wa.me/520000000000', icon: 'bi bi-whatsapp' }
+                    ],
+                    legal: [
+                        { label: 'Aviso de privacidad', url: 'pagina/aviso-de-privacidad', icon: '' },
+                        { label: 'Terminos y condiciones', url: 'pagina/terminos-condiciones', icon: '' }
+                    ]
+                };
+                this.$set(this.componentSettings, 'items', presets[type] || []);
                 this.syncComponentSettings();
             },
             dynamicOptions(field) { return this.options[field.options] || []; },

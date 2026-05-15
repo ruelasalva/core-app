@@ -177,24 +177,106 @@
         .site-main { min-height: 62vh; }
         .site-footer {
             margin-top: 54px;
-            padding: 36px 0;
-            background: #111827;
+            background: #0f172a;
             color: #d8dee9;
+            border-top: 4px solid var(--core-brand);
+        }
+        .footer-top {
+            padding: 44px 0 34px;
+            background:
+                linear-gradient(135deg, rgba(255,255,255,.05), rgba(255,255,255,0) 46%),
+                #0f172a;
         }
         .footer-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 28px;
+            grid-template-columns: 1.25fr repeat(3, minmax(170px, 1fr));
+            gap: 30px;
+            align-items: start;
         }
         .footer-grid h3 {
             margin: 0 0 10px;
-            font-size: 1rem;
+            font-size: .98rem;
             color: #fff;
         }
-        .footer-grid p {
-            margin: 0;
+        .footer-grid p,
+        .footer-rich {
             color: #bcc6d3;
             font-size: .95rem;
+        }
+        .footer-rich p { margin: 0 0 8px; }
+        .footer-rich a,
+        .footer-list a,
+        .footer-contact a {
+            color: #e8eef8;
+        }
+        .footer-rich a:hover,
+        .footer-list a:hover,
+        .footer-contact a:hover { color: #fff; }
+        .footer-list {
+            display: grid;
+            gap: 8px;
+            margin: 0;
+            padding: 0;
+            list-style: none;
+            color: #bcc6d3;
+            font-size: .95rem;
+        }
+        .footer-contact {
+            display: grid;
+            gap: 10px;
+            color: #bcc6d3;
+            font-size: .95rem;
+        }
+        .footer-contact-item {
+            display: flex;
+            gap: 9px;
+            align-items: flex-start;
+        }
+        .footer-contact-item i { color: var(--core-accent); margin-top: 3px; }
+        .footer-social {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .footer-social a {
+            width: 36px;
+            height: 36px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid rgba(255,255,255,.16);
+            border-radius: 999px;
+            color: #fff;
+            background: rgba(255,255,255,.06);
+        }
+        .footer-social a:hover {
+            background: var(--core-brand);
+            border-color: var(--core-brand);
+        }
+        .footer-badges {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .footer-badge {
+            border: 1px solid rgba(255,255,255,.16);
+            border-radius: 8px;
+            padding: 8px 10px;
+            color: #e8eef8;
+            background: rgba(255,255,255,.05);
+            font-size: .86rem;
+        }
+        .footer-bottom {
+            border-top: 1px solid rgba(255,255,255,.10);
+            padding: 16px 0;
+            color: #94a3b8;
+            font-size: .9rem;
+        }
+        .footer-bottom .site-shell {
+            display: flex;
+            justify-content: space-between;
+            gap: 16px;
+            flex-wrap: wrap;
         }
         @media (max-width: 720px) {
             .site-nav {
@@ -207,6 +289,9 @@
                 flex-wrap: wrap;
                 gap: 12px;
             }
+            .footer-grid {
+                grid-template-columns: 1fr;
+            }
         }
         <?php if ($theme && !empty($theme->custom_css)): ?>
         <?php echo $theme->custom_css; ?>
@@ -218,11 +303,22 @@
             return Uri::base(false);
         }
 
-        if (preg_match('/^https?:\/\//i', $url)) {
+        if ($url === '#' || preg_match('/^[a-z][a-z0-9+.-]*:/i', $url)) {
             return $url;
         }
 
         return Uri::base(false).ltrim($url, '/');
+    };
+    $footer_settings = function ($column) {
+        return (!empty($column->settings) && is_array($column->settings)) ? $column->settings : array();
+    };
+    $footer_items = function ($column) use ($footer_settings) {
+        $settings = $footer_settings($column);
+        return !empty($settings['items']) && is_array($settings['items']) ? $settings['items'] : array();
+    };
+    $footer_icon = function ($icon, $fallback = 'bi bi-chevron-right') {
+        $icon = trim((string) $icon);
+        return $icon !== '' ? $icon : $fallback;
     };
     ?>
 </head>
@@ -266,12 +362,56 @@
     </main>
 
     <footer class="site-footer">
+        <div class="footer-top">
         <div class="site-shell footer-grid">
             <?php if (!empty($footer_columns)): ?>
                 <?php foreach ($footer_columns as $column): ?>
+                <?php $type = !empty($column->column_type) ? (string) $column->column_type : 'text'; ?>
                 <section>
                     <h3><?php echo e($column->title); ?></h3>
-                    <p><?php echo nl2br(e($column->content)); ?></p>
+                    <?php if ($type === 'links' || $type === 'legal'): ?>
+                        <ul class="footer-list">
+                            <?php foreach ($footer_items($column) as $item): ?>
+                            <?php if (empty($item['label'])) continue; ?>
+                            <li><a href="<?php echo e($public_url(\Arr::get($item, 'url', '#'))); ?>"><?php echo e($item['label']); ?></a></li>
+                            <?php endforeach; ?>
+                        </ul>
+                    <?php elseif ($type === 'contact'): ?>
+                        <div class="footer-contact">
+                            <?php foreach ($footer_items($column) as $item): ?>
+                            <?php if (empty($item['label'])) continue; ?>
+                            <div class="footer-contact-item">
+                                <i class="<?php echo e($footer_icon(\Arr::get($item, 'icon', ''), 'bi bi-info-circle')); ?>"></i>
+                                <?php if (!empty($item['url'])): ?>
+                                <a href="<?php echo e($public_url($item['url'])); ?>"><?php echo e($item['label']); ?></a>
+                                <?php else: ?>
+                                <span><?php echo e($item['label']); ?></span>
+                                <?php endif; ?>
+                            </div>
+                            <?php endforeach; ?>
+                            <?php if (!empty($column->content)): ?><div class="footer-rich"><?php echo $column->content; ?></div><?php endif; ?>
+                        </div>
+                    <?php elseif ($type === 'social'): ?>
+                        <div class="footer-social">
+                            <?php foreach ($footer_items($column) as $item): ?>
+                            <?php if (empty($item['url'])) continue; ?>
+                            <a href="<?php echo e($public_url($item['url'])); ?>" target="_blank" rel="noopener" aria-label="<?php echo e(\Arr::get($item, 'label', 'Red social')); ?>">
+                                <i class="<?php echo e($footer_icon(\Arr::get($item, 'icon', ''), 'bi bi-share')); ?>"></i>
+                            </a>
+                            <?php endforeach; ?>
+                        </div>
+                        <?php if (!empty($column->content)): ?><div class="footer-rich" style="margin-top: 12px;"><?php echo $column->content; ?></div><?php endif; ?>
+                    <?php elseif ($type === 'badges'): ?>
+                        <div class="footer-badges">
+                            <?php foreach ($footer_items($column) as $item): ?>
+                            <?php if (empty($item['label'])) continue; ?>
+                            <span class="footer-badge"><i class="<?php echo e($footer_icon(\Arr::get($item, 'icon', ''), 'bi bi-patch-check')); ?>"></i> <?php echo e($item['label']); ?></span>
+                            <?php endforeach; ?>
+                        </div>
+                        <?php if (!empty($column->content)): ?><div class="footer-rich" style="margin-top: 12px;"><?php echo $column->content; ?></div><?php endif; ?>
+                    <?php else: ?>
+                        <div class="footer-rich"><?php echo $column->content; ?></div>
+                    <?php endif; ?>
                 </section>
                 <?php endforeach; ?>
             <?php else: ?>
@@ -280,6 +420,13 @@
                     <p>&copy; <?php echo date('Y'); ?> Core-App. Todos los derechos reservados.</p>
                 </section>
             <?php endif; ?>
+        </div>
+        </div>
+        <div class="footer-bottom">
+            <div class="site-shell">
+                <span>&copy; <?php echo date('Y'); ?> <?php echo e($site_name); ?>. Todos los derechos reservados.</span>
+                <span>Sitio administrable desde Core-App.</span>
+            </div>
         </div>
     </footer>
 
