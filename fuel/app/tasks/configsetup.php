@@ -492,6 +492,24 @@ class Configsetup
             'created_at' => time(),
             'updated_at' => time(),
         ]);
+
+        $this->upsert_seed('core_notification_events', 'code', 'sales.portal_quote_requested', [
+            'code' => 'sales.portal_quote_requested',
+            'name' => 'Cotizacion solicitada por cliente',
+            'description' => 'Un cliente envio una solicitud de cotizacion desde su portal.',
+            'title_template' => 'Nueva cotizacion de cliente',
+            'message_template' => '{{message}}',
+            'url_template' => 'admin/sales',
+            'icon' => 'bi bi-receipt',
+            'priority' => 2,
+            'notify_internal' => 1,
+            'notify_email' => 0,
+            'email_role' => 'system',
+            'email_template_code' => 'system_notification',
+            'active' => 1,
+            'created_at' => time(),
+            'updated_at' => time(),
+        ]);
     }
 
     /**
@@ -1954,6 +1972,18 @@ class Configsetup
             'summary' => 'Funcionamiento del carrito publico, relacion con cliente, listas de precio y siguiente conversion a cotizacion o pedido.',
             'content' => '<h3>Objetivo</h3><p>El carrito base permite que un cliente web agregue productos publicados y revise cantidades antes de convertirlos en cotizacion o pedido. Es una capa intermedia: no factura, no cobra y no reserva inventario.</p><h4>Como funciona</h4><ul><li>El carrito se identifica por token anonimo y, cuando el usuario inicia sesion, se vincula al usuario y tercero cliente.</li><li>Los productos se agregan desde la ficha del producto cuando el cliente puede ver precio.</li><li>El precio se toma de la lista de precios del tercero cliente; si no hay precio especifico, usa precio base del producto.</li><li>Las cantidades se pueden actualizar o eliminar desde <code>/carrito</code>.</li><li>Al solicitar cotizacion se genera un folio <code>COT-AAAAMMDD-00001</code> y el carrito queda convertido.</li></ul><h4>Experiencia AJAX</h4><ul><li>La ficha de producto agrega al carrito por AJAX cuando el navegador lo soporta.</li><li>El contador del carrito se actualiza sin recargar la pagina.</li><li>Si el visitante no tiene sesion, se muestra aviso y redireccion a acceso.</li><li>Si JavaScript falla, el formulario conserva el POST tradicional con CSRF.</li></ul><h4>Seguimiento</h4><ul><li>El cliente puede ver sus cotizaciones en <strong>Mi cuenta</strong>.</li><li>Administracion puede crearlas manualmente desde <strong>Admin &gt; Ventas</strong> cuando la solicitud llegue por telefono, correo o mostrador.</li><li>Administracion puede revisarlas desde <strong>Admin &gt; Ventas</strong>, abrir el detalle, revisar partidas y guardar notas internas.</li><li>Los estados base son <code>requested</code>, <code>reviewed</code>, <code>approved</code>, <code>rejected</code> y <code>converted</code>.</li></ul><h4>Reglas actuales</h4><ul><li>La cotizacion queda en estado <code>requested</code> para revision comercial.</li><li>No descuenta inventario porque aun no existe modulo de stock.</li><li>No procesa pagos; pagos y pasarelas deben conectarse despues desde Integraciones/Pagos.</li><li>No emite eventos ecommerce de analytics hasta que se defina tracking con consentimiento.</li></ul><h4>Siguiente crecimiento</h4><ol><li>Crear administracion completa de cotizaciones y pedidos.</li><li>Permitir aprobar/rechazar cotizaciones desde portal.</li><li>Agregar direcciones fiscales/envio desde Mi cuenta.</li><li>Relacionar pedido con pagos, ventas, facturacion y documentos.</li></ol>',
             'sort_order' => 15,
+            'active' => 1,
+            'created_at' => time(),
+            'updated_at' => time(),
+        ]);
+
+        $this->upsert_seed('core_knowledge_articles', 'code', 'portal_clientes_estado_cotizaciones', [
+            'code' => 'portal_clientes_estado_cotizaciones',
+            'title' => 'Portal de clientes: CFDI, estado de cuenta y cotizaciones',
+            'category' => 'Portales',
+            'summary' => 'Uso operativo del portal de clientes para consultar CFDI visibles, saldos, pagos y solicitar cotizaciones.',
+            'content' => '<h3>Objetivo</h3><p>El portal de clientes concentra la informacion que el cliente puede consultar sin entrar al panel administrativo: estado de cuenta, CFDI visibles, cotizaciones y seguimiento basico.</p><h4>Acceso y seguridad</h4><ul><li>El cliente entra por <code>/clientes</code> con un usuario vinculado a un tercero mediante Portales.</li><li>La informacion se filtra por <code>party_id</code>; no se usa el UUID SAT para permisos.</li><li>Los CFDI solo aparecen si estan marcados como visibles para cliente.</li><li>El portal no muestra clientes de otros departamentos ni otros terceros.</li></ul><h4>Estado de cuenta</h4><ul><li>Muestra facturas de venta registradas en Facturacion/Billing.</li><li>Calcula saldo pendiente y saldo vencido con base en vencimiento y saldo por cobrar.</li><li>Muestra pagos recibidos vinculados al tercero cliente.</li></ul><h4>CFDI</h4><ul><li>Muestra documentos emitidos al cliente desde SAT CFDI cuando <code>portal_visible_customer</code> esta activo.</li><li>El UUID visible es fiscal y solo sirve como referencia del comprobante.</li><li>Ventas y facturacion podran relacionar despues esos CFDI con pedidos, pagos y estado de cuenta.</li></ul><h4>Cotizaciones</h4><ul><li>El cliente puede seleccionar productos publicados, cantidad y comentarios.</li><li>El sistema crea una cotizacion en Ventas con origen <code>portal_clientes</code> y estado <code>requested</code>.</li><li>Administracion recibe una notificacion para revisar, ajustar, aprobar o convertir la solicitud.</li><li>El seguimiento visible muestra folio, estado, vencimiento, total y partidas.</li></ul><h4>Siguiente crecimiento</h4><ol><li>Agregar aprobacion/rechazo visible al cliente cuando Ventas tenga flujo fino.</li><li>Relacionar cotizacion convertida con pedido, factura y pago.</li><li>Permitir descarga controlada de PDF/XML desde Documentos/SAT.</li><li>Agregar reglas por departamento o vendedor cuando se cierre la granularidad comercial.</li></ol>',
+            'sort_order' => 36,
             'active' => 1,
             'created_at' => time(),
             'updated_at' => time(),

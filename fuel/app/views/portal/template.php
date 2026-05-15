@@ -6,6 +6,7 @@
     <title><?php echo e(isset($title) ? $title : $portal_name); ?> | Core-App</title>
     <?php echo Asset::css('adminlte.min.css'); ?>
     <?php echo Asset::css('bootstrap-icons.css'); ?>
+    <?php echo Asset::js('vue.min.js'); ?>
     <style>
         :root {
             --portal-primary: <?php echo $branding ? e($branding->primary_color) : '#0d6efd'; ?>;
@@ -35,6 +36,11 @@
                 <li class="nav-item">
                     <a class="nav-link <?php echo Uri::segment(2) == 'cfdi' ? 'active' : ''; ?>" href="<?php echo Uri::create($portal_code.'/cfdi'); ?>">CFDI</a>
                 </li>
+                <?php if ($portal_code === 'clientes'): ?>
+                <li class="nav-item">
+                    <a class="nav-link <?php echo Uri::segment(2) == 'quotes' ? 'active' : ''; ?>" href="<?php echo Uri::create($portal_code.'/quotes'); ?>">Cotizaciones</a>
+                </li>
+                <?php endif; ?>
                 <?php if ($portal_code === 'proveedores'): ?>
                 <li class="nav-item">
                     <a class="nav-link <?php echo Uri::segment(2) == 'compras' ? 'active' : ''; ?>" href="<?php echo Uri::create($portal_code.'/compras'); ?>">Compras</a>
