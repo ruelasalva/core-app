@@ -67,6 +67,35 @@ class Controller_Admin_Sales extends Controller_Adminbase
     }
 
     /**
+     * PRODUCT SEARCH
+     *
+     * BUSQUEDA LIGERA DE PRODUCTOS PARA CAPTURA RAPIDA.
+     *
+     * @access  public
+     * @return  Response
+     */
+    public function action_product_search()
+    {
+        try {
+            $this->assert_schema_ready();
+
+            return $this->json_response([
+                'products' => $this->product_options([
+                    'q' => trim((string) \Input::get('q', '')),
+                    'brand_id' => (int) \Input::get('brand_id', 0),
+                    'category_id' => (int) \Input::get('category_id', 0),
+                    'stock' => trim((string) \Input::get('stock', '')),
+                    'limit' => (int) \Input::get('limit', 25),
+                ]),
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error buscando productos para cotizacion: '.$e->getMessage());
+            return $this->json_response(['error' => 'No se pudo buscar productos.'], 500);
+        }
+    }
+
+
+    /**
      * CREATE QUOTE
      *
      * CREA UNA COTIZACION MANUAL DESDE ADMINISTRACION.
@@ -462,7 +491,7 @@ class Controller_Admin_Sales extends Controller_Adminbase
         # SE ENTREGAN CLIENTES Y PRODUCTOS ACTIVOS
         return [
             'customers' => $this->select_rows('core_parties', 'id', 'name', ['party_type' => 'customer']),
-            'products' => $this->product_options(),
+            'products' => $this->product_options(['limit' => 60]),
             'brands' => $this->select_rows('core_commerce_brands', 'id', 'name'),
             'categories' => $this->select_rows('core_commerce_categories', 'id', 'name'),
         ];
@@ -476,11 +505,12 @@ class Controller_Admin_Sales extends Controller_Adminbase
      * @access  protected
      * @return  Array
      */
-    protected function product_options()
+    protected function product_options(array $filters = [])
     {
         # SE LISTAN PRODUCTOS ACTIVOS
         $items = [];
-        $rows = \DB::select(
+        $limit = min(120, max(10, (int) \Arr::get($filters, 'limit', 60)));
+        $query = \DB::select(
                 ['p.id', 'id'],
                 ['p.sku', 'sku'],
                 ['p.name', 'name'],
@@ -500,8 +530,30 @@ class Controller_Admin_Sales extends Controller_Adminbase
             ->where('p.active', '=', 1)
             ->where('p.published', '=', 1)
             ->order_by('p.name', 'asc')
-            ->limit(500)
-            ->execute();
+            ->limit($limit);
+
+        $q = trim((string) \Arr::get($filters, 'q', ''));
+        if ($q !== '') {
+            $query->and_where_open()
+                ->where('p.name', 'like', '%'.$q.'%')
+                ->or_where('p.sku', 'like', '%'.$q.'%')
+                ->or_where('b.name', 'like', '%'.$q.'%')
+                ->or_where('c.name', 'like', '%'.$q.'%')
+                ->and_where_close();
+        }
+        if ((int) \Arr::get($filters, 'brand_id', 0) > 0) {
+            $query->where('p.brand_id', '=', (int) \Arr::get($filters, 'brand_id', 0));
+        }
+        if ((int) \Arr::get($filters, 'category_id', 0) > 0) {
+            $query->where('p.category_id', '=', (int) \Arr::get($filters, 'category_id', 0));
+        }
+        if (\Arr::get($filters, 'stock', '') === 'available') {
+            $query->where(\DB::expr('(p.stock_quantity - p.stock_reserved)'), '>', 0);
+        } elseif (\Arr::get($filters, 'stock', '') === 'zero') {
+            $query->where(\DB::expr('(p.stock_quantity - p.stock_reserved)'), '<=', 0);
+        }
+
+        $rows = $query->execute();
 
         foreach ($rows as $row) {
             $items[] = [

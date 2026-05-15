@@ -16,8 +16,9 @@
         .quote-search-result img { width: 52px; height: 42px; object-fit: cover; border-radius: 5px; border: 1px solid #dde3ea; }
         .quote-selected-product { display: grid; grid-template-columns: 132px 1fr; gap: 14px; align-items: start; min-height: 132px; }
         .quote-selected-product img { width: 132px; height: 112px; object-fit: cover; border: 1px solid #dde3ea; border-radius: 6px; background: #eef3f7; }
+        .quote-items-panel { background: #fff; border: 1px solid #e0e6ef; border-radius: 6px; padding: 12px; margin-bottom: 14px; }
         .quote-workbench { display: grid; grid-template-columns: minmax(0, 1.25fr) 420px; gap: 16px; }
-        .quote-product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; max-height: 42vh; overflow: auto; padding-right: 4px; }
+        .quote-product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; max-height: 52vh; overflow: auto; padding-right: 4px; }
         .quote-product-card { border: 1px solid #dde3ea; border-radius: 8px; background: #fff; overflow: hidden; cursor: pointer; transition: border-color .15s ease, box-shadow .15s ease; }
         .quote-product-card:hover, .quote-product-card.active { border-color: #007bff; box-shadow: 0 6px 16px rgba(15,23,42,.10); }
         .quote-product-card img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: #eef3f7; }
@@ -30,7 +31,7 @@
         .price-hidden .money-cell, .price-hidden .price-text { display: none; }
         .range-chip { display: inline-block; border: 1px solid #dee2e6; border-radius: 999px; padding: 2px 7px; margin: 2px 2px 0 0; font-size: .72rem; color: #495057; background: #f8f9fa; cursor: pointer; }
         .range-chip:hover { border-color: #007bff; color: #0056b3; }
-        @media (max-width: 1100px) { .quote-workbench { grid-template-columns: 1fr; } .quote-cart { position: static; } }
+        @media (max-width: 1100px) { .quote-workbench { grid-template-columns: 1fr; } .quote-cart { position: static; } .quote-selected-product { grid-template-columns: 1fr; } }
     </style>
     <div class="row">
         <div class="col-lg-3">
@@ -133,7 +134,6 @@
                         <td>{{ quote.created_label }}</td>
                         <td>
                             <div v-for="item in quote.items" :key="item.sku + item.name" class="small d-flex align-items-center mb-1">
-                                <img class="quote-thumb mr-2" :src="item.image_url || noImage" :alt="item.name">
                                 <span>{{ item.quantity }} x {{ item.name }}</span>
                             </div>
                         </td>
@@ -198,7 +198,7 @@
 
                     <h6 class="quote-section-title quote-section-values">Valores generales / Impuestos, Retenciones, Monedas, Descuentos</h6>
                     <h6 class="quote-section-title quote-section-products">Productos y servicios</h6>
-                    <div class="quote-product-capture" :class="quoteForm.quote_mode === 'prequote' ? 'price-hidden' : ''">
+                    <div class="quote-product-capture" v-if="quoteForm.quote_mode === 'quote'">
                         <div class="row">
                             <div class="col-md-2">
                                 <label>Tipo</label>
@@ -210,13 +210,13 @@
                             <div class="col-md-5">
                                 <label>Buscar producto/servicio</label>
                                 <div class="quote-search-wrap">
-                                    <input class="form-control" v-model="lineForm.product_query" @input="lineForm.product_id = ''" @focus="lineForm.search_open = true" @keydown.enter.prevent="selectFirstSearchResult" placeholder="Buscar producto...">
+                                    <input class="form-control" v-model="lineForm.product_query" @input="onProductSearchInput" @focus="lineForm.search_open = true" @keydown.enter.prevent="selectFirstSearchResult" placeholder="Buscar producto...">
                                     <div class="quote-search-results" v-if="lineForm.search_open && productSearchResults.length">
                                         <button type="button" class="quote-search-result" v-for="product in productSearchResults" :key="product.value" @mousedown.prevent="selectProduct(product)">
                                             <img :src="product.image_url || noImage" :alt="product.label">
                                             <span>
                                                 <strong>{{ product.label }}</strong>
-                                                <small class="d-block text-muted">{{ product.brand_name || 'Sin marca' }} · {{ product.category_name || 'Sin categoria' }}</small>
+                                                <small class="d-block text-muted">{{ product.brand_name || 'Sin marca' }} / {{ product.category_name || 'Sin categoria' }}</small>
                                             </span>
                                             <small class="text-right">Exist. {{ money(product.available_stock) }}</small>
                                         </button>
@@ -262,7 +262,26 @@
                         </div>
                     </div>
 
-                    <div class="quote-workbench" :class="quoteForm.quote_mode === 'prequote' ? 'price-hidden' : ''">
+                    <div class="quote-items-panel" v-if="quoteForm.quote_mode === 'quote'">
+                        <table class="table table-sm table-bordered mb-2" v-if="quoteForm.items.length">
+                            <thead><tr><th>Tipo</th><th>Codigo</th><th>Descripcion</th><th>Cantidad</th><th>Precio unitario</th><th>Total</th><th>Acciones</th></tr></thead>
+                            <tbody>
+                                <tr v-for="(item, index) in quoteForm.items" :key="index">
+                                    <td>Producto</td>
+                                    <td>{{ productById(item.product_id).sku || '' }}</td>
+                                    <td>{{ productLabel(item.product_id) }}</td>
+                                    <td><input class="form-control form-control-sm" type="number" min="1" step="1" v-model.number="item.quantity"></td>
+                                    <td>{{ productCurrency(item.product_id) }} {{ money(productPrice(item.product_id, item.quantity)) }}</td>
+                                    <td>{{ productCurrency(item.product_id) }} {{ money(lineTotal(item)) }}</td>
+                                    <td class="text-center"><button class="btn btn-xs btn-danger" @click="removeLine(index)">Quitar</button></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        <div v-else class="text-center text-muted p-3 border rounded">Sin productos agregados.</div>
+                        <div class="text-right border-top pt-2"><strong>Total estimado: {{ quoteCurrency }} {{ money(quoteTotal) }}</strong></div>
+                    </div>
+
+                    <div class="quote-workbench price-hidden" v-if="quoteForm.quote_mode === 'prequote'">
                         <div>
                             <div class="border rounded p-2 mb-2">
                                 <div class="row">
@@ -272,6 +291,7 @@
                                     <div class="col-md-2"><select class="form-control form-control-sm" v-model="filters.stock"><option value="">Existencia</option><option value="available">Disponible</option><option value="zero">Sin existencia</option></select></div>
                                 </div>
                                 <div class="mt-2">
+                                    <button class="btn btn-xs btn-outline-primary mr-1" @click="refreshCatalog">Buscar catalogo</button>
                                     <button class="btn btn-xs btn-outline-secondary mr-1" @click="addFilteredProducts">Agregar filtrados</button>
                                     <button class="btn btn-xs btn-outline-secondary mr-1" @click="addBrandProducts" :disabled="!filters.brand_id">Agregar marca</button>
                                     <button class="btn btn-xs btn-outline-secondary mr-1" @click="addCategoryProducts" :disabled="!filters.category_id">Agregar categoria</button>
@@ -450,9 +470,10 @@ window.onload = function() {
             stats: { quotes: 0, prequote: 0, requested: 0, reviewed: 0, approved: 0, rejected: 0 },
             options: { customers: [], products: [], brands: [], categories: [] },
             quoteForm: { party_id: '', quote_mode: 'quote', items: [], customer_notes: '', internal_notes: '', offline_uuid: '' },
-            lineForm: { product_id: '', product_query: '', product_type: 'product', quantity: 1, search_open: false },
+            lineForm: { product_id: '', product_query: '', product_type: 'product', quantity: 1, search_open: false, search_results: [] },
             closeForm: { party_id: '' },
             filters: { q: '', brand_id: '', category_id: '', stock: '' },
+            searchTimer: null,
             noImage: <?php echo json_encode($no_image_svg); ?>,
             offline: { online: navigator.onLine, drafts: [], syncing: false, saveTimer: null, lastSaved: '' }
         },
@@ -469,17 +490,7 @@ window.onload = function() {
                 });
             },
             productSearchResults() {
-                const q = (this.lineForm.product_query || '').toLowerCase().trim();
-                if (q.length < 2) return [];
-                return (this.options.products || []).filter(product => {
-                    const haystack = [
-                        product.label || '',
-                        product.sku || '',
-                        product.brand_name || '',
-                        product.category_name || ''
-                    ].join(' ').toLowerCase();
-                    return haystack.indexOf(q) >= 0;
-                }).slice(0, 12);
+                return this.lineForm.search_results || [];
             },
             selectedProduct() {
                 return this.productById(this.lineForm.product_id);
@@ -632,20 +643,69 @@ window.onload = function() {
             },
             newQuote() {
                 this.quoteForm = { party_id: '', quote_mode: 'quote', items: [], customer_notes: '', internal_notes: '', offline_uuid: this.newOfflineUuid() };
-                this.lineForm = { product_id: '', product_query: '', product_type: 'product', quantity: 1, search_open: false };
+                this.lineForm = { product_id: '', product_query: '', product_type: 'product', quantity: 1, search_open: false, search_results: [] };
                 this.hydrateOptionsFromCache();
                 this.showModal('modal-new-quote');
             },
             newPrequote() {
                 this.quoteForm = { party_id: '', quote_mode: 'prequote', items: [], customer_notes: '', internal_notes: 'Precotizacion sin precios para mostrar catalogo al cliente.', offline_uuid: this.newOfflineUuid() };
-                this.lineForm = { product_id: '', product_query: '', product_type: 'product', quantity: 1, search_open: false };
+                this.lineForm = { product_id: '', product_query: '', product_type: 'product', quantity: 1, search_open: false, search_results: [] };
                 this.hydrateOptionsFromCache();
                 this.showModal('modal-new-quote');
+            },
+            onProductSearchInput() {
+                this.lineForm.product_id = '';
+                this.lineForm.search_open = true;
+                clearTimeout(this.searchTimer);
+                const q = (this.lineForm.product_query || '').trim();
+                if (q.length < 2) {
+                    this.lineForm.search_results = [];
+                    return;
+                }
+                this.searchTimer = setTimeout(() => this.searchProducts(q), 220);
+            },
+            searchProducts(q) {
+                const url = '<?php echo Uri::create('admin/sales/product_search'); ?>'
+                    + '?q=' + encodeURIComponent(q)
+                    + '&limit=25';
+                fetch(url)
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.error) return;
+                        this.lineForm.search_results = data.products || [];
+                        this.mergeProducts(data.products || []);
+                    });
+            },
+            mergeProducts(products) {
+                products.forEach(product => {
+                    const exists = (this.options.products || []).some(item => Number(item.value) === Number(product.value));
+                    if (!exists) {
+                        this.options.products.push(product);
+                    }
+                });
+            },
+            refreshCatalog() {
+                const url = '<?php echo Uri::create('admin/sales/product_search'); ?>'
+                    + '?q=' + encodeURIComponent(this.filters.q || '')
+                    + '&brand_id=' + encodeURIComponent(this.filters.brand_id || '')
+                    + '&category_id=' + encodeURIComponent(this.filters.category_id || '')
+                    + '&stock=' + encodeURIComponent(this.filters.stock || '')
+                    + '&limit=120';
+                fetch(url)
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.error) {
+                            alert(data.error);
+                            return;
+                        }
+                        this.options.products = data.products || [];
+                    });
             },
             selectProduct(product) {
                 this.lineForm.product_id = product.value;
                 this.lineForm.product_query = product.label;
                 this.lineForm.search_open = false;
+                this.mergeProducts([product]);
             },
             selectFirstSearchResult() {
                 if (this.productSearchResults.length) {
@@ -661,7 +721,7 @@ window.onload = function() {
                     product_id: this.lineForm.product_id,
                     quantity: this.lineForm.quantity || 1
                 });
-                this.lineForm = { product_id: '', product_query: '', product_type: 'product', quantity: 1, search_open: false };
+                this.lineForm = { product_id: '', product_query: '', product_type: 'product', quantity: 1, search_open: false, search_results: [] };
             },
             quickAdd(product) {
                 this.quoteForm.items.push({ product_id: product.value, quantity: this.lineForm.quantity || 1 });
@@ -678,11 +738,29 @@ window.onload = function() {
             addBrandProducts() {
                 const brandId = this.selectedProduct.brand_id || this.filters.brand_id;
                 if (!brandId) return;
-                this.filteredProducts.filter(product => Number(product.brand_id) === Number(brandId)).forEach(product => this.quoteForm.items.push({ product_id: product.value, quantity: this.lineForm.quantity || 1 }));
+                const url = '<?php echo Uri::create('admin/sales/product_search'); ?>'
+                    + '?brand_id=' + encodeURIComponent(brandId)
+                    + '&limit=120';
+                fetch(url)
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.error) return;
+                        this.mergeProducts(data.products || []);
+                        (data.products || []).forEach(product => this.quoteForm.items.push({ product_id: product.value, quantity: this.lineForm.quantity || 1 }));
+                    });
             },
             addCategoryProducts() {
                 if (!this.filters.category_id) return;
-                this.filteredProducts.filter(product => Number(product.category_id) === Number(this.filters.category_id)).forEach(product => this.quoteForm.items.push({ product_id: product.value, quantity: this.lineForm.quantity || 1 }));
+                const url = '<?php echo Uri::create('admin/sales/product_search'); ?>'
+                    + '?category_id=' + encodeURIComponent(this.filters.category_id)
+                    + '&limit=120';
+                fetch(url)
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.error) return;
+                        this.mergeProducts(data.products || []);
+                        (data.products || []).forEach(product => this.quoteForm.items.push({ product_id: product.value, quantity: this.lineForm.quantity || 1 }));
+                    });
             },
             clearFilters() {
                 this.filters = { q: '', brand_id: '', category_id: '', stock: '' };
