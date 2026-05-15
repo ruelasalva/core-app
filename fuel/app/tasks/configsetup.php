@@ -1989,6 +1989,18 @@ class Configsetup
             'updated_at' => time(),
         ]);
 
+        $this->upsert_seed('core_knowledge_articles', 'code', 'portal_clientes_exportacion_catalogo', [
+            'code' => 'portal_clientes_exportacion_catalogo',
+            'title' => 'Portal de clientes: exportacion e imagenes de productos',
+            'category' => 'Portales',
+            'summary' => 'Ajustes de usabilidad para cotizar desde el portal con imagenes de catalogo y exportacion de tablas.',
+            'content' => '<h3>Objetivo</h3><p>El portal de clientes debe ser util para operacion diaria, no solo una consulta basica. Por eso las tablas principales permiten exportar y la solicitud de cotizacion muestra productos con imagen cuando exista.</p><h4>Exportaciones</h4><ul><li>Estado de cuenta, pagos, CFDI, cotizaciones y pedidos tienen salida CSV, Excel compatible y PDF por impresion del navegador.</li><li>No se agregaron plugins externos de DataTables porque el proyecto solo tiene DataTables base; los botones oficiales requieren Buttons, JSZip y pdfmake.</li><li>Si mas adelante se decide usar DataTables Buttons, debe agregarse completo al asset pipeline para evitar errores de consola.</li></ul><h4>Imagenes</h4><ul><li>El portal toma <code>main_image_path</code> del catalogo comercial.</li><li>Si no hay imagen, se muestra un placeholder visual de Sin imagen.</li><li>Las cotizaciones existentes tambien muestran miniatura si el producto conserva referencia al catalogo.</li></ul>',
+            'sort_order' => 37,
+            'active' => 1,
+            'created_at' => time(),
+            'updated_at' => time(),
+        ]);
+
         $this->upsert_seed('core_knowledge_articles', 'code', 'estructura_core_app_modulos', [
             'code' => 'estructura_core_app_modulos',
             'title' => 'Estructura actual de Core-App',

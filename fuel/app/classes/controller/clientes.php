@@ -365,12 +365,19 @@ class Controller_Clientes extends Controller_Portalbase
         if (!\DBUtil::table_exists('core_sales_quote_items')) {
             return [];
         }
-        return \DB::select('sku', 'name', 'quantity', 'unit_price', 'line_total')
-            ->from('core_sales_quote_items')
-            ->where('quote_id', '=', (int) $quote_id)
-            ->order_by('sort_order', 'asc')
+        $rows = \DB::select('i.product_id', 'i.sku', 'i.name', 'i.quantity', 'i.unit_price', 'i.line_total', ['p.main_image_path', 'image_path'])
+            ->from(['core_sales_quote_items', 'i'])
+            ->join(['core_commerce_products', 'p'], 'left')->on('i.product_id', '=', 'p.id')
+            ->where('i.quote_id', '=', (int) $quote_id)
+            ->order_by('i.sort_order', 'asc')
             ->execute()
             ->as_array();
+
+        foreach ($rows as &$row) {
+            $row['image_url'] = $this->media_url((string) $row['image_path']);
+        }
+        unset($row);
+        return $rows;
     }
 
     protected function customer_options($party_id)
@@ -385,7 +392,7 @@ class Controller_Clientes extends Controller_Portalbase
         if (!\DBUtil::table_exists('core_commerce_products')) {
             return [];
         }
-        $rows = \DB::select('id', 'sku', 'name', 'currency_code', 'price')
+        $rows = \DB::select('id', 'sku', 'name', 'currency_code', 'price', 'main_image_path')
             ->from('core_commerce_products')
             ->where('active', '=', 1)
             ->where('published', '=', 1)
@@ -400,6 +407,7 @@ class Controller_Clientes extends Controller_Portalbase
                 'label' => trim($row['name'].' '.($row['sku'] ? '('.$row['sku'].')' : '')),
                 'currency_code' => $price['currency_code'],
                 'price' => $price['price'],
+                'image_url' => $this->media_url((string) $row['main_image_path']),
             ];
         }
         return $items;
@@ -410,7 +418,7 @@ class Controller_Clientes extends Controller_Portalbase
         if (!\DBUtil::table_exists('core_commerce_products')) {
             return null;
         }
-        $row = \DB::select('id', 'sku', 'name', 'currency_code', 'price')
+        $row = \DB::select('id', 'sku', 'name', 'currency_code', 'price', 'main_image_path')
             ->from('core_commerce_products')
             ->where('id', '=', (int) $product_id)
             ->where('active', '=', 1)
@@ -418,6 +426,17 @@ class Controller_Clientes extends Controller_Portalbase
             ->execute()
             ->current();
         return $row ?: null;
+    }
+
+    protected function media_url($path)
+    {
+        if ($path === '') {
+            return '';
+        }
+        if (preg_match('/^https?:\/\//i', $path)) {
+            return $path;
+        }
+        return \Uri::base(false).ltrim($path, '/');
     }
 
     protected function product_price(array $product, $party_id)
