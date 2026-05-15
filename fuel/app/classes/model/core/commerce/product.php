@@ -6,7 +6,8 @@ class Model_Core_Commerce_Product extends \Orm\Model
     protected static $_primary_key = ['id'];
     protected static $_properties = [
         'id', 'sku', 'name', 'slug', 'short_description', 'description', 'brand_id', 'category_id', 'subcategory_id',
-        'unit_code', 'currency_code', 'price', 'cost', 'tax_code', 'main_image_path', 'show_in_home', 'featured',
+        'unit_code', 'currency_code', 'price', 'cost', 'tax_code', 'stock_quantity', 'stock_reserved',
+        'stock_updated_at', 'main_image_path', 'show_in_home', 'featured',
         'published', 'active', 'sort_order', 'created_at', 'updated_at',
     ];
     protected static $_observers = [

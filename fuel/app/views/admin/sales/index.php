@@ -1,4 +1,24 @@
 <div id="app-sales">
+    <?php
+    $no_image_svg = 'data:image/svg+xml;charset=UTF-8,'.rawurlencode('<svg xmlns="http://www.w3.org/2000/svg" width="360" height="260" viewBox="0 0 360 260"><rect width="360" height="260" fill="#eef3f7"/><path d="M72 178h216l-64-82-48 60-34-44-70 66z" fill="#cbd5e1"/><circle cx="130" cy="86" r="24" fill="#cbd5e1"/><text x="180" y="226" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="20" fill="#64748b">Sin imagen</text></svg>');
+    ?>
+    <style>
+        .quote-workbench { display: grid; grid-template-columns: minmax(0, 1.25fr) 420px; gap: 16px; }
+        .quote-product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; max-height: 58vh; overflow: auto; padding-right: 4px; }
+        .quote-product-card { border: 1px solid #dde3ea; border-radius: 8px; background: #fff; overflow: hidden; cursor: pointer; transition: border-color .15s ease, box-shadow .15s ease; }
+        .quote-product-card:hover, .quote-product-card.active { border-color: #007bff; box-shadow: 0 6px 16px rgba(15,23,42,.10); }
+        .quote-product-card img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: #eef3f7; }
+        .quote-product-body { padding: 9px; }
+        .quote-product-title { font-size: .88rem; line-height: 1.25; font-weight: 700; min-height: 36px; }
+        .quote-meta { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: .78rem; color: #6c757d; }
+        .quote-thumb { width: 54px; height: 44px; border-radius: 6px; border: 1px solid #dde3ea; object-fit: cover; background: #eef3f7; }
+        .quote-cart { position: sticky; top: 12px; }
+        .quote-toolbar { display: grid; grid-template-columns: 1.3fr 1fr 1fr auto; gap: 8px; align-items: end; }
+        .price-hidden .money-cell, .price-hidden .price-text { display: none; }
+        .range-chip { display: inline-block; border: 1px solid #dee2e6; border-radius: 999px; padding: 2px 7px; margin: 2px 2px 0 0; font-size: .72rem; color: #495057; background: #f8f9fa; cursor: pointer; }
+        .range-chip:hover { border-color: #007bff; color: #0056b3; }
+        @media (max-width: 1100px) { .quote-workbench { grid-template-columns: 1fr; } .quote-cart { position: static; } }
+    </style>
     <div class="row">
         <div class="col-lg-3">
             <div class="small-box bg-info">
@@ -7,6 +27,15 @@
                     <p>Cotizaciones</p>
                 </div>
                 <div class="icon"><i class="bi bi-receipt"></i></div>
+            </div>
+        </div>
+        <div class="col-lg-3">
+            <div class="small-box bg-secondary">
+                <div class="inner">
+                    <h3>{{ stats.prequote || 0 }}</h3>
+                    <p>Precotizaciones</p>
+                </div>
+                <div class="icon"><i class="bi bi-bag"></i></div>
             </div>
         </div>
         <div class="col-lg-3">
@@ -48,6 +77,9 @@
                 <button class="btn btn-outline-info btn-sm mr-2" @click="syncDrafts" :disabled="offline.syncing || offline.drafts.length === 0">
                     <i class="bi bi-arrow-repeat"></i> Sincronizar {{ offline.drafts.length || '' }}
                 </button>
+                <button class="btn btn-outline-secondary btn-sm mr-1" @click="newPrequote">
+                    <i class="bi bi-bag-plus"></i> Precotizacion
+                </button>
                 <button class="btn btn-primary btn-sm" @click="newQuote">
                     <i class="bi bi-plus-lg"></i> Nueva cotizacion
                 </button>
@@ -87,8 +119,9 @@
                         <td>{{ quote.currency_code }} {{ money(quote.total) }}</td>
                         <td>{{ quote.created_label }}</td>
                         <td>
-                            <div v-for="item in quote.items" :key="item.sku + item.name" class="small">
-                                {{ item.quantity }} x {{ item.name }}
+                            <div v-for="item in quote.items" :key="item.sku + item.name" class="small d-flex align-items-center mb-1">
+                                <img class="quote-thumb mr-2" :src="item.image_url || noImage" :alt="item.name">
+                                <span>{{ item.quantity }} x {{ item.name }}</span>
                             </div>
                         </td>
                         <td class="text-center">
@@ -109,10 +142,10 @@
     </div>
 
     <div class="modal fade" id="modal-new-quote" tabindex="-1" role="dialog" aria-hidden="true">
-        <div class="modal-dialog modal-lg">
+        <div class="modal-dialog modal-xl">
             <div class="modal-content">
                 <div class="modal-header bg-primary text-white">
-                    <h5 class="modal-title">Nueva cotizacion</h5>
+                    <h5 class="modal-title">{{ quoteForm.quote_mode === 'prequote' ? 'Nueva precotizacion' : 'Nueva cotizacion' }}</h5>
                     <button type="button" class="close text-white" @click="hideModal('modal-new-quote')">
                         <span>&times;</span>
                     </button>
@@ -122,55 +155,94 @@
                         <span :class="offline.online ? 'text-success' : 'text-warning'">{{ offline.online ? 'Con conexion' : 'Sin conexion' }}</span>
                         <span v-if="offline.lastSaved" class="text-muted ml-2">Borrador local guardado {{ offline.lastSaved }}</span>
                     </div>
-                    <div class="form-group">
-                        <label>Cliente</label>
-                        <select class="form-control" v-model="quoteForm.party_id">
-                            <option value="">Selecciona cliente</option>
-                            <option v-for="customer in options.customers" :value="customer.value">{{ customer.label }}</option>
-                        </select>
+                    <div class="quote-toolbar mb-3">
+                        <div class="form-group mb-0">
+                            <label>Cliente</label>
+                            <select class="form-control" v-model="quoteForm.party_id">
+                                <option value="">Selecciona cliente</option>
+                                <option v-for="customer in options.customers" :value="customer.value">{{ customer.label }}</option>
+                            </select>
+                        </div>
+                        <div class="form-group mb-0">
+                            <label>Modo</label>
+                            <select class="form-control" v-model="quoteForm.quote_mode">
+                                <option value="quote">Cotizacion con precios</option>
+                                <option value="prequote">Precotizacion / catalogo sin precios</option>
+                            </select>
+                        </div>
+                        <div class="form-group mb-0">
+                            <label>Cantidad rapida</label>
+                            <input type="number" min="1" step="1" class="form-control" v-model.number="lineForm.quantity">
+                        </div>
+                        <button class="btn btn-outline-primary" @click="addSelectedLine" :disabled="!lineForm.product_id">Agregar seleccionado</button>
                     </div>
 
-                    <div class="border rounded p-3 mb-3">
-                        <div class="row">
-                            <div class="col-md-7">
-                                <div class="form-group">
-                                    <label>Producto</label>
-                                    <select class="form-control" v-model="lineForm.product_id">
-                                        <option value="">Selecciona producto</option>
-                                        <option v-for="product in options.products" :value="product.value">{{ product.label }}</option>
-                                    </select>
+                    <div class="quote-workbench" :class="quoteForm.quote_mode === 'prequote' ? 'price-hidden' : ''">
+                        <div>
+                            <div class="border rounded p-2 mb-2">
+                                <div class="row">
+                                    <div class="col-md-4"><input class="form-control form-control-sm" v-model="filters.q" placeholder="Buscar SKU o producto"></div>
+                                    <div class="col-md-3"><select class="form-control form-control-sm" v-model="filters.brand_id"><option value="">Todas las marcas</option><option v-for="brand in options.brands" :value="brand.value">{{ brand.label }}</option></select></div>
+                                    <div class="col-md-3"><select class="form-control form-control-sm" v-model="filters.category_id"><option value="">Todas las categorias</option><option v-for="category in options.categories" :value="category.value">{{ category.label }}</option></select></div>
+                                    <div class="col-md-2"><select class="form-control form-control-sm" v-model="filters.stock"><option value="">Existencia</option><option value="available">Disponible</option><option value="zero">Sin existencia</option></select></div>
+                                </div>
+                                <div class="mt-2">
+                                    <button class="btn btn-xs btn-outline-secondary mr-1" @click="addFilteredProducts">Agregar filtrados</button>
+                                    <button class="btn btn-xs btn-outline-secondary mr-1" @click="addBrandProducts" :disabled="!filters.brand_id">Agregar marca</button>
+                                    <button class="btn btn-xs btn-outline-secondary mr-1" @click="addCategoryProducts" :disabled="!filters.category_id">Agregar categoria</button>
+                                    <button class="btn btn-xs btn-outline-secondary" @click="clearFilters">Limpiar filtros</button>
+                                    <span class="text-muted small ml-2">{{ filteredProducts.length }} productos</span>
                                 </div>
                             </div>
-                            <div class="col-md-3">
-                                <div class="form-group">
-                                    <label>Cantidad</label>
-                                    <input type="number" min="1" step="1" class="form-control" v-model.number="lineForm.quantity">
+                            <div class="quote-product-grid">
+                                <div class="quote-product-card" v-for="product in filteredProducts" :key="product.value" :class="{active: Number(lineForm.product_id) === Number(product.value)}" @click="selectProduct(product)">
+                                    <img :src="product.image_url || noImage" :alt="product.label">
+                                    <div class="quote-product-body">
+                                        <div class="quote-product-title">{{ product.label }}</div>
+                                        <div class="quote-meta"><span>{{ product.brand_name || 'Sin marca' }}</span><span>{{ product.category_name || '' }}</span></div>
+                                        <div class="quote-meta mt-1"><span>Exist. {{ money(product.available_stock) }}</span><span class="price-text">{{ product.currency_code }} {{ money(product.price) }}</span></div>
+                                        <div v-if="product.price_ranges && product.price_ranges.length" class="price-text mt-1">
+                                            <button type="button" class="range-chip" v-for="range in product.price_ranges" @click.stop="quickAddRange(product, range)" :title="'Agregar cantidad ' + money(range.min_quantity)">
+                                                +{{ money(range.min_quantity) }}: {{ range.currency_code }} {{ money(range.price) }}
+                                            </button>
+                                        </div>
+                                        <button class="btn btn-xs btn-primary mt-2" @click.stop="quickAdd(product)">Agregar</button>
+                                    </div>
                                 </div>
                             </div>
-                            <div class="col-md-2 d-flex align-items-end">
-                                <button class="btn btn-outline-primary btn-block mb-3" @click="addLine">Agregar</button>
+                        </div>
+
+                        <div class="quote-cart">
+                            <div class="card card-outline card-info">
+                                <div class="card-header py-2">
+                                    <strong>Partidas</strong>
+                                    <span class="badge badge-light float-right">{{ quoteForm.items.length }}</span>
+                                </div>
+                                <div class="card-body p-2">
+                                    <table class="table table-sm table-bordered mb-2" v-if="quoteForm.items.length">
+                                        <thead><tr><th>Producto</th><th>Cant.</th><th class="money-cell">Precio</th><th class="money-cell">Total</th><th></th></tr></thead>
+                                        <tbody>
+                                            <tr v-for="(item, index) in quoteForm.items" :key="index">
+                                                <td><div class="d-flex align-items-center"><img class="quote-thumb mr-2" :src="productImage(item.product_id)" :alt="productLabel(item.product_id)"><div><strong class="small">{{ productLabel(item.product_id) }}</strong><div class="text-muted small">Exist. {{ money(productStock(item.product_id)) }}</div></div></div></td>
+                                                <td><input class="form-control form-control-sm" type="number" min="1" step="1" v-model.number="item.quantity"></td>
+                                                <td class="money-cell">{{ productCurrency(item.product_id) }} {{ money(productPrice(item.product_id, item.quantity)) }}</td>
+                                                <td class="money-cell">{{ productCurrency(item.product_id) }} {{ money(lineTotal(item)) }}</td>
+                                                <td class="text-center"><button class="btn btn-xs btn-danger" @click="removeLine(index)">Quitar</button></td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                    <div v-else class="text-center text-muted p-3">Selecciona productos del catalogo.</div>
+                                    <div class="d-flex justify-content-between border-top pt-2 money-cell">
+                                        <strong>Total estimado</strong>
+                                        <strong>{{ quoteCurrency }} {{ money(quoteTotal) }}</strong>
+                                    </div>
+                                    <div v-if="quoteForm.quote_mode === 'prequote'" class="alert alert-secondary mt-2 mb-0 py-2 small">
+                                        Modo catalogo: no se muestran ni guardan precios. Podras cerrar la cotizacion despues.
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
-
-                    <table class="table table-sm table-bordered" v-if="quoteForm.items.length">
-                        <thead>
-                            <tr>
-                                <th>Producto</th>
-                                <th>Cantidad</th>
-                                <th>Precio base</th>
-                                <th></th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr v-for="(item, index) in quoteForm.items" :key="index">
-                                <td>{{ productLabel(item.product_id) }}</td>
-                                <td>{{ item.quantity }}</td>
-                                <td>{{ productCurrency(item.product_id) }} {{ money(productPrice(item.product_id)) }}</td>
-                                <td class="text-center"><button class="btn btn-xs btn-danger" @click="removeLine(index)">Quitar</button></td>
-                            </tr>
-                        </tbody>
-                    </table>
 
                     <div class="form-group">
                         <label>Notas para el cliente</label>
@@ -183,7 +255,7 @@
                 </div>
                 <div class="modal-footer">
                     <button class="btn btn-secondary" @click="hideModal('modal-new-quote')">Cerrar</button>
-                    <button class="btn btn-primary" @click="saveQuote">Guardar cotizacion</button>
+                    <button class="btn btn-primary" @click="saveQuote">{{ quoteForm.quote_mode === 'prequote' ? 'Guardar precotizacion' : 'Guardar cotizacion' }}</button>
                 </div>
             </div>
         </div>
@@ -219,6 +291,7 @@
                     <table class="table table-sm table-bordered">
                         <thead>
                             <tr>
+                                <th></th>
                                 <th>SKU</th>
                                 <th>Producto</th>
                                 <th>Cantidad</th>
@@ -228,8 +301,9 @@
                         </thead>
                         <tbody>
                             <tr v-for="item in selected.items" :key="item.sku + item.name">
+                                <td><img class="quote-thumb" :src="item.image_url || noImage" :alt="item.name"></td>
                                 <td>{{ item.sku }}</td>
-                                <td>{{ item.name }}</td>
+                                <td>{{ item.name }}<div class="text-muted small">Exist. {{ money(item.available_stock) }}</div></td>
                                 <td>{{ item.quantity }}</td>
                                 <td>{{ selected.currency_code }} {{ money(item.unit_price) }}</td>
                                 <td>{{ selected.currency_code }} {{ money(item.line_total) }}</td>
@@ -248,12 +322,27 @@
                     <div class="form-group">
                         <label>Estado</label>
                         <select class="form-control" v-model="selected.status">
+                            <option value="prequote">Precotizacion</option>
                             <option value="requested">Solicitada</option>
                             <option value="reviewed">Revisada</option>
                             <option value="approved">Aprobada</option>
                             <option value="rejected">Rechazada</option>
                             <option value="converted">Convertida</option>
                         </select>
+                    </div>
+                    <div v-if="selected.status === 'prequote'" class="border rounded p-3 bg-light">
+                        <h6>Cerrar con precios</h6>
+                        <div class="row">
+                            <div class="col-md-8">
+                                <select class="form-control" v-model="closeForm.party_id">
+                                    <option value="">Selecciona cliente</option>
+                                    <option v-for="customer in options.customers" :value="customer.value">{{ customer.label }}</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <button class="btn btn-primary btn-block" @click="closePrequote">Cerrar cotizacion</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -273,11 +362,35 @@ window.onload = function() {
             loading: true,
             quotes: [],
             selected: null,
-            stats: { quotes: 0, requested: 0, reviewed: 0, approved: 0, rejected: 0 },
-            options: { customers: [], products: [] },
-            quoteForm: { party_id: '', items: [], customer_notes: '', internal_notes: '', offline_uuid: '' },
+            stats: { quotes: 0, prequote: 0, requested: 0, reviewed: 0, approved: 0, rejected: 0 },
+            options: { customers: [], products: [], brands: [], categories: [] },
+            quoteForm: { party_id: '', quote_mode: 'quote', items: [], customer_notes: '', internal_notes: '', offline_uuid: '' },
             lineForm: { product_id: '', quantity: 1 },
+            closeForm: { party_id: '' },
+            filters: { q: '', brand_id: '', category_id: '', stock: '' },
+            noImage: <?php echo json_encode($no_image_svg); ?>,
             offline: { online: navigator.onLine, drafts: [], syncing: false, saveTimer: null, lastSaved: '' }
+        },
+        computed: {
+            filteredProducts() {
+                const q = (this.filters.q || '').toLowerCase();
+                return (this.options.products || []).filter(product => {
+                    if (q && (String(product.label || '').toLowerCase().indexOf(q) < 0 && String(product.sku || '').toLowerCase().indexOf(q) < 0)) return false;
+                    if (this.filters.brand_id && Number(product.brand_id) !== Number(this.filters.brand_id)) return false;
+                    if (this.filters.category_id && Number(product.category_id) !== Number(this.filters.category_id)) return false;
+                    if (this.filters.stock === 'available' && Number(product.available_stock || 0) <= 0) return false;
+                    if (this.filters.stock === 'zero' && Number(product.available_stock || 0) > 0) return false;
+                    return true;
+                });
+            },
+            quoteTotal() {
+                if (this.quoteForm.quote_mode === 'prequote') return 0;
+                return (this.quoteForm.items || []).reduce((sum, item) => sum + this.lineTotal(item), 0);
+            },
+            quoteCurrency() {
+                const first = (this.quoteForm.items || [])[0];
+                return first ? this.productCurrency(first.product_id) : 'MXN';
+            }
         },
         mounted() {
             this.loadData();
@@ -338,6 +451,7 @@ window.onload = function() {
             },
             statusLabel(status) {
                 const labels = {
+                    prequote: 'Precotizacion',
                     requested: 'Solicitada',
                     reviewed: 'Revisada',
                     approved: 'Aprobada',
@@ -348,6 +462,7 @@ window.onload = function() {
             },
             statusClass(status) {
                 const classes = {
+                    prequote: 'badge-secondary',
                     requested: 'badge-warning',
                     reviewed: 'badge-info',
                     approved: 'badge-success',
@@ -358,6 +473,7 @@ window.onload = function() {
             },
             openDetail(quote) {
                 this.selected = JSON.parse(JSON.stringify(quote));
+                this.closeForm = { party_id: this.selected.party_id || '' };
                 this.showModal('modal-quote');
             },
             saveSelected() {
@@ -381,6 +497,28 @@ window.onload = function() {
                         this.hideModal('modal-quote');
                     });
             },
+            closePrequote() {
+                if (!this.selected) return;
+                if (!this.closeForm.party_id) {
+                    alert('Selecciona cliente para cerrar con precios.');
+                    return;
+                }
+                fetch('<?php echo Uri::create('admin/sales/close_prequote'); ?>', window.coreAppFetchOptions({
+                    id: this.selected.id,
+                    party_id: this.closeForm.party_id,
+                    internal_notes: this.selected.internal_notes || ''
+                }))
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.error) {
+                            alert(data.error);
+                            return;
+                        }
+                        this.quotes = data.quotes || [];
+                        this.stats = data.stats || this.stats;
+                        this.hideModal('modal-quote');
+                    });
+            },
             showModal(id) {
                 if (window.jQuery) {
                     $('#' + id).modal('show');
@@ -392,10 +530,22 @@ window.onload = function() {
                 }
             },
             newQuote() {
-                this.quoteForm = { party_id: '', items: [], customer_notes: '', internal_notes: '', offline_uuid: this.newOfflineUuid() };
+                this.quoteForm = { party_id: '', quote_mode: 'quote', items: [], customer_notes: '', internal_notes: '', offline_uuid: this.newOfflineUuid() };
                 this.lineForm = { product_id: '', quantity: 1 };
                 this.hydrateOptionsFromCache();
                 this.showModal('modal-new-quote');
+            },
+            newPrequote() {
+                this.quoteForm = { party_id: '', quote_mode: 'prequote', items: [], customer_notes: '', internal_notes: 'Precotizacion sin precios para mostrar catalogo al cliente.', offline_uuid: this.newOfflineUuid() };
+                this.lineForm = { product_id: '', quantity: 1 };
+                this.hydrateOptionsFromCache();
+                this.showModal('modal-new-quote');
+            },
+            selectProduct(product) {
+                this.lineForm.product_id = product.value;
+            },
+            addSelectedLine() {
+                this.addLine();
             },
             addLine() {
                 if (!this.lineForm.product_id) return;
@@ -404,6 +554,29 @@ window.onload = function() {
                     quantity: this.lineForm.quantity || 1
                 });
                 this.lineForm = { product_id: '', quantity: 1 };
+            },
+            quickAdd(product) {
+                this.quoteForm.items.push({ product_id: product.value, quantity: this.lineForm.quantity || 1 });
+            },
+            quickAddRange(product, range) {
+                this.quoteForm.items.push({
+                    product_id: product.value,
+                    quantity: Number(range.min_quantity || this.lineForm.quantity || 1)
+                });
+            },
+            addFilteredProducts() {
+                this.filteredProducts.forEach(product => this.quoteForm.items.push({ product_id: product.value, quantity: this.lineForm.quantity || 1 }));
+            },
+            addBrandProducts() {
+                if (!this.filters.brand_id) return;
+                this.filteredProducts.filter(product => Number(product.brand_id) === Number(this.filters.brand_id)).forEach(product => this.quoteForm.items.push({ product_id: product.value, quantity: this.lineForm.quantity || 1 }));
+            },
+            addCategoryProducts() {
+                if (!this.filters.category_id) return;
+                this.filteredProducts.filter(product => Number(product.category_id) === Number(this.filters.category_id)).forEach(product => this.quoteForm.items.push({ product_id: product.value, quantity: this.lineForm.quantity || 1 }));
+            },
+            clearFilters() {
+                this.filters = { q: '', brand_id: '', category_id: '', stock: '' };
             },
             removeLine(index) {
                 this.quoteForm.items.splice(index, 1);
@@ -414,11 +587,31 @@ window.onload = function() {
             productLabel(productId) {
                 return this.productById(productId).label || '-';
             },
-            productPrice(productId) {
-                return this.productById(productId).price || 0;
+            productPrice(productId, quantity) {
+                const product = this.productById(productId);
+                const ranges = product.price_ranges || [];
+                let price = Number(product.price || 0);
+                ranges.forEach(range => {
+                    const min = Number(range.min_quantity || 1);
+                    const max = Number(range.max_quantity || 0);
+                    if (Number(quantity || 1) >= min && (max <= 0 || Number(quantity || 1) <= max)) {
+                        price = Number(range.price || price);
+                    }
+                });
+                return price;
             },
             productCurrency(productId) {
                 return this.productById(productId).currency_code || 'MXN';
+            },
+            productImage(productId) {
+                return this.productById(productId).image_url || this.noImage;
+            },
+            productStock(productId) {
+                return this.productById(productId).available_stock || 0;
+            },
+            lineTotal(item) {
+                if (this.quoteForm.quote_mode === 'prequote') return 0;
+                return Number(item.quantity || 0) * Number(this.productPrice(item.product_id, item.quantity) || 0);
             },
             saveQuote() {
                 this.ensureOfflineUuid();

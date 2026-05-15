@@ -335,6 +335,8 @@ class Controller_Admin_Commerce extends Controller_Adminbase
                     ['name' => 'price', 'label' => 'Precio', 'type' => 'number', 'default' => 0],
                     ['name' => 'cost', 'label' => 'Costo', 'type' => 'number', 'default' => 0],
                     ['name' => 'tax_code', 'label' => 'Impuesto', 'type' => 'select', 'options' => 'taxes', 'default' => 'iva_16'],
+                    ['name' => 'stock_quantity', 'label' => 'Existencia', 'type' => 'number', 'default' => 0],
+                    ['name' => 'stock_reserved', 'label' => 'Reservado', 'type' => 'number', 'default' => 0],
                     ['name' => 'main_image_path', 'label' => 'Imagen principal', 'type' => 'image', 'default' => ''],
                     ['name' => 'show_in_home', 'label' => 'Mostrar inicio', 'type' => 'checkbox', 'default' => 0],
                     ['name' => 'featured', 'label' => 'Destacado', 'type' => 'checkbox', 'default' => 0],

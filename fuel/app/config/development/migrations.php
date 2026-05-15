@@ -39,6 +39,7 @@ return array (
         33 => '034_enhance_purchase_approval_flow',
         34 => '035_add_offline_sales_support',
         35 => '036_enhance_frontend_footer_cms',
+        36 => '037_add_commerce_stock_quote_fields',
       ),
     ),
     'module' => array(    

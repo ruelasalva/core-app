@@ -2015,6 +2015,18 @@ class Configsetup
             'updated_at' => time(),
         ]);
 
+        $this->upsert_seed('core_knowledge_articles', 'code', 'ventas_cotizador_admin_catalogo', [
+            'code' => 'ventas_cotizador_admin_catalogo',
+            'title' => 'Ventas: cotizador rapido y precotizacion',
+            'category' => 'Ventas',
+            'summary' => 'Uso del cotizador administrativo con imagen, existencias, filtros por marca/categoria, rangos de precio y modo catalogo sin precios.',
+            'content' => '<h3>Objetivo</h3><p>El cotizador administrativo esta pensado para mostrador, llamadas y visitas con cliente: encontrar productos rapido, revisar existencia, agregar por marca o categoria y guardar una cotizacion sin perder el borrador si falla internet.</p><h4>Flujo de cotizacion</h4><ol><li>Entra a <strong>Admin &gt; Ventas</strong>.</li><li>Presiona <strong>Nueva cotizacion</strong>.</li><li>Selecciona cliente para aplicar sus precios o lista comercial.</li><li>Busca por SKU/nombre, filtra por marca, categoria o existencia.</li><li>Agrega productos uno por uno, todos los filtrados, toda una marca o toda una categoria.</li><li>Si el producto tiene rangos, presiona el rango para agregar la cantidad minima de ese precio.</li><li>Guarda. La cotizacion queda como <code>reviewed</code> para seguimiento interno.</li></ol><h4>Precotizacion o catalogo</h4><ul><li>Usa <strong>Precotizacion</strong> cuando estes frente al cliente y quieras mostrar catalogo, imagenes y existencias sin revelar precios.</li><li>Este modo permite guardar partidas sin cliente y sin importes.</li><li>El estado queda como <code>prequote</code>.</li><li>Para cerrarla, abre el detalle, selecciona cliente en <strong>Cerrar con precios</strong> y confirma; el sistema recalcula partidas con lista/rango del cliente y cambia a <code>reviewed</code>.</li><li>La precotizacion no descuenta inventario ni reserva stock; solo conserva la seleccion.</li></ul><h4>Datos del producto</h4><ul><li>La imagen viene de <code>main_image_path</code>; si falta, se usa Sin imagen.</li><li>La existencia disponible es <code>stock_quantity - stock_reserved</code>.</li><li>El precio base viene del catalogo comercial y puede ajustarse con listas/rangos de precio cuando exista cliente.</li></ul><h4>Permisos</h4><ul><li><code>sales.access[view]</code> permite consultar cotizaciones y catalogo visible para ventas.</li><li><code>sales.access[create]</code> permite crear cotizaciones, precotizaciones y sincronizar borradores.</li><li><code>sales.access[edit]</code> permite cambiar estado, cerrar precotizaciones y guardar notas internas.</li><li>El alcance de clientes respeta la regla de terceros por departamento/responsable cuando este configurada.</li></ul>',
+            'sort_order' => 60,
+            'active' => 1,
+            'created_at' => time(),
+            'updated_at' => time(),
+        ]);
+
         $this->upsert_seed('core_knowledge_articles', 'code', 'frontend_carrito_base', [
             'code' => 'frontend_carrito_base',
             'title' => 'Carrito base del frontend',
