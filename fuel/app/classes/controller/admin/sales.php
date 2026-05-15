@@ -506,6 +506,7 @@ class Controller_Admin_Sales extends Controller_Adminbase
         foreach ($rows as $row) {
             $items[] = [
                 'value' => (int) $row['id'],
+                'sku' => (string) $row['sku'],
                 'label' => trim($row['name'].' '.($row['sku'] ? '('.$row['sku'].')' : '')),
                 'currency_code' => (string) $row['currency_code'],
                 'price' => (float) $row['price'],

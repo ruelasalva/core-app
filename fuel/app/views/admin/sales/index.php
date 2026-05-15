@@ -3,8 +3,21 @@
     $no_image_svg = 'data:image/svg+xml;charset=UTF-8,'.rawurlencode('<svg xmlns="http://www.w3.org/2000/svg" width="360" height="260" viewBox="0 0 360 260"><rect width="360" height="260" fill="#eef3f7"/><path d="M72 178h216l-64-82-48 60-34-44-70 66z" fill="#cbd5e1"/><circle cx="130" cy="86" r="24" fill="#cbd5e1"/><text x="180" y="226" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="20" fill="#64748b">Sin imagen</text></svg>');
     ?>
     <style>
+        .quote-section-title { color: #fff; font-weight: 700; padding: 14px 18px; margin: 0 -1rem 1rem; }
+        .quote-section-partner { background: #5b6ee1; }
+        .quote-section-values { background: #15bfd2; }
+        .quote-section-products { background: #ff5b42; }
+        .quote-partner-panel { background: #fff; border-radius: 6px; padding: 12px; margin-bottom: 18px; }
+        .quote-product-capture { background: #fff; border: 1px solid #e0e6ef; border-radius: 6px; padding: 14px; margin-bottom: 14px; }
+        .quote-search-wrap { position: relative; }
+        .quote-search-results { position: absolute; z-index: 1060; left: 0; right: 0; max-height: 280px; overflow: auto; background: #fff; border: 1px solid #cfd8e3; border-radius: 0 0 6px 6px; box-shadow: 0 10px 24px rgba(15,23,42,.16); }
+        .quote-search-result { display: grid; grid-template-columns: 52px 1fr auto; gap: 10px; align-items: center; width: 100%; border: 0; border-bottom: 1px solid #edf1f5; background: #fff; text-align: left; padding: 8px; }
+        .quote-search-result:hover { background: #f5f8fb; }
+        .quote-search-result img { width: 52px; height: 42px; object-fit: cover; border-radius: 5px; border: 1px solid #dde3ea; }
+        .quote-selected-product { display: grid; grid-template-columns: 132px 1fr; gap: 14px; align-items: start; min-height: 132px; }
+        .quote-selected-product img { width: 132px; height: 112px; object-fit: cover; border: 1px solid #dde3ea; border-radius: 6px; background: #eef3f7; }
         .quote-workbench { display: grid; grid-template-columns: minmax(0, 1.25fr) 420px; gap: 16px; }
-        .quote-product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; max-height: 58vh; overflow: auto; padding-right: 4px; }
+        .quote-product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; max-height: 42vh; overflow: auto; padding-right: 4px; }
         .quote-product-card { border: 1px solid #dde3ea; border-radius: 8px; background: #fff; overflow: hidden; cursor: pointer; transition: border-color .15s ease, box-shadow .15s ease; }
         .quote-product-card:hover, .quote-product-card.active { border-color: #007bff; box-shadow: 0 6px 16px rgba(15,23,42,.10); }
         .quote-product-card img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: #eef3f7; }
@@ -155,26 +168,98 @@
                         <span :class="offline.online ? 'text-success' : 'text-warning'">{{ offline.online ? 'Con conexion' : 'Sin conexion' }}</span>
                         <span v-if="offline.lastSaved" class="text-muted ml-2">Borrador local guardado {{ offline.lastSaved }}</span>
                     </div>
-                    <div class="quote-toolbar mb-3">
-                        <div class="form-group mb-0">
-                            <label>Cliente</label>
+                    <h6 class="quote-section-title quote-section-partner">Datos del socio</h6>
+                    <div class="quote-partner-panel">
+                        <div class="form-group">
+                            <label>Socio de negocio</label>
                             <select class="form-control" v-model="quoteForm.party_id">
-                                <option value="">Selecciona cliente</option>
+                                <option value="">Escribe o selecciona socio...</option>
                                 <option v-for="customer in options.customers" :value="customer.value">{{ customer.label }}</option>
                             </select>
                         </div>
-                        <div class="form-group mb-0">
-                            <label>Modo</label>
-                            <select class="form-control" v-model="quoteForm.quote_mode">
-                                <option value="quote">Cotizacion con precios</option>
-                                <option value="prequote">Precotizacion / catalogo sin precios</option>
-                            </select>
+                        <div class="row">
+                            <div class="col-md-4">
+                                <label>Modo</label>
+                                <select class="form-control" v-model="quoteForm.quote_mode">
+                                    <option value="quote">Cotizacion con precios</option>
+                                    <option value="prequote">Precotizacion / catalogo sin precios</option>
+                                </select>
+                            </div>
+                            <div class="col-md-5">
+                                <label>Referencia</label>
+                                <input class="form-control" v-model="quoteForm.customer_notes" placeholder="Referencia o comentario visible">
+                            </div>
+                            <div class="col-md-3">
+                                <label>Valido hasta</label>
+                                <input class="form-control" disabled :value="'15 dias'">
+                            </div>
                         </div>
-                        <div class="form-group mb-0">
-                            <label>Cantidad rapida</label>
-                            <input type="number" min="1" step="1" class="form-control" v-model.number="lineForm.quantity">
+                    </div>
+
+                    <h6 class="quote-section-title quote-section-values">Valores generales / Impuestos, Retenciones, Monedas, Descuentos</h6>
+                    <h6 class="quote-section-title quote-section-products">Productos y servicios</h6>
+                    <div class="quote-product-capture" :class="quoteForm.quote_mode === 'prequote' ? 'price-hidden' : ''">
+                        <div class="row">
+                            <div class="col-md-2">
+                                <label>Tipo</label>
+                                <select class="form-control" v-model="lineForm.product_type">
+                                    <option value="product">Producto</option>
+                                    <option value="service">Servicio</option>
+                                </select>
+                            </div>
+                            <div class="col-md-5">
+                                <label>Buscar producto/servicio</label>
+                                <div class="quote-search-wrap">
+                                    <input class="form-control" v-model="lineForm.product_query" @input="lineForm.product_id = ''" @focus="lineForm.search_open = true" @keydown.enter.prevent="selectFirstSearchResult" placeholder="Buscar producto...">
+                                    <div class="quote-search-results" v-if="lineForm.search_open && productSearchResults.length">
+                                        <button type="button" class="quote-search-result" v-for="product in productSearchResults" :key="product.value" @mousedown.prevent="selectProduct(product)">
+                                            <img :src="product.image_url || noImage" :alt="product.label">
+                                            <span>
+                                                <strong>{{ product.label }}</strong>
+                                                <small class="d-block text-muted">{{ product.brand_name || 'Sin marca' }} · {{ product.category_name || 'Sin categoria' }}</small>
+                                            </span>
+                                            <small class="text-right">Exist. {{ money(product.available_stock) }}</small>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-1">
+                                <label>Existencias</label>
+                                <input class="form-control" disabled :value="money(selectedProduct.available_stock)">
+                            </div>
+                            <div class="col-md-2">
+                                <label>Precio unitario</label>
+                                <input class="form-control money-cell" disabled :value="productCurrency(lineForm.product_id) + ' ' + money(productPrice(lineForm.product_id, lineForm.quantity))">
+                            </div>
+                            <div class="col-md-2">
+                                <label>Cantidad</label>
+                                <input type="number" min="1" step="1" class="form-control" v-model.number="lineForm.quantity">
+                            </div>
                         </div>
-                        <button class="btn btn-outline-primary" @click="addSelectedLine" :disabled="!lineForm.product_id">Agregar seleccionado</button>
+                        <div class="row mt-3 align-items-center">
+                            <div class="col-md-3">
+                                <div class="quote-selected-product">
+                                    <img :src="selectedProduct.image_url || noImage" :alt="selectedProduct.label || 'Sin imagen'">
+                                    <div>
+                                        <strong>{{ selectedProduct.label || 'Selecciona un producto' }}</strong>
+                                        <div class="text-muted small">{{ selectedProduct.sku || '' }}</div>
+                                        <div class="small">{{ selectedProduct.brand_name || '' }} {{ selectedProduct.category_name ? '/ ' + selectedProduct.category_name : '' }}</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-5">
+                                <button class="btn btn-info mr-2" @click="addBrandProducts" :disabled="!selectedProduct.brand_id && !filters.brand_id">Agregar por marca</button>
+                                <button class="btn btn-info mr-2" @click="addSelectedRange" :disabled="!selectedProduct.price_ranges || selectedProduct.price_ranges.length === 0">Agregar por rango</button>
+                                <span class="price-text" v-if="selectedProduct.price_ranges && selectedProduct.price_ranges.length">
+                                    <button type="button" class="range-chip" v-for="range in selectedProduct.price_ranges" @click="quickAddRange(selectedProduct, range)">
+                                        +{{ money(range.min_quantity) }}: {{ range.currency_code }} {{ money(range.price) }}
+                                    </button>
+                                </span>
+                            </div>
+                            <div class="col-md-4 text-right">
+                                <button class="btn btn-primary px-5" @click="addSelectedLine" :disabled="!lineForm.product_id">Agregar</button>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="quote-workbench" :class="quoteForm.quote_mode === 'prequote' ? 'price-hidden' : ''">
@@ -365,7 +450,7 @@ window.onload = function() {
             stats: { quotes: 0, prequote: 0, requested: 0, reviewed: 0, approved: 0, rejected: 0 },
             options: { customers: [], products: [], brands: [], categories: [] },
             quoteForm: { party_id: '', quote_mode: 'quote', items: [], customer_notes: '', internal_notes: '', offline_uuid: '' },
-            lineForm: { product_id: '', quantity: 1 },
+            lineForm: { product_id: '', product_query: '', product_type: 'product', quantity: 1, search_open: false },
             closeForm: { party_id: '' },
             filters: { q: '', brand_id: '', category_id: '', stock: '' },
             noImage: <?php echo json_encode($no_image_svg); ?>,
@@ -382,6 +467,22 @@ window.onload = function() {
                     if (this.filters.stock === 'zero' && Number(product.available_stock || 0) > 0) return false;
                     return true;
                 });
+            },
+            productSearchResults() {
+                const q = (this.lineForm.product_query || '').toLowerCase().trim();
+                if (q.length < 2) return [];
+                return (this.options.products || []).filter(product => {
+                    const haystack = [
+                        product.label || '',
+                        product.sku || '',
+                        product.brand_name || '',
+                        product.category_name || ''
+                    ].join(' ').toLowerCase();
+                    return haystack.indexOf(q) >= 0;
+                }).slice(0, 12);
+            },
+            selectedProduct() {
+                return this.productById(this.lineForm.product_id);
             },
             quoteTotal() {
                 if (this.quoteForm.quote_mode === 'prequote') return 0;
@@ -531,18 +632,25 @@ window.onload = function() {
             },
             newQuote() {
                 this.quoteForm = { party_id: '', quote_mode: 'quote', items: [], customer_notes: '', internal_notes: '', offline_uuid: this.newOfflineUuid() };
-                this.lineForm = { product_id: '', quantity: 1 };
+                this.lineForm = { product_id: '', product_query: '', product_type: 'product', quantity: 1, search_open: false };
                 this.hydrateOptionsFromCache();
                 this.showModal('modal-new-quote');
             },
             newPrequote() {
                 this.quoteForm = { party_id: '', quote_mode: 'prequote', items: [], customer_notes: '', internal_notes: 'Precotizacion sin precios para mostrar catalogo al cliente.', offline_uuid: this.newOfflineUuid() };
-                this.lineForm = { product_id: '', quantity: 1 };
+                this.lineForm = { product_id: '', product_query: '', product_type: 'product', quantity: 1, search_open: false };
                 this.hydrateOptionsFromCache();
                 this.showModal('modal-new-quote');
             },
             selectProduct(product) {
                 this.lineForm.product_id = product.value;
+                this.lineForm.product_query = product.label;
+                this.lineForm.search_open = false;
+            },
+            selectFirstSearchResult() {
+                if (this.productSearchResults.length) {
+                    this.selectProduct(this.productSearchResults[0]);
+                }
             },
             addSelectedLine() {
                 this.addLine();
@@ -553,7 +661,7 @@ window.onload = function() {
                     product_id: this.lineForm.product_id,
                     quantity: this.lineForm.quantity || 1
                 });
-                this.lineForm = { product_id: '', quantity: 1 };
+                this.lineForm = { product_id: '', product_query: '', product_type: 'product', quantity: 1, search_open: false };
             },
             quickAdd(product) {
                 this.quoteForm.items.push({ product_id: product.value, quantity: this.lineForm.quantity || 1 });
@@ -568,8 +676,9 @@ window.onload = function() {
                 this.filteredProducts.forEach(product => this.quoteForm.items.push({ product_id: product.value, quantity: this.lineForm.quantity || 1 }));
             },
             addBrandProducts() {
-                if (!this.filters.brand_id) return;
-                this.filteredProducts.filter(product => Number(product.brand_id) === Number(this.filters.brand_id)).forEach(product => this.quoteForm.items.push({ product_id: product.value, quantity: this.lineForm.quantity || 1 }));
+                const brandId = this.selectedProduct.brand_id || this.filters.brand_id;
+                if (!brandId) return;
+                this.filteredProducts.filter(product => Number(product.brand_id) === Number(brandId)).forEach(product => this.quoteForm.items.push({ product_id: product.value, quantity: this.lineForm.quantity || 1 }));
             },
             addCategoryProducts() {
                 if (!this.filters.category_id) return;
@@ -577,6 +686,10 @@ window.onload = function() {
             },
             clearFilters() {
                 this.filters = { q: '', brand_id: '', category_id: '', stock: '' };
+            },
+            addSelectedRange() {
+                if (!this.selectedProduct.value || !this.selectedProduct.price_ranges || !this.selectedProduct.price_ranges.length) return;
+                this.quickAddRange(this.selectedProduct, this.selectedProduct.price_ranges[0]);
             },
             removeLine(index) {
                 this.quoteForm.items.splice(index, 1);
