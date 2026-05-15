@@ -40,6 +40,7 @@ return array (
         34 => '035_add_offline_sales_support',
         35 => '036_enhance_frontend_footer_cms',
         36 => '037_add_commerce_stock_quote_fields',
+        37 => '038_enhance_billing_pac_cfdi',
       ),
     ),
     'module' => array(    

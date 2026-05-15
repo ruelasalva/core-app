@@ -1434,7 +1434,7 @@ class Configsetup
         }
 
         $this->seed_default_integration_connection('sat', 'sat_descarga_masiva', 'SAT descarga masiva', 'production', '{"module":"sat","use":"download","auth":"fiel","credentials":"core_sat_credentials","requires_secret":false,"library":"phpcfdi/sat-ws-descarga-masiva"}');
-        $this->seed_default_integration_connection('factura_com', 'factura_com_pac', 'Factura.com PAC', 'sandbox', '{"module":"billing","use":"pac","docs":"https://factura.com/apidocs/"}');
+        $this->seed_default_integration_connection('factura_com', 'factura_com_pac', 'Factura.com PAC', 'sandbox', '{"module":"billing","use":"pac","docs":"https://factura.com/apidocs/","host":"https://sandbox.factura.com/api","plugin":"9d4095c8f7ed5785cb14c0e3b033eeb8252416ed","requires":"F-Api-Key,F-Secret-Key,Serie UID,Receptor UID"}');
     }
 
     protected function seed_default_integration_connection($provider_code, $code, $name, $environment, $config_json)
@@ -1444,19 +1444,41 @@ class Configsetup
             return;
         }
 
-        $this->upsert_seed('core_integration_connections', 'code', $code, [
+        $exists = \DB::select('id', 'config_json')
+            ->from('core_integration_connections')
+            ->where('code', '=', $code)
+            ->execute()
+            ->current();
+
+        if ($exists) {
+            $update = [
+                'provider_id' => (int) $provider['id'],
+                'name' => $name,
+                'environment' => $environment,
+                'active' => 1,
+                'updated_at' => time(),
+            ];
+            if (trim((string) $exists['config_json']) === '') {
+                $update['config_json'] = $config_json;
+            }
+            \DB::update('core_integration_connections')->set($update)->where('id', '=', (int) $exists['id'])->execute();
+            return;
+        }
+
+        \DB::insert('core_integration_connections')->set([
             'provider_id' => (int) $provider['id'],
             'code' => $code,
             'name' => $name,
             'environment' => $environment,
             'public_key' => '',
             'public_value' => '',
+            'secret_value' => '',
             'config_json' => $config_json,
             'enabled' => 0,
             'active' => 1,
             'created_at' => time(),
             'updated_at' => time(),
-        ]);
+        ])->execute();
     }
 
     /**
@@ -2199,8 +2221,8 @@ class Configsetup
             'code' => 'facturacion_cfdi_base',
             'title' => 'Facturacion y preparacion CFDI',
             'category' => 'Finanzas',
-            'summary' => 'Manual base para crear facturas, capturar conceptos, calcular importes y preparar timbrado futuro.',
-            'content' => '<h3>Objetivo</h3><p>Facturacion administra el documento operativo antes del timbrado. SAT conserva catalogos, credenciales y CFDI fiscales; Facturacion prepara tercero, conceptos, importes, uso CFDI, forma y metodo de pago.</p><h4>Crear una factura</h4><ol><li>Entra a <strong>Admin &gt; Facturacion</strong>.</li><li>Presiona <strong>Nueva factura</strong>.</li><li>Selecciona tipo: venta, compra, nota de credito o complemento de pago.</li><li>Selecciona tercero, fechas, moneda, condicion de pago y datos SAT.</li><li>Guarda la factura. El sistema genera folio interno <code>FAC-AAAAMMDD-00001</code>.</li></ol><h4>Agregar conceptos</h4><ol><li>Selecciona la factura.</li><li>Presiona <strong>Concepto</strong>.</li><li>Selecciona producto o captura concepto manual.</li><li>Captura cantidad, precio, descuento, unidad SAT, clave producto SAT y tasa de impuesto.</li><li>Guarda. El sistema recalcula subtotal, impuestos, retenciones, total y saldo.</li></ol><h4>Relacion con otros modulos</h4><ul><li><strong>Terceros</strong> aporta cliente/proveedor, RFC, regimen fiscal y uso CFDI sugerido.</li><li><strong>Catalogos</strong> aporta monedas, condiciones de pago, unidades e impuestos.</li><li><strong>SAT</strong> aporta catalogos fiscales, CFDI final y credenciales.</li><li><strong>Pagos y Bancos</strong> debera liquidar facturas por asignaciones.</li><li><strong>Documentos</strong> debera almacenar XML/PDF y evidencias relacionadas.</li></ul><h4>Reglas de seguridad</h4><ul><li>No timbrar sin validar credenciales CSD y proveedor PAC.</li><li>No guardar secretos fiscales en facturas.</li><li>Todo cambio de factura o concepto debe quedar auditado.</li><li>El estado <strong>Lista para timbrar</strong> no significa CFDI emitido; solo indica que esta lista para conectar el proceso fiscal.</li></ul>',
+            'summary' => 'Manual base para crear facturas, capturar conceptos, preparar CFDI 4.0, timbrar y cancelar con Factura.com.',
+            'content' => '<h3>Objetivo</h3><p>Facturacion administra el documento operativo y prepara el CFDI. SAT conserva los CFDI fiscales emitidos o descargados, e Integraciones guarda las credenciales del PAC Factura.com.</p><h4>Configuracion PAC</h4><ol><li>Entra a <strong>Admin &gt; Integraciones</strong>.</li><li>Abre <strong>Factura.com PAC</strong>.</li><li>Captura <code>F-Api-Key</code> en llave publica y <code>F-Secret-Key</code> en valor secreto.</li><li>Activa la conexion solo cuando sea sandbox probado o produccion autorizada.</li><li>En la factura captura <strong>Serie Factura.com</strong> y <strong>UID receptor</strong>; esos datos vienen de Factura.com.</li></ol><h4>Crear una factura</h4><ol><li>Entra a <strong>Admin &gt; Facturacion</strong>.</li><li>Presiona <strong>Nueva factura</strong>.</li><li>Selecciona tipo: venta, compra, nota de credito o complemento de pago.</li><li>Selecciona tercero, fechas, moneda, condicion de pago, uso CFDI, forma/metodo de pago y datos PAC.</li><li>Guarda la factura. El sistema genera folio interno <code>FAC-AAAAMMDD-00001</code>.</li></ol><h4>Conceptos e impuestos</h4><ol><li>Selecciona la factura y presiona <strong>Concepto</strong>.</li><li>Captura producto o concepto manual, cantidad, precio, descuento, unidad SAT y clave producto SAT.</li><li>Captura objeto de impuesto, tipo factor, tasa de IVA y retenciones si aplican.</li><li>Guarda. El sistema recalcula subtotal, impuestos, retenciones, total y saldo.</li></ol><h4>Preparar, timbrar y cancelar</h4><ul><li><strong>Preparar CFDI</strong> genera y guarda el JSON que se mandara al PAC. No timbra.</li><li><strong>Timbrar</strong> envia el payload a Factura.com, guarda respuesta, UID/UUID y crea/relaciona el registro en <code>core_sat_cfdi</code>.</li><li><strong>Cancelar</strong> solicita cancelacion al PAC con motivo SAT y UUID sustituto si aplica; tambien marca SAT CFDI como cancelado.</li><li>Los eventos PAC quedan en <code>core_integration_events</code> y los eventos de factura en <code>core_billing_invoice_events</code>.</li></ul><h4>Relacion con otros modulos</h4><ul><li><strong>Terceros</strong> aporta cliente/proveedor, RFC, regimen fiscal y uso CFDI sugerido.</li><li><strong>Catalogos</strong> aporta monedas, condiciones de pago, unidades, impuestos y retenciones.</li><li><strong>SAT</strong> conserva CFDI, UUID, estado fiscal y visibilidad al portal del cliente.</li><li><strong>Pagos y Bancos</strong> debera liquidar facturas por asignaciones.</li><li><strong>Documentos</strong> debera almacenar XML/PDF cuando el PAC los entregue o se descarguen.</li></ul><h4>Reglas de seguridad</h4><ul><li>No guardar secretos fiscales en facturas.</li><li>No timbrar en produccion sin validar CSD, receptor, regimen, CP y serie.</li><li>Todo timbrado/cancelacion debe auditarse y conservar respuesta del PAC.</li><li>El estado <strong>Lista para timbrar</strong> no significa CFDI emitido; solo indica que el JSON fue preparado.</li></ul>',
             'sort_order' => 53,
             'active' => 1,
             'created_at' => time(),

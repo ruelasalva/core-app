@@ -44,6 +44,15 @@
                                 <td><span class="badge badge-secondary">{{ invoice.status }}</span></td>
                                 <td class="text-right">{{ money(invoice.total, invoice.currency_code) }}</td>
                                 <td class="text-right">
+                                    <button class="btn btn-xs btn-outline-info" @click="prepareCfdi(invoice)" title="Preparar CFDI">
+                                        <i class="bi bi-braces"></i>
+                                    </button>
+                                    <button class="btn btn-xs btn-outline-success" @click="stampInvoice(invoice)" :disabled="invoice.status === 'stamped' || invoice.status === 'cancelled'" title="Timbrar">
+                                        <i class="bi bi-patch-check"></i>
+                                    </button>
+                                    <button class="btn btn-xs btn-outline-danger" @click="openCancel(invoice)" :disabled="invoice.status !== 'stamped'" title="Cancelar">
+                                        <i class="bi bi-x-octagon"></i>
+                                    </button>
                                     <button class="btn btn-xs btn-outline-primary" @click="editInvoice(invoice)">
                                         <i class="bi bi-pencil"></i>
                                     </button>
@@ -98,7 +107,9 @@
                     <div class="text-right">
                         <div>Subtotal: <strong>{{ money(selectedInvoice.subtotal, selectedInvoice.currency_code) }}</strong></div>
                         <div>Impuestos: <strong>{{ money(selectedInvoice.tax_total, selectedInvoice.currency_code) }}</strong></div>
+                        <div>Retenciones: <strong>{{ money(selectedInvoice.retention_total, selectedInvoice.currency_code) }}</strong></div>
                         <div>Total: <strong>{{ money(selectedInvoice.total, selectedInvoice.currency_code) }}</strong></div>
+                        <div v-if="selectedInvoice.uuid" class="text-muted small">UUID: {{ selectedInvoice.uuid }}</div>
                     </div>
                 </div>
                 <div class="alert alert-info" v-else>
@@ -167,6 +178,21 @@
                                 <option value="0">Sin condicion</option>
                                 <option v-for="option in options.payment_terms" :value="option.value">{{ option.label }}</option>
                             </select>
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label>Conexion PAC</label>
+                            <select v-model="invoiceForm.pac_connection_id" class="form-control">
+                                <option value="0">Factura.com PAC predeterminada</option>
+                                <option v-for="option in options.pac_connections" :value="option.value">{{ option.label }}</option>
+                            </select>
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label>Serie Factura.com</label>
+                            <input v-model="invoiceForm.pac_series_id" class="form-control" placeholder="ID de serie">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label>UID receptor Factura.com</label>
+                            <input v-model="invoiceForm.pac_receptor_uid" class="form-control" placeholder="UID del cliente en Factura.com">
                         </div>
                         <div class="form-group col-md-4">
                             <label>Uso CFDI</label>
@@ -243,14 +269,75 @@
                             <input v-model="itemForm.sat_product_service_code" class="form-control">
                         </div>
                         <div class="form-group col-md-4">
+                            <label>Objeto impuesto</label>
+                            <select v-model="itemForm.sat_object_tax_code" class="form-control">
+                                <option value="01">01 - No objeto</option>
+                                <option value="02">02 - Si objeto</option>
+                                <option value="03">03 - Si objeto no obligado</option>
+                            </select>
+                        </div>
+                        <div class="form-group col-md-4">
                             <label>Tasa impuesto</label>
                             <input v-model.number="itemForm.tax_rate" type="number" step="0.000001" class="form-control">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label>Tipo factor</label>
+                            <select v-model="itemForm.tax_factor_type" class="form-control">
+                                <option value="Tasa">Tasa</option>
+                                <option value="Cuota">Cuota</option>
+                                <option value="Exento">Exento</option>
+                            </select>
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label>Retencion</label>
+                            <select v-model="itemForm.retention_tax_code" class="form-control">
+                                <option value="">Sin retencion</option>
+                                <option v-for="option in options.retentions" :value="option.value">{{ option.label }}</option>
+                            </select>
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label>Tasa retencion</label>
+                            <input v-model.number="itemForm.retention_rate" type="number" step="0.000001" class="form-control">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label>Importe retencion</label>
+                            <input v-model.number="itemForm.retention_amount" type="number" step="0.01" class="form-control">
                         </div>
                     </div>
                 </div>
                 <div class="modal-footer">
                     <button class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
                     <button class="btn btn-primary" @click="saveItem">Guardar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="cancel-modal" tabindex="-1" role="dialog">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Cancelar CFDI</h5>
+                    <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label>Motivo SAT</label>
+                        <select v-model="cancelForm.cancel_motive" class="form-control">
+                            <option value="01">01 - Comprobante emitido con errores con relacion</option>
+                            <option value="02">02 - Comprobante emitido con errores sin relacion</option>
+                            <option value="03">03 - No se llevo a cabo la operacion</option>
+                            <option value="04">04 - Operacion nominativa relacionada en factura global</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>UUID sustituto</label>
+                        <input v-model="cancelForm.cancel_substitute_uuid" class="form-control">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
+                    <button class="btn btn-danger" @click="cancelInvoice">Cancelar CFDI</button>
                 </div>
             </div>
         </div>
@@ -267,9 +354,10 @@ new Vue({
         items: [],
         selectedInvoice: null,
         stats: {},
-        options: { parties: [], products: [], currencies: [], payment_terms: [], sat_cfdi_uses: [], sat_payment_forms: [], sat_payment_methods: [], units: [], taxes: [] },
+        options: { parties: [], products: [], currencies: [], payment_terms: [], sat_cfdi_uses: [], sat_payment_forms: [], sat_payment_methods: [], units: [], taxes: [], retentions: [], pac_connections: [] },
         invoiceForm: {},
         itemForm: {},
+        cancelForm: {},
         statBoxes: [
             { key: 'invoices', label: 'Facturas', icon: 'bi bi-receipt', className: 'bg-info' },
             { key: 'draft', label: 'Borradores', icon: 'bi bi-pencil-square', className: 'bg-secondary' },
@@ -309,6 +397,9 @@ new Vue({
                 currency_code: 'MXN',
                 exchange_rate: 1,
                 payment_term_id: 0,
+                pac_connection_id: 0,
+                pac_series_id: '',
+                pac_receptor_uid: '',
                 sat_cfdi_use_code: 'G03',
                 sat_payment_form_code: '99',
                 sat_payment_method_code: 'PPD',
@@ -344,9 +435,14 @@ new Vue({
                 description: '',
                 quantity: 1,
                 unit_code: 'H87',
+                sat_object_tax_code: '02',
                 unit_price: 0,
                 discount_amount: 0,
                 tax_rate: 0.16,
+                tax_factor_type: 'Tasa',
+                retention_tax_code: '',
+                retention_rate: 0,
+                retention_amount: 0,
                 sat_product_service_code: '01010101',
                 active: true
             };
@@ -366,6 +462,45 @@ new Vue({
                     this.stats = data.stats || {};
                     this.selectedInvoice = this.invoices.find(item => parseInt(item.id) === parseInt(this.itemForm.invoice_id)) || this.selectedInvoice;
                     $('#item-modal').modal('hide');
+                });
+        },
+        prepareCfdi: function(invoice) {
+            fetch('<?php echo Uri::create('admin/billing/prepare_cfdi'); ?>', window.coreAppFetchOptions({ id: invoice.id }))
+                .then(res => res.json())
+                .then(data => {
+                    if (data.error) { this.error = data.error; return; }
+                    this.invoices = data.invoices || [];
+                    this.items = data.items || this.items;
+                    this.stats = data.stats || {};
+                    this.selectedInvoice = this.invoices.find(item => parseInt(item.id) === parseInt(invoice.id)) || this.selectedInvoice;
+                });
+        },
+        stampInvoice: function(invoice) {
+            if (!confirm('Timbrar factura ' + invoice.folio + ' con Factura.com?')) return;
+            fetch('<?php echo Uri::create('admin/billing/stamp_invoice'); ?>', window.coreAppFetchOptions({ id: invoice.id }))
+                .then(res => res.json())
+                .then(data => {
+                    if (data.error) { this.error = data.error; return; }
+                    this.invoices = data.invoices || [];
+                    this.items = data.items || this.items;
+                    this.stats = data.stats || {};
+                    this.selectedInvoice = this.invoices.find(item => parseInt(item.id) === parseInt(invoice.id)) || this.selectedInvoice;
+                });
+        },
+        openCancel: function(invoice) {
+            this.cancelForm = { id: invoice.id, cancel_motive: '02', cancel_substitute_uuid: '' };
+            $('#cancel-modal').modal('show');
+        },
+        cancelInvoice: function() {
+            fetch('<?php echo Uri::create('admin/billing/cancel_invoice'); ?>', window.coreAppFetchOptions(this.cancelForm))
+                .then(res => res.json())
+                .then(data => {
+                    if (data.error) { this.error = data.error; return; }
+                    this.invoices = data.invoices || [];
+                    this.items = data.items || this.items;
+                    this.stats = data.stats || {};
+                    this.selectedInvoice = this.invoices.find(item => parseInt(item.id) === parseInt(this.cancelForm.id)) || this.selectedInvoice;
+                    $('#cancel-modal').modal('hide');
                 });
         },
         money: function(value, currency) {
