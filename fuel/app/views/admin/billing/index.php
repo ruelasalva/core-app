@@ -220,6 +220,75 @@
                             <textarea v-model="invoiceForm.notes" class="form-control" rows="2"></textarea>
                         </div>
                     </div>
+                    <div class="border rounded p-3 bg-light" v-if="!invoiceForm.id">
+                        <div class="d-flex align-items-center mb-2">
+                            <h6 class="mb-0">Conceptos de la factura</h6>
+                            <span class="ml-auto text-muted small">Se guardan al crear la factura</span>
+                        </div>
+                        <div class="row align-items-end">
+                            <div class="form-group col-md-5">
+                                <label>Producto o servicio</label>
+                                <input v-model="invoiceDraftSearch" class="form-control" placeholder="Buscar SKU o producto">
+                                <div class="list-group position-absolute w-100 shadow-sm" style="z-index: 1060; max-height: 220px; overflow-y: auto;" v-if="invoiceDraftSearch && invoiceDraftProducts.length">
+                                    <button type="button" class="list-group-item list-group-item-action" v-for="product in invoiceDraftProducts" :key="product.value" @click="chooseInvoiceDraftProduct(product)">
+                                        <strong>{{ product.name }}</strong>
+                                        <span class="d-block small text-muted">{{ product.sku || 'Sin SKU' }} - Disponible {{ product.available_stock || 0 }}</span>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="form-group col-md-2">
+                                <label>Cantidad</label>
+                                <input v-model.number="invoiceDraftConcept.quantity" type="number" min="0.0001" step="0.0001" class="form-control">
+                            </div>
+                            <div class="form-group col-md-2">
+                                <label>Precio</label>
+                                <input v-model.number="invoiceDraftConcept.unit_price" type="number" step="0.01" class="form-control">
+                            </div>
+                            <div class="form-group col-md-3">
+                                <button class="btn btn-outline-primary btn-block" type="button" @click="addInvoiceDraftConcept">
+                                    <i class="bi bi-plus"></i> Agregar concepto
+                                </button>
+                            </div>
+                        </div>
+                        <div class="row" v-if="invoiceDraftConcept.product_id">
+                            <div class="col-md-3">
+                                <div class="border rounded bg-white d-flex align-items-center justify-content-center mb-2" style="height: 120px; overflow: hidden;">
+                                    <img :src="invoiceDraftProduct.image_url || noImage" :alt="invoiceDraftProduct.label || 'Sin imagen'" style="max-width: 100%; max-height: 100%;">
+                                </div>
+                            </div>
+                            <div class="col-md-9 small text-muted">
+                                <div><strong>{{ invoiceDraftProduct.name }}</strong></div>
+                                <div>SKU: {{ invoiceDraftProduct.sku || 'Sin SKU' }}</div>
+                                <div>Existencia disponible: {{ invoiceDraftProduct.available_stock || 0 }}</div>
+                                <div>Impuesto: {{ invoiceDraftProduct.tax_code || 'iva_16' }}</div>
+                            </div>
+                        </div>
+                        <div class="table-responsive mt-2">
+                            <table class="table table-sm mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Concepto</th>
+                                        <th class="text-right">Cantidad</th>
+                                        <th class="text-right">Precio</th>
+                                        <th class="text-right">Total</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="(concept, index) in invoiceDraftItems" :key="index">
+                                        <td>{{ concept.description }}</td>
+                                        <td class="text-right">{{ concept.quantity }}</td>
+                                        <td class="text-right">{{ money(concept.unit_price, invoiceForm.currency_code) }}</td>
+                                        <td class="text-right">{{ money(draftConceptTotal(concept), invoiceForm.currency_code) }}</td>
+                                        <td class="text-right"><button class="btn btn-xs btn-outline-danger" type="button" @click="removeInvoiceDraftConcept(index)">Quitar</button></td>
+                                    </tr>
+                                    <tr v-if="invoiceDraftItems.length === 0">
+                                        <td colspan="5" class="text-muted">Agrega productos para facturar directo.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
@@ -391,6 +460,9 @@ new Vue({
         options: { parties: [], products: [], currencies: [], payment_terms: [], sat_cfdi_uses: [], sat_payment_forms: [], sat_payment_methods: [], units: [], taxes: [], retentions: [], pac_connections: [] },
         noImage: '<?php echo $no_image_svg; ?>',
         productSearch: '',
+        invoiceDraftSearch: '',
+        invoiceDraftConcept: {},
+        invoiceDraftItems: [],
         invoiceForm: {},
         itemForm: {},
         cancelForm: {},
@@ -413,6 +485,18 @@ new Vue({
         },
         selectedProduct: function() {
             const productId = parseInt(this.itemForm.product_id || 0);
+            return (this.options.products || []).find(product => parseInt(product.value) === productId) || {};
+        },
+        invoiceDraftProducts: function() {
+            const q = (this.invoiceDraftSearch || '').toLowerCase().trim();
+            if (q.length < 2) return [];
+            return (this.options.products || []).filter(product => {
+                const text = [product.label, product.name, product.sku].join(' ').toLowerCase();
+                return text.indexOf(q) !== -1;
+            }).slice(0, 20);
+        },
+        invoiceDraftProduct: function() {
+            const productId = parseInt(this.invoiceDraftConcept.product_id || 0);
             return (this.options.products || []).find(product => parseInt(product.value) === productId) || {};
         }
     },
@@ -458,10 +542,16 @@ new Vue({
                 notes: '',
                 active: true
             };
+            this.invoiceDraftSearch = '';
+            this.invoiceDraftConcept = this.emptyInvoiceDraftConcept();
+            this.invoiceDraftItems = [];
             $('#invoice-modal').modal('show');
         },
         editInvoice: function(invoice) {
             this.invoiceForm = Object.assign({}, invoice);
+            this.invoiceDraftSearch = '';
+            this.invoiceDraftConcept = this.emptyInvoiceDraftConcept();
+            this.invoiceDraftItems = [];
             $('#invoice-modal').modal('show');
         },
         saveInvoice: function() {
@@ -469,10 +559,83 @@ new Vue({
                 .then(res => res.json())
                 .then(data => {
                     if (data.error) { this.error = data.error; return; }
+                    const invoiceId = data.invoice_id || (data.invoices && data.invoices.length ? data.invoices[0].id : 0);
+                    if (!this.invoiceForm.id && this.invoiceDraftItems.length && invoiceId) {
+                        this.saveInvoiceDraftItems(invoiceId).then(() => {
+                            this.load(invoiceId);
+                            $('#invoice-modal').modal('hide');
+                        });
+                        return;
+                    }
                     this.invoices = data.invoices || [];
                     this.stats = data.stats || {};
+                    if (invoiceId) this.selectedInvoice = this.invoices.find(item => parseInt(item.id) === parseInt(invoiceId)) || this.selectedInvoice;
                     $('#invoice-modal').modal('hide');
                 });
+        },
+        saveInvoiceDraftItems: function(invoiceId) {
+            const items = this.invoiceDraftItems.slice();
+            const saveOne = index => {
+                if (index >= items.length) return Promise.resolve();
+                const payload = Object.assign({}, items[index], { invoice_id: invoiceId });
+                return fetch('<?php echo Uri::create('admin/billing/save_item'); ?>', window.coreAppFetchOptions(payload))
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.error) throw new Error(data.error);
+                    })
+                    .then(() => saveOne(index + 1));
+            };
+            return saveOne(0).catch(error => {
+                this.error = error.message || 'No se pudieron guardar todos los conceptos.';
+            });
+        },
+        emptyInvoiceDraftConcept: function() {
+            return {
+                product_id: 0,
+                description: '',
+                quantity: 1,
+                unit_code: 'H87',
+                sat_object_tax_code: '02',
+                unit_price: 0,
+                discount_amount: 0,
+                tax_code: 'iva_16',
+                tax_rate: 0.16,
+                tax_factor_type: 'Tasa',
+                retention_tax_code: '',
+                retention_rate: 0,
+                retention_amount: 0,
+                sat_product_service_code: '01010101',
+                active: true
+            };
+        },
+        chooseInvoiceDraftProduct: function(product) {
+            this.invoiceDraftConcept = Object.assign({}, this.emptyInvoiceDraftConcept(), {
+                product_id: product.value,
+                description: product.name || product.label || '',
+                quantity: this.invoiceDraftConcept.quantity || 1,
+                unit_code: product.unit_code || 'H87',
+                unit_price: parseFloat(product.price || 0),
+                tax_code: product.tax_code || 'iva_16',
+                tax_rate: parseFloat(product.tax_rate || 0),
+                sat_object_tax_code: parseFloat(product.tax_rate || 0) > 0 ? '02' : '01'
+            });
+            this.invoiceDraftSearch = product.label || product.name || '';
+        },
+        addInvoiceDraftConcept: function() {
+            if (!this.invoiceDraftConcept.description) {
+                alert('Selecciona producto o captura descripcion.');
+                return;
+            }
+            this.invoiceDraftItems.push(Object.assign({}, this.invoiceDraftConcept));
+            this.invoiceDraftSearch = '';
+            this.invoiceDraftConcept = this.emptyInvoiceDraftConcept();
+        },
+        removeInvoiceDraftConcept: function(index) {
+            this.invoiceDraftItems.splice(index, 1);
+        },
+        draftConceptTotal: function(concept) {
+            const base = Math.max(0, (Number(concept.quantity || 0) * Number(concept.unit_price || 0)) - Number(concept.discount_amount || 0));
+            return base + (base * Number(concept.tax_rate || 0)) - Number(concept.retention_amount || 0);
         },
         selectInvoice: function(invoice) {
             this.selectedInvoice = invoice;

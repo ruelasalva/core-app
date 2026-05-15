@@ -390,6 +390,14 @@
                             <p class="mb-1"><strong>Fecha:</strong> {{ selected.created_label }}</p>
                             <p class="mb-1"><strong>Vence:</strong> {{ selected.expires_label || '-' }}</p>
                             <p class="mb-3"><strong>Total:</strong> {{ selected.currency_code }} {{ money(selected.total) }}</p>
+                            <div class="btn-group btn-group-sm">
+                                <button class="btn btn-outline-primary" @click="createOrderFromQuote" :disabled="selected.status === 'prequote' || (selected.orders && selected.orders.length)">
+                                    Crear pedido
+                                </button>
+                                <button class="btn btn-outline-success" v-if="selected.orders && selected.orders.length" @click="createDeliveryFromOrder(selected.orders[0])" :disabled="selected.orders[0].status === 'delivered' || selected.orders[0].status === 'closed' || selected.orders[0].status === 'billed'">
+                                    Crear entrega
+                                </button>
+                            </div>
                         </div>
                     </div>
 
@@ -447,7 +455,7 @@
                             <div class="d-flex align-items-center">
                                 <strong>{{ order.folio }}</strong>
                                 <span class="badge badge-info ml-2">{{ order.status }}</span>
-                                <button class="btn btn-xs btn-outline-success ml-auto" @click="createDeliveryFromOrder(order)" :disabled="order.status === 'delivered' || order.status === 'closed'">
+                                <button class="btn btn-xs btn-outline-success ml-auto" @click="createDeliveryFromOrder(order)" :disabled="order.status === 'delivered' || order.status === 'closed' || order.status === 'billed'">
                                     Crear entrega
                                 </button>
                             </div>
@@ -873,7 +881,14 @@ window.onload = function() {
             saveQuote() {
                 this.ensureOfflineUuid();
                 fetch('<?php echo Uri::create('admin/sales/create_quote'); ?>', window.coreAppFetchOptions(this.quoteForm))
-                    .then(res => res.json())
+                    .then(res => {
+                        if (!res.ok) {
+                            return res.text().then(text => {
+                                throw new Error(text || ('HTTP ' + res.status));
+                            });
+                        }
+                        return res.json();
+                    })
                     .then(data => {
                         if (data.error) {
                             alert(data.error);
@@ -884,7 +899,11 @@ window.onload = function() {
                         this.removeDraftByUuid(this.quoteForm.offline_uuid);
                         this.hideModal('modal-new-quote');
                     })
-                    .catch(() => {
+                    .catch(error => {
+                        if (error && error.name !== 'TypeError') {
+                            alert('No se pudo guardar la cotizacion. Revisa sesion, permisos o el log.');
+                            return;
+                        }
                         this.saveDraftNow();
                         alert('Sin conexion. La cotizacion quedo guardada como borrador en este equipo.');
                     });

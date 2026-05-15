@@ -146,6 +146,8 @@ class Controller_Admin_Billing extends Controller_Adminbase
 
             return $this->json_response([
                 'status' => 'ok',
+                'invoice_id' => (int) $invoice->id,
+                'folio' => (string) $invoice->folio,
                 'invoices' => $this->get_invoices(),
                 'items' => $this->get_items((int) $invoice->id),
                 'stats' => $this->get_stats(),
