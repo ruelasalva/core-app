@@ -39,6 +39,7 @@
                         <thead>
                             <tr>
                                 <th>SKU</th>
+                                <th>Almacen</th>
                                 <th>Producto</th>
                                 <th class="text-right">Existencia</th>
                                 <th class="text-right">Reservado</th>
@@ -49,13 +50,14 @@
                         <tbody>
                             <tr v-for="row in filteredStock" :key="row.product_id">
                                 <td>{{ row.sku }}</td>
+                                <td>{{ row.warehouse_name || '-' }}</td>
                                 <td>{{ row.name }}</td>
                                 <td class="text-right">{{ qty(row.stock_quantity) }}</td>
                                 <td class="text-right">{{ qty(row.stock_reserved) }}</td>
                                 <td class="text-right">{{ qty(Number(row.stock_quantity || 0) - Number(row.stock_reserved || 0)) }}</td>
                                 <td>{{ date(row.stock_updated_at) }}</td>
                             </tr>
-                            <tr v-if="filteredStock.length === 0"><td colspan="6" class="text-muted">Sin productos.</td></tr>
+                            <tr v-if="filteredStock.length === 0"><td colspan="7" class="text-muted">Sin productos.</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -163,7 +165,7 @@
     </div>
 
     <div class="modal fade" id="modal-inventory-movement" tabindex="-1" role="dialog">
-        <div class="modal-dialog">
+        <div class="modal-dialog modal-lg">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">Movimiento de inventario</h5>
@@ -182,13 +184,6 @@
                         </select>
                     </div>
                     <div class="form-group">
-                        <label>Producto</label>
-                        <select class="form-control" v-model="movementForm.product_id">
-                            <option value="0">Selecciona producto</option>
-                            <option v-for="product in products" :value="product.id">{{ product.sku }} - {{ product.name }}</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
                         <label>Almacen origen</label>
                         <select class="form-control" v-model="movementForm.warehouse_id">
                             <option value="0">Selecciona almacen</option>
@@ -202,9 +197,45 @@
                             <option v-for="warehouse in warehouses" :value="warehouse.id">{{ warehouse.code }} - {{ warehouse.name }}</option>
                         </select>
                     </div>
-                    <div class="form-group">
-                        <label>Cantidad</label>
-                        <input class="form-control" type="number" min="0.0001" step="0.0001" v-model.number="movementForm.quantity">
+                    <div class="border rounded p-3 mb-3 bg-light">
+                        <h6>Partidas del movimiento</h6>
+                        <div class="row align-items-end">
+                            <div class="form-group col-md-7">
+                                <label>Producto</label>
+                                <select class="form-control" v-model="movementLine.product_id">
+                                    <option value="0">Selecciona producto</option>
+                                    <option v-for="product in products" :value="product.id">{{ product.sku }} - {{ product.name }}</option>
+                                </select>
+                            </div>
+                            <div class="form-group col-md-3">
+                                <label>Cantidad</label>
+                                <input class="form-control" type="number" min="0.0001" step="0.0001" v-model.number="movementLine.quantity">
+                            </div>
+                            <div class="form-group col-md-2">
+                                <button class="btn btn-outline-primary btn-block" type="button" @click="addMovementLine">Agregar</button>
+                            </div>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-sm mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Producto</th>
+                                        <th class="text-right">Cantidad</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="(item, index) in movementForm.items" :key="index">
+                                        <td>{{ productLabel(item.product_id) }}</td>
+                                        <td class="text-right">{{ qty(item.quantity) }}</td>
+                                        <td class="text-right"><button class="btn btn-xs btn-outline-danger" type="button" @click="removeMovementLine(index)">Quitar</button></td>
+                                    </tr>
+                                    <tr v-if="!movementForm.items || movementForm.items.length === 0">
+                                        <td colspan="3" class="text-muted">Agrega uno o varios productos al movimiento.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                     <div class="form-group">
                         <label>Notas</label>
@@ -236,6 +267,7 @@ new Vue({
         stats: {},
         filters: { stock: '', movements: '' },
         movementForm: {},
+        movementLine: {},
         statBoxes: [
             { key: 'products', label: 'Productos', icon: 'bi bi-box-seam', className: 'bg-info' },
             { key: 'warehouses', label: 'Almacenes', icon: 'bi bi-building', className: 'bg-secondary' },
@@ -247,7 +279,7 @@ new Vue({
         filteredStock: function() {
             var q = (this.filters.stock || '').toLowerCase();
             return this.stock.filter(function(row) {
-                return [row.sku, row.name].join(' ').toLowerCase().indexOf(q) !== -1;
+                return [row.sku, row.name, row.warehouse_name].join(' ').toLowerCase().indexOf(q) !== -1;
             });
         },
         filteredMovements: function() {
@@ -278,11 +310,34 @@ new Vue({
         },
         openMovement: function() {
             var warehouse = this.warehouses.find(function(item) { return Number(item.is_default || 0) === 1; }) || this.warehouses[0] || {};
-            this.movementForm = { movement_type: 'adjustment_in', product_id: 0, warehouse_id: warehouse.id || 0, target_warehouse_id: 0, quantity: 1, notes: '' };
+            this.movementForm = { movement_type: 'adjustment_in', warehouse_id: warehouse.id || 0, target_warehouse_id: 0, items: [], notes: '' };
+            this.movementLine = { product_id: 0, quantity: 1 };
             $('#modal-inventory-movement').modal('show');
+        },
+        addMovementLine: function() {
+            if (!this.movementLine.product_id || Number(this.movementLine.quantity || 0) <= 0) {
+                alert('Selecciona producto y cantidad.');
+                return;
+            }
+            this.movementForm.items.push({
+                product_id: Number(this.movementLine.product_id),
+                quantity: Number(this.movementLine.quantity)
+            });
+            this.movementLine = { product_id: 0, quantity: 1 };
+        },
+        removeMovementLine: function(index) {
+            this.movementForm.items.splice(index, 1);
+        },
+        productLabel: function(productId) {
+            var product = this.products.find(function(item) { return Number(item.id) === Number(productId); }) || {};
+            return product.id ? ((product.sku || 'Sin SKU') + ' - ' + product.name) : '-';
         },
         saveMovement: function() {
             this.error = '';
+            if (!this.movementForm.items || this.movementForm.items.length === 0) {
+                alert('Agrega al menos un producto.');
+                return;
+            }
             fetch('<?php echo Uri::create('admin/inventory/save_movement'); ?>', window.coreAppFetchOptions(this.movementForm))
                 .then(function(res) { return res.json(); })
                 .then(data => {

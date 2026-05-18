@@ -39,33 +39,37 @@ class Controller_Admin_Inventory extends Controller_Adminbase
         try {
             $val = (array) \Input::json();
             $type = $this->movement_type((string) \Arr::get($val, 'movement_type', 'adjustment_in'));
-            $product_id = (int) \Arr::get($val, 'product_id', 0);
             $warehouse_id = (int) \Arr::get($val, 'warehouse_id', 0);
             $target_warehouse_id = (int) \Arr::get($val, 'target_warehouse_id', 0);
-            $quantity = max(0, (float) \Arr::get($val, 'quantity', 0));
             $notes = trim((string) \Arr::get($val, 'notes', ''));
+            $items = $this->movement_items($val);
 
-            if ($product_id < 1 || !Model_Core_Commerce_Product::find($product_id)) {
-                return $this->json_response(['error' => 'Producto invalido.'], 422);
-            }
             if ($warehouse_id < 1 || !Model_Core_Inventory_Warehouse::find($warehouse_id)) {
                 return $this->json_response(['error' => 'Almacen invalido.'], 422);
             }
-            if ($quantity <= 0) {
-                return $this->json_response(['error' => 'Captura cantidad mayor a cero.'], 422);
+            if (empty($items)) {
+                return $this->json_response(['error' => 'Agrega al menos un producto al movimiento.'], 422);
             }
 
+            $ref = time();
             if ($type === 'transfer') {
                 if ($target_warehouse_id < 1 || $target_warehouse_id === $warehouse_id || !Model_Core_Inventory_Warehouse::find($target_warehouse_id)) {
                     return $this->json_response(['error' => 'Selecciona almacen destino diferente.'], 422);
                 }
-                $ref = time();
-                $this->insert_movement($warehouse_id, $product_id, 'transfer_out', -$quantity, 'inventory', 'transfer', $ref, $notes);
-                $this->insert_movement($target_warehouse_id, $product_id, 'transfer_in', $quantity, 'inventory', 'transfer', $ref, $notes);
+                foreach ($items as $item) {
+                    $this->insert_movement($warehouse_id, $item['product_id'], 'transfer_out', -$item['quantity'], 'inventory', 'transfer', $ref, $notes);
+                    $this->adjust_balance($warehouse_id, $item['product_id'], -$item['quantity']);
+                    $this->insert_movement($target_warehouse_id, $item['product_id'], 'transfer_in', $item['quantity'], 'inventory', 'transfer', $ref, $notes);
+                    $this->adjust_balance($target_warehouse_id, $item['product_id'], $item['quantity']);
+                    $this->refresh_product_stock($item['product_id']);
+                }
             } else {
-                $signed = in_array($type, ['adjustment_out', 'sale_out', 'damage_out'], true) ? -$quantity : $quantity;
-                $this->insert_movement($warehouse_id, $product_id, $type, $signed, 'inventory', 'manual', 0, $notes);
-                $this->update_product_stock($product_id, $signed);
+                foreach ($items as $item) {
+                    $signed = in_array($type, ['adjustment_out', 'sale_out', 'damage_out'], true) ? -$item['quantity'] : $item['quantity'];
+                    $this->insert_movement($warehouse_id, $item['product_id'], $type, $signed, 'inventory', 'manual', $ref, $notes);
+                    $this->adjust_balance($warehouse_id, $item['product_id'], $signed);
+                    $this->refresh_product_stock($item['product_id']);
+                }
             }
 
             Helper_Core_Audit::log([
@@ -112,7 +116,20 @@ class Controller_Admin_Inventory extends Controller_Adminbase
 
     protected function stock()
     {
-        return \DB::select(['p.id', 'product_id'], ['p.sku', 'sku'], ['p.name', 'name'], ['p.stock_quantity', 'stock_quantity'], ['p.stock_reserved', 'stock_reserved'], ['p.stock_updated_at', 'stock_updated_at'])
+        if (\DBUtil::table_exists('core_inventory_stock_balances')) {
+            return \DB::select(['b.id', 'balance_id'], ['b.product_id', 'product_id'], ['b.warehouse_id', 'warehouse_id'], ['w.name', 'warehouse_name'], ['p.sku', 'sku'], ['p.name', 'name'], ['b.quantity_on_hand', 'stock_quantity'], ['b.quantity_reserved', 'stock_reserved'], ['b.last_movement_at', 'stock_updated_at'])
+                ->from(['core_inventory_stock_balances', 'b'])
+                ->join(['core_commerce_products', 'p'], 'inner')->on('b.product_id', '=', 'p.id')
+                ->join(['core_inventory_warehouses', 'w'], 'left')->on('b.warehouse_id', '=', 'w.id')
+                ->where('p.active', '=', 1)
+                ->order_by('p.name', 'asc')
+                ->order_by('w.name', 'asc')
+                ->limit(500)
+                ->execute()
+                ->as_array();
+        }
+
+        return \DB::select(['p.id', 'product_id'], [\DB::expr('0'), 'warehouse_id'], [\DB::expr("''"), 'warehouse_name'], ['p.sku', 'sku'], ['p.name', 'name'], ['p.stock_quantity', 'stock_quantity'], ['p.stock_reserved', 'stock_reserved'], ['p.stock_updated_at', 'stock_updated_at'])
             ->from(['core_commerce_products', 'p'])
             ->where('p.active', '=', 1)
             ->order_by('p.name', 'asc')
@@ -152,6 +169,36 @@ class Controller_Admin_Inventory extends Controller_Adminbase
 
     protected function audit()
     {
+        if (\DBUtil::table_exists('core_inventory_stock_balances')) {
+            return \DB::select(
+                    ['b.product_id', 'product_id'],
+                    ['b.warehouse_id', 'warehouse_id'],
+                    ['w.name', 'warehouse_name'],
+                    ['p.sku', 'sku'],
+                    ['p.name', 'name'],
+                    ['b.quantity_on_hand', 'stock_quantity'],
+                    [\DB::expr('COALESCE(SUM(m.quantity), 0)'), 'movement_balance'],
+                    [\DB::expr('(b.quantity_on_hand - COALESCE(SUM(m.quantity), 0))'), 'difference']
+                )
+                ->from(['core_inventory_stock_balances', 'b'])
+                ->join(['core_commerce_products', 'p'], 'inner')->on('b.product_id', '=', 'p.id')
+                ->join(['core_inventory_warehouses', 'w'], 'left')->on('b.warehouse_id', '=', 'w.id')
+                ->join(['core_inventory_movements', 'm'], 'left')
+                    ->on('b.product_id', '=', 'm.product_id')
+                    ->on('b.warehouse_id', '=', 'm.warehouse_id')
+                ->where('p.active', '=', 1)
+                ->group_by('b.product_id')
+                ->group_by('b.warehouse_id')
+                ->group_by('w.name')
+                ->group_by('p.sku')
+                ->group_by('p.name')
+                ->group_by('b.quantity_on_hand')
+                ->order_by(\DB::expr('ABS(b.quantity_on_hand - COALESCE(SUM(m.quantity), 0))'), 'desc')
+                ->limit(300)
+                ->execute()
+                ->as_array();
+        }
+
         return \DB::select(
                 ['p.id', 'product_id'],
                 ['p.sku', 'sku'],
@@ -195,6 +242,30 @@ class Controller_Admin_Inventory extends Controller_Adminbase
         return in_array($type, $allowed, true) ? $type : 'adjustment_in';
     }
 
+    protected function movement_items(array $payload)
+    {
+        $raw_items = (array) \Arr::get($payload, 'items', []);
+        if (empty($raw_items) && (int) \Arr::get($payload, 'product_id', 0) > 0) {
+            $raw_items[] = [
+                'product_id' => (int) \Arr::get($payload, 'product_id', 0),
+                'quantity' => (float) \Arr::get($payload, 'quantity', 0),
+            ];
+        }
+
+        $items = [];
+        foreach ($raw_items as $raw) {
+            $raw = (array) $raw;
+            $product_id = (int) \Arr::get($raw, 'product_id', 0);
+            $quantity = max(0, (float) \Arr::get($raw, 'quantity', 0));
+            if ($product_id < 1 || $quantity <= 0 || !Model_Core_Commerce_Product::find($product_id)) {
+                continue;
+            }
+            $items[] = ['product_id' => $product_id, 'quantity' => $quantity];
+        }
+
+        return $items;
+    }
+
     protected function insert_movement($warehouse_id, $product_id, $type, $quantity, $module, $entity_type, $entity_id, $notes)
     {
         Model_Core_Inventory_Movement::forge([
@@ -211,11 +282,59 @@ class Controller_Admin_Inventory extends Controller_Adminbase
         ])->save();
     }
 
-    protected function update_product_stock($product_id, $quantity)
+    protected function adjust_balance($warehouse_id, $product_id, $quantity)
     {
+        if (!\DBUtil::table_exists('core_inventory_stock_balances')) {
+            return;
+        }
+
+        $now = time();
+        $row = \DB::select('id', 'quantity_on_hand')
+            ->from('core_inventory_stock_balances')
+            ->where('warehouse_id', '=', (int) $warehouse_id)
+            ->where('product_id', '=', (int) $product_id)
+            ->execute()
+            ->current();
+
+        if ($row) {
+            \DB::update('core_inventory_stock_balances')
+                ->set([
+                    'quantity_on_hand' => \DB::expr('GREATEST(0, quantity_on_hand + '.(float) $quantity.')'),
+                    'last_movement_at' => $now,
+                    'updated_at' => $now,
+                ])
+                ->where('id', '=', (int) $row['id'])
+                ->execute();
+            return;
+        }
+
+        \DB::insert('core_inventory_stock_balances')->set([
+            'warehouse_id' => (int) $warehouse_id,
+            'product_id' => (int) $product_id,
+            'quantity_on_hand' => max(0, (float) $quantity),
+            'quantity_reserved' => 0,
+            'last_movement_at' => $now,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ])->execute();
+    }
+
+    protected function refresh_product_stock($product_id)
+    {
+        if (!\DBUtil::table_exists('core_inventory_stock_balances')) {
+            return;
+        }
+
+        $row = \DB::select([\DB::expr('COALESCE(SUM(quantity_on_hand), 0)'), 'stock'], [\DB::expr('COALESCE(SUM(quantity_reserved), 0)'), 'reserved'])
+            ->from('core_inventory_stock_balances')
+            ->where('product_id', '=', (int) $product_id)
+            ->execute()
+            ->current();
+
         \DB::update('core_commerce_products')
             ->set([
-                'stock_quantity' => \DB::expr('GREATEST(0, stock_quantity + '.(float) $quantity.')'),
+                'stock_quantity' => (float) $row['stock'],
+                'stock_reserved' => (float) $row['reserved'],
                 'stock_updated_at' => time(),
                 'updated_at' => time(),
             ])

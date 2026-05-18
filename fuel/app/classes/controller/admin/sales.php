@@ -880,7 +880,7 @@ class Controller_Admin_Sales extends Controller_Adminbase
         Model_Core_Inventory_Movement::forge([
             'warehouse_id' => (int) $warehouse_id,
             'product_id' => (int) $product_id,
-            'movement_type' => 'out',
+            'movement_type' => 'delivery_out',
             'quantity' => -abs((float) $quantity),
             'related_module' => 'sales',
             'related_entity_type' => $entity_type,
@@ -889,11 +889,9 @@ class Controller_Admin_Sales extends Controller_Adminbase
             'created_by' => $this->current_user_id(),
         ])->save();
 
-        $product = Model_Core_Commerce_Product::find((int) $product_id);
-        if ($product && property_exists($product, 'stock_quantity')) {
-            $product->stock_quantity = max(0, (float) $product->stock_quantity - abs((float) $quantity));
-            $product->stock_updated_at = time();
-            $product->save();
+        if (\DBUtil::table_exists('core_inventory_stock_balances')) {
+            $this->adjust_inventory_balance((int) $warehouse_id, (int) $product_id, -abs((float) $quantity));
+            $this->refresh_product_stock_from_balances((int) $product_id);
         } else {
             \DB::update('core_commerce_products')
                 ->value('stock_quantity', \DB::expr('GREATEST(0, stock_quantity - '.(float) abs($quantity).')'))
@@ -901,6 +899,58 @@ class Controller_Admin_Sales extends Controller_Adminbase
                 ->where('id', '=', (int) $product_id)
                 ->execute();
         }
+    }
+
+    protected function adjust_inventory_balance($warehouse_id, $product_id, $quantity)
+    {
+        $now = time();
+        $row = \DB::select('id')
+            ->from('core_inventory_stock_balances')
+            ->where('warehouse_id', '=', (int) $warehouse_id)
+            ->where('product_id', '=', (int) $product_id)
+            ->execute()
+            ->current();
+
+        if ($row) {
+            \DB::update('core_inventory_stock_balances')
+                ->set([
+                    'quantity_on_hand' => \DB::expr('GREATEST(0, quantity_on_hand + '.(float) $quantity.')'),
+                    'last_movement_at' => $now,
+                    'updated_at' => $now,
+                ])
+                ->where('id', '=', (int) $row['id'])
+                ->execute();
+            return;
+        }
+
+        \DB::insert('core_inventory_stock_balances')->set([
+            'warehouse_id' => (int) $warehouse_id,
+            'product_id' => (int) $product_id,
+            'quantity_on_hand' => max(0, (float) $quantity),
+            'quantity_reserved' => 0,
+            'last_movement_at' => $now,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ])->execute();
+    }
+
+    protected function refresh_product_stock_from_balances($product_id)
+    {
+        $row = \DB::select([\DB::expr('COALESCE(SUM(quantity_on_hand), 0)'), 'stock'], [\DB::expr('COALESCE(SUM(quantity_reserved), 0)'), 'reserved'])
+            ->from('core_inventory_stock_balances')
+            ->where('product_id', '=', (int) $product_id)
+            ->execute()
+            ->current();
+
+        \DB::update('core_commerce_products')
+            ->set([
+                'stock_quantity' => (float) $row['stock'],
+                'stock_reserved' => (float) $row['reserved'],
+                'stock_updated_at' => time(),
+                'updated_at' => time(),
+            ])
+            ->where('id', '=', (int) $product_id)
+            ->execute();
     }
 
     protected function audit_flow($action, $summary, $entity_type, $entity_id, array $values)
