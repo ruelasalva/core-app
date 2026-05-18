@@ -901,7 +901,7 @@ window.onload = function() {
                     })
                     .catch(error => {
                         if (error && error.name !== 'TypeError') {
-                            alert('No se pudo guardar la cotizacion. Revisa sesion, permisos o el log.');
+                            alert('No se pudo guardar la cotizacion: ' + (error.message || 'respuesta invalida del servidor'));
                             return;
                         }
                         this.saveDraftNow();
