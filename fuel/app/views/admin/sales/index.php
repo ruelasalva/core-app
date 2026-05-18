@@ -28,6 +28,9 @@
         .quote-thumb { width: 54px; height: 44px; border-radius: 6px; border: 1px solid #dde3ea; object-fit: cover; background: #eef3f7; }
         .quote-cart { position: sticky; top: 12px; }
         .quote-toolbar { display: grid; grid-template-columns: 1.3fr 1fr 1fr auto; gap: 8px; align-items: end; }
+        .quote-modal-fullscreen { width: calc(100vw - 24px); max-width: calc(100vw - 24px); margin: 12px auto; }
+        .quote-modal-fullscreen .modal-content { min-height: calc(100vh - 24px); }
+        .quote-modal-fullscreen .modal-body { max-height: calc(100vh - 156px); overflow: auto; }
         .price-hidden .money-cell, .price-hidden .price-text { display: none; }
         .range-chip { display: inline-block; border: 1px solid #dee2e6; border-radius: 999px; padding: 2px 7px; margin: 2px 2px 0 0; font-size: .72rem; color: #495057; background: #f8f9fa; cursor: pointer; }
         .range-chip:hover { border-color: #007bff; color: #0056b3; }
@@ -155,7 +158,7 @@
     </div>
 
     <div class="modal fade" id="modal-new-quote" tabindex="-1" role="dialog" aria-hidden="true">
-        <div class="modal-dialog modal-xl">
+        <div class="modal-dialog quote-modal-fullscreen">
             <div class="modal-content">
                 <div class="modal-header bg-primary text-white">
                     <h5 class="modal-title">{{ quoteForm.quote_mode === 'prequote' ? 'Nueva precotizacion' : 'Nueva cotizacion' }}</h5>
@@ -884,7 +887,18 @@ window.onload = function() {
                     .then(res => {
                         if (!res.ok) {
                             return res.text().then(text => {
-                                throw new Error(text || ('HTTP ' + res.status));
+                                let message = 'Error HTTP ' + res.status;
+                                try {
+                                    const payload = JSON.parse(text);
+                                    message = payload.error || message;
+                                } catch (e) {
+                                    if (res.status === 400) {
+                                        message = 'La sesion de seguridad expiro o no se envio correctamente. Recarga la pantalla e intenta de nuevo.';
+                                    } else if (res.status === 404) {
+                                        message = 'No se encontro la ruta para guardar la cotizacion. Recarga la pantalla e intenta de nuevo.';
+                                    }
+                                }
+                                throw new Error(message);
                             });
                         }
                         return res.json();

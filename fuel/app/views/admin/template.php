@@ -422,6 +422,7 @@ window.coreAppFetchOptions = function(data) {
     return {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': data[window.coreAppCsrfKey] },
+        credentials: 'same-origin',
         body: JSON.stringify(data)
     };
 };

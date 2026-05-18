@@ -216,6 +216,24 @@ class Controller_Admin_Sales extends Controller_Adminbase
     }
 
     /**
+     * CREATE QUOTE ACTION
+     *
+     * COMPATIBILIDAD DE RUTA PARA PETICIONES AJAX POST/JSON.
+     *
+     * @access  public
+     * @return  Response
+     */
+    public function action_create_quote()
+    {
+        if (\Input::method() !== 'POST') {
+            return $this->json_response(['error' => 'Metodo no permitido.'], 405);
+        }
+
+        # SE REUTILIZA EL FLUJO POST PARA EVITAR RESPUESTAS HTML 404
+        return $this->post_create_quote();
+    }
+
+    /**
      * UPDATE STATUS
      *
      * ACTUALIZA EL ESTADO DE UNA COTIZACION.
@@ -271,6 +289,24 @@ class Controller_Admin_Sales extends Controller_Adminbase
             \Log::error('Error actualizando cotizacion: '.$e->getMessage());
             return $this->json_response(['error' => 'No se pudo actualizar la cotizacion.'], 400);
         }
+    }
+
+    /**
+     * UPDATE STATUS ACTION
+     *
+     * COMPATIBILIDAD DE RUTA PARA PETICIONES AJAX POST/JSON.
+     *
+     * @access  public
+     * @return  Response
+     */
+    public function action_update_status()
+    {
+        if (\Input::method() !== 'POST') {
+            return $this->json_response(['error' => 'Metodo no permitido.'], 405);
+        }
+
+        # SE REUTILIZA EL FLUJO POST PARA MANTENER UNA SOLA LOGICA
+        return $this->post_update_status();
     }
 
     /**
@@ -366,6 +402,32 @@ class Controller_Admin_Sales extends Controller_Adminbase
         }
     }
 
+    /**
+     * CLOSE PREQUOTE ACTION
+     *
+     * COMPATIBILIDAD DE RUTA PARA PETICIONES AJAX POST/JSON.
+     *
+     * @access  public
+     * @return  Response
+     */
+    public function action_close_prequote()
+    {
+        if (\Input::method() !== 'POST') {
+            return $this->json_response(['error' => 'Metodo no permitido.'], 405);
+        }
+
+        # SE REUTILIZA EL FLUJO POST PARA MANTENER UNA SOLA LOGICA
+        return $this->post_close_prequote();
+    }
+
+    /**
+     * CREATE ORDER FROM QUOTE
+     *
+     * CREA UN PEDIDO DESDE UNA COTIZACION APROBADA.
+     *
+     * @access  public
+     * @return  Response
+     */
     public function post_create_order_from_quote()
     {
         $this->require_access('sales.access[edit]');
@@ -425,6 +487,32 @@ class Controller_Admin_Sales extends Controller_Adminbase
         }
     }
 
+    /**
+     * CREATE ORDER FROM QUOTE ACTION
+     *
+     * COMPATIBILIDAD DE RUTA PARA PETICIONES AJAX POST/JSON.
+     *
+     * @access  public
+     * @return  Response
+     */
+    public function action_create_order_from_quote()
+    {
+        if (\Input::method() !== 'POST') {
+            return $this->json_response(['error' => 'Metodo no permitido.'], 405);
+        }
+
+        # SE REUTILIZA EL FLUJO POST PARA MANTENER UNA SOLA LOGICA
+        return $this->post_create_order_from_quote();
+    }
+
+    /**
+     * CREATE DELIVERY FROM ORDER
+     *
+     * CREA ENTREGA DESDE UN PEDIDO Y AFECTA INVENTARIO.
+     *
+     * @access  public
+     * @return  Response
+     */
     public function post_create_delivery_from_order()
     {
         $this->require_access('sales.access[edit]');
@@ -482,6 +570,24 @@ class Controller_Admin_Sales extends Controller_Adminbase
             \Log::error('Error creando entrega desde pedido: '.$e->getMessage());
             return $this->json_response(['error' => 'No se pudo crear la entrega.'], 400);
         }
+    }
+
+    /**
+     * CREATE DELIVERY FROM ORDER ACTION
+     *
+     * COMPATIBILIDAD DE RUTA PARA PETICIONES AJAX POST/JSON.
+     *
+     * @access  public
+     * @return  Response
+     */
+    public function action_create_delivery_from_order()
+    {
+        if (\Input::method() !== 'POST') {
+            return $this->json_response(['error' => 'Metodo no permitido.'], 405);
+        }
+
+        # SE REUTILIZA EL FLUJO POST PARA MANTENER UNA SOLA LOGICA
+        return $this->post_create_delivery_from_order();
     }
 
     /**
