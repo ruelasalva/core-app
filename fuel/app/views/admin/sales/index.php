@@ -974,13 +974,21 @@ window.onload = function() {
                     }
                     const draft = drafts[index];
                     fetch('<?php echo Uri::create('admin/sales/create_quote'); ?>', window.coreAppFetchOptions(draft.value.data))
-                        .then(res => res.json())
+                        .then(res => {
+                            if (!res.ok) {
+                                throw new Error('HTTP ' + res.status);
+                            }
+                            return res.json();
+                        })
                         .then(data => {
                             if (!data.error) {
                                 return window.CoreOffline.remove(draft.key);
                             }
+                            this.error = data.error;
                         })
-                        .catch(() => null)
+                        .catch(error => {
+                            this.error = 'No se pudo sincronizar una cotizacion local. Revisa sesion, permisos o recarga la pantalla.';
+                        })
                         .then(() => syncOne(index + 1));
                 };
                 syncOne(0);

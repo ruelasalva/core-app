@@ -311,6 +311,9 @@ class Controller_Proveedores extends Controller_Portalbase
 
             return $this->json_response([
                 'status' => 'ok',
+                'orders' => $this->purchase_orders($party_id),
+                'invoices' => $this->purchase_invoices($party_id),
+                'receipts' => $this->purchase_receipts($party_id),
                 'documents' => $this->purchase_documents($party_id),
             ]);
         } catch (\Exception $e) {
@@ -479,7 +482,7 @@ class Controller_Proveedores extends Controller_Portalbase
 
         $documents = [];
         foreach ($parts as $part) {
-            $rows = \DB::select(['d.id', 'id'], ['l.entity_type', 'entity_type'], ['l.entity_id', 'entity_id'], ['d.title', 'title'], ['d.original_name', 'original_name'], ['d.file_path', 'file_path'], ['d.file_extension', 'file_extension'], ['d.created_at', 'created_at'])
+            $rows = \DB::select(['d.id', 'id'], ['l.entity_type', 'entity_type'], ['l.entity_id', 'entity_id'], ['l.relation_type', 'relation_type'], ['l.notes', 'link_notes'], ['d.document_type', 'document_type'], ['d.title', 'title'], ['d.description', 'description'], ['d.original_name', 'original_name'], ['d.file_path', 'file_path'], ['d.file_extension', 'file_extension'], ['d.file_size', 'file_size'], ['d.is_evidence', 'is_evidence'], ['d.created_at', 'created_at'])
                 ->from(['core_document_links', 'l'])
                 ->join(['core_documents', 'd'], 'inner')->on('d.id', '=', 'l.document_id')
                 ->where('l.entity_type', '=', $part[0])
@@ -508,13 +511,16 @@ class Controller_Proveedores extends Controller_Portalbase
         if ($entity_type === 'purchase_invoice') {
             return (bool) \DB::select('id')->from('core_purchase_invoices')->where('id', '=', (int) $entity_id)->where('party_id', '=', (int) $party_id)->where('active', '=', 1)->execute()->current();
         }
+        if ($entity_type === 'purchase_receipt') {
+            return (bool) \DB::select('id')->from('core_purchase_receipts')->where('id', '=', (int) $entity_id)->where('party_id', '=', (int) $party_id)->where('active', '=', 1)->execute()->current();
+        }
         return false;
     }
 
     protected function purchase_entity_type($value)
     {
         $value = $this->codeify($value);
-        return in_array($value, ['purchase_order', 'purchase_invoice'], true) ? $value : '';
+        return in_array($value, ['purchase_order', 'purchase_invoice', 'purchase_receipt'], true) ? $value : '';
     }
 
     protected function store_purchase_document($entity_type, $entity_id)
@@ -543,7 +549,7 @@ class Controller_Proveedores extends Controller_Portalbase
         }
 
         $document = Model_Core_Document::forge([
-            'document_type' => $entity_type,
+            'document_type' => $this->document_type((string) \Input::post('document_type', $entity_type)),
             'title' => trim((string) \Input::post('title', '')) ?: $base_name,
             'description' => trim((string) \Input::post('description', '')),
             'file_path' => str_replace('\\', '/', $relative_dir.'/'.$filename),
@@ -563,12 +569,27 @@ class Controller_Proveedores extends Controller_Portalbase
             'document_id' => (int) $document->id,
             'entity_type' => $entity_type,
             'entity_id' => (int) $entity_id,
-            'relation_type' => 'attachment',
+            'relation_type' => $this->document_relation((string) \Input::post('relation_type', 'evidence')),
+            'notes' => trim((string) \Input::post('notes', '')),
             'created_by' => $this->user_id,
             'active' => 1,
         ])->save();
 
         return $document;
+    }
+
+    protected function document_type($value)
+    {
+        $value = $this->codeify($value);
+        $allowed = ['purchase_order', 'purchase_invoice', 'purchase_receipt', 'delivery_evidence', 'payment_evidence', 'tax_document', 'other_evidence'];
+        return in_array($value, $allowed, true) ? $value : 'other_evidence';
+    }
+
+    protected function document_relation($value)
+    {
+        $value = $this->codeify($value);
+        $allowed = ['attachment', 'evidence', 'invoice_file', 'xml_file', 'delivery_proof', 'payment_proof'];
+        return in_array($value, $allowed, true) ? $value : 'evidence';
     }
 
     protected function next_purchase_folio($prefix, $table)

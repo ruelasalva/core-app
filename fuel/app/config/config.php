@@ -221,6 +221,7 @@ return array(
 		'csrf_auto_token'          => true,
 		'csrf_token_key'           => 'fuel_csrf_token',
 		'csrf_expiration'          => 0,
+		'csrf_rotate'              => false,
 
 		/**
 		 * ---------------------------------------------------------------------
