@@ -1,5 +1,6 @@
 <div id="app-sales">
     <?php
+    $capture_page = !empty($capture_page);
     $no_image_svg = 'data:image/svg+xml;charset=UTF-8,'.rawurlencode('<svg xmlns="http://www.w3.org/2000/svg" width="360" height="260" viewBox="0 0 360 260"><rect width="360" height="260" fill="#eef3f7"/><path d="M72 178h216l-64-82-48 60-34-44-70 66z" fill="#cbd5e1"/><circle cx="130" cy="86" r="24" fill="#cbd5e1"/><text x="180" y="226" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="20" fill="#64748b">Sin imagen</text></svg>');
     ?>
     <style>
@@ -31,11 +32,15 @@
         .quote-modal-fullscreen { width: calc(100vw - 24px); max-width: calc(100vw - 24px); margin: 12px auto; }
         .quote-modal-fullscreen .modal-content { min-height: calc(100vh - 24px); }
         .quote-modal-fullscreen .modal-body { max-height: calc(100vh - 156px); overflow: auto; }
+        .quote-page-capture { margin: -10px -7.5px 0; }
+        .quote-page-capture .modal-content { min-height: calc(100vh - 150px); border: 0; border-radius: 0; box-shadow: none; }
+        .quote-page-capture .modal-body { min-height: calc(100vh - 280px); overflow: visible; }
         .price-hidden .money-cell, .price-hidden .price-text { display: none; }
         .range-chip { display: inline-block; border: 1px solid #dee2e6; border-radius: 999px; padding: 2px 7px; margin: 2px 2px 0 0; font-size: .72rem; color: #495057; background: #f8f9fa; cursor: pointer; }
         .range-chip:hover { border-color: #007bff; color: #0056b3; }
         @media (max-width: 1100px) { .quote-workbench { grid-template-columns: 1fr; } .quote-cart { position: static; } .quote-selected-product { grid-template-columns: 1fr; } }
     </style>
+    <?php if (!$capture_page): ?>
     <div class="row">
         <div class="col-lg-3">
             <div class="small-box bg-info">
@@ -97,9 +102,9 @@
                 <button class="btn btn-outline-secondary btn-sm mr-1" @click="newPrequote">
                     <i class="bi bi-bag-plus"></i> Precotizacion
                 </button>
-                <button class="btn btn-primary btn-sm" @click="newQuote">
+                <a class="btn btn-primary btn-sm" href="<?php echo Uri::create('admin/sales/create'); ?>">
                     <i class="bi bi-plus-lg"></i> Nueva cotizacion
-                </button>
+                </a>
             </div>
         </div>
         <div class="card-body">
@@ -156,15 +161,27 @@
             </table>
         </div>
     </div>
+    <?php endif; ?>
 
+    <?php if ($capture_page): ?>
+    <div class="quote-page-capture">
+        <div class="modal-content">
+    <?php else: ?>
     <div class="modal fade" id="modal-new-quote" tabindex="-1" role="dialog" aria-hidden="true">
         <div class="modal-dialog quote-modal-fullscreen">
             <div class="modal-content">
+    <?php endif; ?>
                 <div class="modal-header bg-primary text-white">
                     <h5 class="modal-title">{{ quoteForm.quote_mode === 'prequote' ? 'Nueva precotizacion' : 'Nueva cotizacion' }}</h5>
+                    <?php if ($capture_page): ?>
+                    <a class="close text-white" href="<?php echo Uri::create('admin/sales'); ?>">
+                        <span>&times;</span>
+                    </a>
+                    <?php else: ?>
                     <button type="button" class="close text-white" @click="hideModal('modal-new-quote')">
                         <span>&times;</span>
                     </button>
+                    <?php endif; ?>
                 </div>
                 <div class="modal-body">
                     <div class="alert alert-light border py-2">
@@ -362,12 +379,21 @@
                     </div>
                 </div>
                 <div class="modal-footer">
+                    <?php if ($capture_page): ?>
+                    <a class="btn btn-secondary" href="<?php echo Uri::create('admin/sales'); ?>">Regresar</a>
+                    <?php else: ?>
                     <button class="btn btn-secondary" @click="hideModal('modal-new-quote')">Cerrar</button>
+                    <?php endif; ?>
                     <button class="btn btn-primary" @click="saveQuote">{{ quoteForm.quote_mode === 'prequote' ? 'Guardar precotizacion' : 'Guardar cotizacion' }}</button>
                 </div>
+    <?php if ($capture_page): ?>
+            </div>
+        </div>
+    <?php else: ?>
             </div>
         </div>
     </div>
+    <?php endif; ?>
 
     <div class="modal fade" id="modal-quote" tabindex="-1" role="dialog" aria-hidden="true">
         <div class="modal-dialog modal-lg">
@@ -512,6 +538,7 @@ window.onload = function() {
             filters: { q: '', brand_id: '', category_id: '', stock: '' },
             searchTimer: null,
             noImage: <?php echo json_encode($no_image_svg); ?>,
+            capturePage: <?php echo $capture_page ? 'true' : 'false'; ?>,
             offline: { online: navigator.onLine, drafts: [], syncing: false, saveTimer: null, lastSaved: '' }
         },
         computed: {
@@ -542,6 +569,9 @@ window.onload = function() {
             }
         },
         mounted() {
+            if (this.capturePage) {
+                this.prepareQuoteForm('quote');
+            }
             this.loadData();
             this.loadDrafts();
             window.addEventListener('online', this.onOnline);
@@ -719,16 +749,25 @@ window.onload = function() {
                 }
             },
             newQuote() {
-                this.quoteForm = { party_id: '', quote_mode: 'quote', items: [], customer_notes: '', internal_notes: '', offline_uuid: this.newOfflineUuid() };
-                this.lineForm = { product_id: '', product_query: '', product_type: 'product', quantity: 1, search_open: false, search_results: [] };
+                this.prepareQuoteForm('quote');
                 this.hydrateOptionsFromCache();
                 this.showModal('modal-new-quote');
             },
             newPrequote() {
-                this.quoteForm = { party_id: '', quote_mode: 'prequote', items: [], customer_notes: '', internal_notes: 'Precotizacion sin precios para mostrar catalogo al cliente.', offline_uuid: this.newOfflineUuid() };
-                this.lineForm = { product_id: '', product_query: '', product_type: 'product', quantity: 1, search_open: false, search_results: [] };
+                this.prepareQuoteForm('prequote');
                 this.hydrateOptionsFromCache();
                 this.showModal('modal-new-quote');
+            },
+            prepareQuoteForm(mode) {
+                this.quoteForm = {
+                    party_id: '',
+                    quote_mode: mode,
+                    items: [],
+                    customer_notes: '',
+                    internal_notes: mode === 'prequote' ? 'Precotizacion sin precios para mostrar catalogo al cliente.' : '',
+                    offline_uuid: this.newOfflineUuid()
+                };
+                this.lineForm = { product_id: '', product_query: '', product_type: 'product', quantity: 1, search_open: false, search_results: [] };
             },
             onProductSearchInput() {
                 this.lineForm.product_id = '';
@@ -911,6 +950,10 @@ window.onload = function() {
                         this.quotes = data.quotes || [];
                         this.stats = data.stats || this.stats;
                         this.removeDraftByUuid(this.quoteForm.offline_uuid);
+                        if (this.capturePage) {
+                            window.location.href = '<?php echo Uri::create('admin/sales'); ?>';
+                            return;
+                        }
                         this.hideModal('modal-new-quote');
                     })
                     .catch(error => {
@@ -965,7 +1008,9 @@ window.onload = function() {
                 this.quoteForm = JSON.parse(JSON.stringify(draft.value.data || {}));
                 this.lineForm = { product_id: '', quantity: 1 };
                 this.hydrateOptionsFromCache();
-                this.showModal('modal-new-quote');
+                if (!this.capturePage) {
+                    this.showModal('modal-new-quote');
+                }
             },
             discardDraft(draft) {
                 if (!window.CoreOffline) return;

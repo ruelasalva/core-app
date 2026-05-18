@@ -28,9 +28,16 @@ return array(
 	 */
 
 	'_404_' => 'welcome/404',
+    '_400_' => 'welcome/400',
 
 	// Ruta para el panel administrativo
     'admin' => 'admin/dashboard/index',
+    'admin/sales/create' => 'admin/sales/create',
+    'admin/sales/create_quote' => 'admin/sales/create_quote',
+    'admin/sales/update_status' => 'admin/sales/update_status',
+    'admin/sales/close_prequote' => 'admin/sales/close_prequote',
+    'admin/sales/create_order_from_quote' => 'admin/sales/create_order_from_quote',
+    'admin/sales/create_delivery_from_order' => 'admin/sales/create_delivery_from_order',
 
 	// Ruta para el login (el que creamos anteriormente)
     'login' => 'auth/login',

@@ -42,6 +42,24 @@ class Controller_Admin_Sales extends Controller_Adminbase
     }
 
     /**
+     * CREATE
+     *
+     * MUESTRA CAPTURA DE COTIZACION EN PANTALLA COMPLETA.
+     *
+     * @access  public
+     * @return  Void
+     */
+    public function action_create()
+    {
+        # VALIDAR PERMISO PARA CREAR COTIZACIONES
+        $this->require_access('sales.access[create]');
+
+        # SE CARGA LA MISMA LOGICA DE VENTAS EN MODO CAPTURA
+        $this->template->title = 'Nueva cotizacion';
+        $this->template->content = View::forge('admin/sales/index', ['capture_page' => true]);
+    }
+
+    /**
      * DATA
      *
      * ENTREGA COTIZACIONES EN JSON.

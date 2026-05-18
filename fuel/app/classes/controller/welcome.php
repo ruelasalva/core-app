@@ -54,4 +54,27 @@ class Controller_Welcome extends Controller
 	{
 		return Response::forge(Presenter::forge('welcome/404'), 404);
 	}
+
+	/**
+	 * Bad request action.
+	 *
+	 * @access  public
+	 * @return  Response
+	 */
+	public function action_400()
+	{
+		$content_type = (string) Input::headers('Content-Type', '');
+		$accept = (string) Input::headers('Accept', '');
+		$is_json = stripos($content_type, 'application/json') !== false || stripos($accept, 'application/json') !== false;
+
+		if ($is_json) {
+			return Response::forge(
+				json_encode(['error' => 'La solicitud no paso la validacion de seguridad. Recarga la pantalla e intenta de nuevo.']),
+				400,
+				['Content-Type' => 'application/json']
+			);
+		}
+
+		return Response::forge(Presenter::forge('welcome/404'), 400);
+	}
 }

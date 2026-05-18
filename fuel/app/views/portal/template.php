@@ -72,6 +72,10 @@
 <?php echo Security::js_fetch_token(); ?>
 <script>
 window.coreAppCsrfKey = <?php echo json_encode(Config::get('security.csrf_token_key', 'fuel_csrf_token')); ?>;
+window.coreAppCsrfToken = <?php echo json_encode(Security::fetch_token()); ?>;
+window.fuel_csrf_token = function() {
+    return window.coreAppCsrfToken || '';
+};
 window.coreAppFetchOptions = function(data) {
     data = data || {};
     data[window.coreAppCsrfKey] = fuel_csrf_token();
@@ -79,6 +83,7 @@ window.coreAppFetchOptions = function(data) {
     return {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': data[window.coreAppCsrfKey] },
+        credentials: 'same-origin',
         body: JSON.stringify(data)
     };
 };
