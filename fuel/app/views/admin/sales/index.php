@@ -1,6 +1,10 @@
 <div id="app-sales">
     <?php
     $capture_page = !empty($capture_page);
+    $initial_view = Input::get('view', 'quotes');
+    if (!in_array($initial_view, ['quotes', 'orders', 'deliveries'], true)) {
+        $initial_view = 'quotes';
+    }
     $no_image_svg = 'data:image/svg+xml;charset=UTF-8,'.rawurlencode('<svg xmlns="http://www.w3.org/2000/svg" width="360" height="260" viewBox="0 0 360 260"><rect width="360" height="260" fill="#eef3f7"/><path d="M72 178h216l-64-82-48 60-34-44-70 66z" fill="#cbd5e1"/><circle cx="130" cy="86" r="24" fill="#cbd5e1"/><text x="180" y="226" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="20" fill="#64748b">Sin imagen</text></svg>');
     ?>
     <style>
@@ -72,19 +76,19 @@
         <div class="col-lg-3">
             <div class="small-box bg-success">
                 <div class="inner">
-                    <h3>{{ stats.approved || 0 }}</h3>
-                    <p>Aprobadas</p>
+                    <h3>{{ stats.orders || 0 }}</h3>
+                    <p>Pedidos</p>
                 </div>
-                <div class="icon"><i class="bi bi-check2-circle"></i></div>
+                <div class="icon"><i class="bi bi-clipboard-check"></i></div>
             </div>
         </div>
         <div class="col-lg-3">
             <div class="small-box bg-danger">
                 <div class="inner">
-                    <h3>{{ stats.rejected || 0 }}</h3>
-                    <p>Rechazadas</p>
+                    <h3>{{ stats.deliveries || 0 }}</h3>
+                    <p>Entregas</p>
                 </div>
-                <div class="icon"><i class="bi bi-x-circle"></i></div>
+                <div class="icon"><i class="bi bi-truck"></i></div>
             </div>
         </div>
     </div>
@@ -108,6 +112,17 @@
             </div>
         </div>
         <div class="card-body">
+            <div class="btn-group btn-group-sm mb-3" role="group" aria-label="Vista de ventas">
+                <button class="btn" :class="viewMode === 'quotes' ? 'btn-primary' : 'btn-outline-primary'" @click="viewMode = 'quotes'">
+                    Cotizaciones
+                </button>
+                <button class="btn" :class="viewMode === 'orders' ? 'btn-primary' : 'btn-outline-primary'" @click="viewMode = 'orders'">
+                    Pedidos
+                </button>
+                <button class="btn" :class="viewMode === 'deliveries' ? 'btn-primary' : 'btn-outline-primary'" @click="viewMode = 'deliveries'">
+                    Entregas
+                </button>
+            </div>
             <div v-if="offline.drafts.length" class="alert alert-warning">
                 <strong>Borradores en este equipo:</strong>
                 <span v-for="draft in offline.drafts" :key="draft.key" class="badge badge-light border ml-2">
@@ -121,7 +136,7 @@
                 <p class="mt-2">Cargando ventas...</p>
             </div>
 
-            <table v-show="!loading" class="table table-bordered table-hover">
+            <table v-show="!loading && viewMode === 'quotes'" class="table table-bordered table-hover">
                 <thead>
                     <tr>
                         <th>Folio</th>
@@ -156,6 +171,74 @@
                     </tr>
                     <tr v-if="quotes.length === 0">
                         <td colspan="7" class="text-center text-muted">Todavia no hay cotizaciones.</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <table v-show="!loading && viewMode === 'orders'" class="table table-bordered table-hover">
+                <thead>
+                    <tr>
+                        <th>Pedido</th>
+                        <th>Cliente</th>
+                        <th>Cotizacion</th>
+                        <th>Fecha</th>
+                        <th>Estado</th>
+                        <th>Total</th>
+                        <th>Surtido</th>
+                        <th class="text-center">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr v-for="order in orders" :key="order.id">
+                        <td><strong>{{ order.folio }}</strong></td>
+                        <td>{{ order.party_name || '-' }}</td>
+                        <td>{{ order.quote_folio || '-' }}</td>
+                        <td>{{ order.order_date || '-' }}</td>
+                        <td><span class="badge badge-light">{{ order.status }}</span></td>
+                        <td>{{ order.currency_code }} {{ money(order.total) }}</td>
+                        <td>{{ order.currency_code }} {{ money(order.delivered_total) }}</td>
+                        <td class="text-center">
+                            <button class="btn btn-xs btn-outline-success" @click="createDeliveryFromOrder(order)" :disabled="order.status === 'delivered' || order.status === 'closed' || order.status === 'billed'">
+                                Crear entrega
+                            </button>
+                        </td>
+                    </tr>
+                    <tr v-if="orders.length === 0">
+                        <td colspan="8" class="text-center text-muted">Todavia no hay pedidos.</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <table v-show="!loading && viewMode === 'deliveries'" class="table table-bordered table-hover">
+                <thead>
+                    <tr>
+                        <th>Entrega</th>
+                        <th>Cliente</th>
+                        <th>Pedido</th>
+                        <th>Almacen</th>
+                        <th>Fecha</th>
+                        <th>Estado</th>
+                        <th>Total</th>
+                        <th class="text-center">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr v-for="delivery in deliveries" :key="delivery.id">
+                        <td><strong>{{ delivery.folio }}</strong></td>
+                        <td>{{ delivery.party_name || '-' }}</td>
+                        <td>{{ delivery.order_folio || '-' }}</td>
+                        <td>{{ delivery.warehouse_name || '-' }}</td>
+                        <td>{{ delivery.delivery_date || '-' }}</td>
+                        <td><span class="badge badge-light">{{ delivery.status }}</span></td>
+                        <td>{{ delivery.currency_code }} {{ money(delivery.total) }}</td>
+                        <td class="text-center">
+                            <button class="btn btn-xs btn-outline-primary" @click="invoiceDelivery(delivery)" :disabled="delivery.billing_invoice_id > 0">
+                                Facturar
+                            </button>
+                        </td>
+                    </tr>
+                    <tr v-if="deliveries.length === 0">
+                        <td colspan="8" class="text-center text-muted">Todavia no hay entregas.</td>
                     </tr>
                 </tbody>
             </table>
@@ -529,8 +612,11 @@ window.onload = function() {
         data: {
             loading: true,
             quotes: [],
+            orders: [],
+            deliveries: [],
+            viewMode: '<?php echo $initial_view; ?>',
             selected: null,
-            stats: { quotes: 0, prequote: 0, requested: 0, reviewed: 0, approved: 0, rejected: 0 },
+            stats: { quotes: 0, orders: 0, deliveries: 0, prequote: 0, requested: 0, reviewed: 0, approved: 0, rejected: 0 },
             options: { customers: [], products: [], brands: [], categories: [] },
             quoteForm: { party_id: '', quote_mode: 'quote', items: [], customer_notes: '', internal_notes: '', offline_uuid: '' },
             lineForm: { product_id: '', product_query: '', product_type: 'product', quantity: 1, search_open: false, search_results: [] },
@@ -597,6 +683,8 @@ window.onload = function() {
                             return;
                         }
                         this.quotes = data.quotes || [];
+                        this.orders = data.orders || [];
+                        this.deliveries = data.deliveries || [];
                         this.stats = data.stats || this.stats;
                         this.options = data.options || this.options;
                         this.cacheCatalogs();
@@ -672,6 +760,8 @@ window.onload = function() {
                             return;
                         }
                         this.quotes = data.quotes || [];
+                        this.orders = data.orders || this.orders;
+                        this.deliveries = data.deliveries || this.deliveries;
                         this.stats = data.stats || this.stats;
                         this.hideModal('modal-quote');
                     });
@@ -694,6 +784,8 @@ window.onload = function() {
                             return;
                         }
                         this.quotes = data.quotes || [];
+                        this.orders = data.orders || this.orders;
+                        this.deliveries = data.deliveries || this.deliveries;
                         this.stats = data.stats || this.stats;
                         this.hideModal('modal-quote');
                     });
@@ -708,8 +800,11 @@ window.onload = function() {
                             return;
                         }
                         this.quotes = data.quotes || [];
+                        this.orders = data.orders || this.orders;
+                        this.deliveries = data.deliveries || this.deliveries;
                         this.stats = data.stats || this.stats;
                         this.selected = this.quotes.find(item => Number(item.id) === Number(this.selected.id)) || this.selected;
+                        this.viewMode = 'orders';
                     });
             },
             createDeliveryFromOrder(order) {
@@ -721,8 +816,13 @@ window.onload = function() {
                             return;
                         }
                         this.quotes = data.quotes || [];
+                        this.orders = data.orders || this.orders;
+                        this.deliveries = data.deliveries || this.deliveries;
                         this.stats = data.stats || this.stats;
-                        this.selected = this.quotes.find(item => Number(item.id) === Number(this.selected.id)) || this.selected;
+                        if (this.selected) {
+                            this.selected = this.quotes.find(item => Number(item.id) === Number(this.selected.id)) || this.selected;
+                        }
+                        this.viewMode = 'deliveries';
                     });
             },
             invoiceDelivery(delivery) {
@@ -948,6 +1048,8 @@ window.onload = function() {
                             return;
                         }
                         this.quotes = data.quotes || [];
+                        this.orders = data.orders || this.orders;
+                        this.deliveries = data.deliveries || this.deliveries;
                         this.stats = data.stats || this.stats;
                         this.removeDraftByUuid(this.quoteForm.offline_uuid);
                         if (this.capturePage) {

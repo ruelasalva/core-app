@@ -58,6 +58,7 @@ class Controller_Admin_Payments extends Controller_Adminbase
             # SE REGRESA INFORMACION PARA VUE
             return $this->json_response([
                 'payments' => $this->get_payments(),
+                'receivables' => $this->get_receivables(),
                 'movements' => $this->get_movements(),
                 'reconciliations' => $this->get_reconciliations(),
                 'options' => $this->get_options(),
@@ -92,6 +93,9 @@ class Controller_Admin_Payments extends Controller_Adminbase
             }
 
             # SE PREPARAN DATOS
+            $id = (int) \Arr::get($val, 'id', 0);
+            $allocation_entity_type = $this->codeify(\Arr::get($val, 'allocation_entity_type', ''));
+            $allocation_entity_id = (int) \Arr::get($val, 'allocation_entity_id', 0);
             $data = [
                 'payment_type' => $this->codeify(\Arr::get($val, 'payment_type', 'received')),
                 'party_id' => (int) \Arr::get($val, 'party_id', 0),
@@ -110,7 +114,6 @@ class Controller_Admin_Payments extends Controller_Adminbase
             ];
 
             # SE CREA O ACTUALIZA
-            $id = (int) \Arr::get($val, 'id', 0);
             if ($id > 0) {
                 $payment = Model_Core_Payment::find($id);
                 if (!$payment) {
@@ -126,6 +129,10 @@ class Controller_Admin_Payments extends Controller_Adminbase
             }
             $payment->save();
 
+            if ($id === 0 && $allocation_entity_type === 'billing_invoice' && $allocation_entity_id > 0) {
+                $this->apply_payment_to_invoice($payment, $allocation_entity_id);
+            }
+
             # SE AUDITA CAMBIO
             Helper_Core_Audit::log([
                 'module' => 'payments',
@@ -137,7 +144,7 @@ class Controller_Admin_Payments extends Controller_Adminbase
                 'new_values' => $payment->to_array(),
             ]);
 
-            return $this->json_response(['status' => 'ok', 'payments' => $this->get_payments(), 'stats' => $this->get_stats()]);
+            return $this->json_response(['status' => 'ok', 'payments' => $this->get_payments(), 'receivables' => $this->get_receivables(), 'stats' => $this->get_stats()]);
         } catch (\Exception $e) {
             \Log::error('Error guardando pago: '.$e->getMessage());
             return $this->json_response(['error' => 'No se pudo guardar el pago.'], 400);
@@ -252,6 +259,50 @@ class Controller_Admin_Payments extends Controller_Adminbase
         return $items;
     }
 
+    /**
+     * GET RECEIVABLES
+     *
+     * LISTA FACTURAS DE VENTA CON SALDO PARA COBRANZA.
+     *
+     * @access  protected
+     * @return  Array
+     */
+    protected function get_receivables()
+    {
+        if (!\DBUtil::table_exists('core_billing_invoices')) {
+            return [];
+        }
+
+        $query = \DB::select(
+                ['i.id', 'id'],
+                ['i.folio', 'folio'],
+                ['i.uuid', 'uuid'],
+                ['i.party_id', 'party_id'],
+                ['p.name', 'party_name'],
+                ['i.issue_date', 'issue_date'],
+                ['i.due_date', 'due_date'],
+                ['i.currency_code', 'currency_code'],
+                ['i.total', 'total'],
+                ['i.balance_due', 'balance_due'],
+                ['i.status', 'status'],
+                ['i.sat_payment_method_code', 'sat_payment_method_code'],
+                ['i.sat_payment_form_code', 'sat_payment_form_code']
+            )
+            ->from(['core_billing_invoices', 'i'])
+            ->join(['core_parties', 'p'], 'left')->on('i.party_id', '=', 'p.id')
+            ->where('i.invoice_type', '=', 'sale')
+            ->where('i.active', '=', 1)
+            ->where('i.balance_due', '>', 0);
+        $this->apply_party_scope($query, 'p', 'sales');
+
+        return $query
+            ->order_by('i.due_date', 'asc')
+            ->order_by('i.id', 'desc')
+            ->limit(200)
+            ->execute()
+            ->as_array();
+    }
+
     protected function get_reconciliations()
     {
         $items = [];
@@ -274,8 +325,17 @@ class Controller_Admin_Payments extends Controller_Adminbase
 
     protected function get_stats()
     {
+        $receivable_rows = $this->get_receivables();
+        $receivables = count($receivable_rows);
+        $receivable_total = 0;
+        foreach ($receivable_rows as $row) {
+            $receivable_total += (float) $row['balance_due'];
+        }
+
         return [
             'payments' => (int) \DB::count_records('core_payments'),
+            'receivables' => $receivables,
+            'receivable_total' => $receivable_total,
             'pending' => (int) \DB::select()->from('core_payments')->where('status', '=', 'pending')->execute()->count(),
             'movements' => (int) \DB::count_records('core_bank_movements'),
             'unreconciled' => (int) \DB::select()->from('core_bank_movements')->where('reconciled', '=', 0)->execute()->count(),
@@ -304,6 +364,43 @@ class Controller_Admin_Payments extends Controller_Adminbase
                 throw new \RuntimeException('Falta ejecutar migraciones de pagos.');
             }
         }
+    }
+
+    /**
+     * APPLY PAYMENT TO INVOICE
+     *
+     * APLICA UN COBRO A UNA FACTURA DE VENTA Y ACTUALIZA SALDO.
+     *
+     * @access  protected
+     * @param   Model_Core_Payment  $payment
+     * @param   int                 $invoice_id
+     * @return  Void
+     */
+    protected function apply_payment_to_invoice(Model_Core_Payment $payment, $invoice_id)
+    {
+        $invoice = Model_Core_Billing_Invoice::find((int) $invoice_id);
+        if (!$invoice || $invoice->invoice_type !== 'sale' || (int) $invoice->active !== 1) {
+            return;
+        }
+
+        $balance = max(0, (float) $invoice->balance_due);
+        $amount = min(max(0, (float) $payment->amount), $balance);
+        if ($amount <= 0) {
+            return;
+        }
+
+        Model_Core_Payment_Allocation::forge([
+            'payment_id' => (int) $payment->id,
+            'entity_type' => 'billing_invoice',
+            'entity_id' => (int) $invoice->id,
+            'amount' => round($amount, 2),
+            'notes' => 'Aplicacion de cobro desde Pagos y Bancos',
+            'active' => 1,
+        ])->save();
+
+        $invoice->balance_due = round(max(0, $balance - $amount), 2);
+        $invoice->status = $invoice->balance_due <= 0 ? 'paid' : 'partial';
+        $invoice->save();
     }
 
     protected function codeify($value)

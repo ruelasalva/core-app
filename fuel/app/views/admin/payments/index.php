@@ -1,12 +1,37 @@
 <div id="app-payments">
     <div class="row">
-        <div class="col-lg-3 col-6"><div class="small-box bg-info"><div class="inner"><h3>{{ stats.payments || 0 }}</h3><p>Pagos</p></div><div class="icon"><i class="bi bi-cash-coin"></i></div></div></div>
+        <div class="col-lg-3 col-6"><div class="small-box bg-info"><div class="inner"><h3>{{ stats.receivables || 0 }}</h3><p>Cuentas por cobrar</p></div><div class="icon"><i class="bi bi-file-earmark-text"></i></div></div></div>
         <div class="col-lg-3 col-6"><div class="small-box bg-warning"><div class="inner"><h3>{{ stats.pending || 0 }}</h3><p>Pendientes</p></div><div class="icon"><i class="bi bi-hourglass-split"></i></div></div></div>
         <div class="col-lg-3 col-6"><div class="small-box bg-success"><div class="inner"><h3>{{ stats.movements || 0 }}</h3><p>Movimientos</p></div><div class="icon"><i class="bi bi-bank"></i></div></div></div>
         <div class="col-lg-3 col-6"><div class="small-box bg-secondary"><div class="inner"><h3>{{ stats.unreconciled || 0 }}</h3><p>Sin conciliar</p></div><div class="icon"><i class="bi bi-check2-square"></i></div></div></div>
     </div>
 
     <div v-if="error" class="alert alert-danger">{{ error }}</div>
+
+    <div class="card card-warning card-outline">
+        <div class="card-header">
+            <h3 class="card-title mb-0">Cuentas por cobrar</h3>
+        </div>
+        <div class="card-body table-responsive">
+            <table class="table table-bordered table-hover">
+                <thead><tr><th>Factura</th><th>Cliente</th><th>Emision</th><th>Vence</th><th>Metodo</th><th>Total</th><th>Saldo</th><th>Estado</th><th class="text-center">Acciones</th></tr></thead>
+                <tbody>
+                    <tr v-for="invoice in receivables" :key="invoice.id">
+                        <td><strong>{{ invoice.folio }}</strong><div class="text-muted small">{{ invoice.uuid || '' }}</div></td>
+                        <td>{{ invoice.party_name || label(options.parties, invoice.party_id) || '-' }}</td>
+                        <td>{{ invoice.issue_date || '-' }}</td>
+                        <td>{{ invoice.due_date || '-' }}</td>
+                        <td><span class="badge" :class="invoice.sat_payment_method_code === 'PPD' ? 'badge-info' : 'badge-success'">{{ invoice.sat_payment_method_code || '-' }}</span></td>
+                        <td>{{ invoice.currency_code }} {{ money(invoice.total) }}</td>
+                        <td><strong>{{ invoice.currency_code }} {{ money(invoice.balance_due) }}</strong></td>
+                        <td><span class="badge badge-light">{{ invoice.status }}</span></td>
+                        <td class="text-center"><button class="btn btn-xs btn-outline-primary" @click="openReceivablePayment(invoice)">Registrar cobro</button></td>
+                    </tr>
+                    <tr v-if="receivables.length === 0"><td colspan="9" class="text-center text-muted">Sin facturas pendientes de cobro</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
 
     <div class="card card-primary card-outline">
         <div class="card-header d-flex justify-content-between align-items-center">
@@ -71,6 +96,7 @@
                 <div class="col-md-4"><div class="form-group"><label>Forma pago SAT</label><select class="form-control" v-model="paymentForm.sat_payment_form_code"><option v-for="option in options.sat_payment_forms" :value="option.value">{{ option.label }}</option></select></div></div>
                 <div class="col-md-4"><div class="form-group"><label>Referencia</label><input class="form-control" v-model="paymentForm.reference"></div></div>
                 <div class="col-md-4"><div class="form-group"><label>ID externo</label><input class="form-control" v-model="paymentForm.external_id"></div></div>
+                <div class="col-md-12" v-if="paymentForm.allocation_entity_id"><div class="alert alert-info py-2 mb-2">Este cobro se aplicara a la factura {{ paymentForm.reference }}. Si la factura es PPD, quedara pendiente emitir complemento de pago cuando se cierre el flujo fiscal.</div></div>
                 <div class="col-md-12"><div class="form-group"><label>Notas</label><textarea class="form-control" rows="2" v-model="paymentForm.notes"></textarea></div></div>
             </div></div>
             <div class="modal-footer"><button class="btn btn-secondary" @click="hideModal('modal-payment')">Cerrar</button><button class="btn btn-primary" @click="savePayment">Guardar</button></div>
@@ -98,13 +124,14 @@
 window.onload = function() {
     new Vue({
         el: '#app-payments',
-        data: { error: '', payments: [], movements: [], reconciliations: [], options: { parties: [], bank_accounts: [], currencies: [], sat_payment_forms: [], integrations: [] }, stats: {}, paymentForm: {}, movementForm: {} },
+        data: { error: '', payments: [], receivables: [], movements: [], reconciliations: [], options: { parties: [], bank_accounts: [], currencies: [], sat_payment_forms: [], integrations: [] }, stats: {}, paymentForm: {}, movementForm: {} },
         mounted() { this.loadData(); },
         methods: {
             loadData() {
                 fetch('<?php echo Uri::create('admin/payments/data'); ?>').then(res => res.json()).then(data => {
                     if (data.error) { this.error = data.error; return; }
                     this.payments = data.payments || [];
+                    this.receivables = data.receivables || [];
                     this.movements = data.movements || [];
                     this.reconciliations = data.reconciliations || [];
                     this.options = data.options || this.options;
@@ -112,7 +139,29 @@ window.onload = function() {
                 });
             },
             openPayment(payment) {
-                this.paymentForm = Object.assign({ id: 0, payment_type: 'received', party_id: 0, bank_account_id: 0, integration_connection_id: 0, payment_date: new Date().toISOString().slice(0, 10), currency_code: 'MXN', exchange_rate: 1, amount: 0, sat_payment_form_code: '99', reference: '', external_id: '', status: 'pending', notes: '', active: true }, payment);
+                this.paymentForm = Object.assign({ id: 0, payment_type: 'received', party_id: 0, bank_account_id: 0, integration_connection_id: 0, payment_date: new Date().toISOString().slice(0, 10), currency_code: 'MXN', exchange_rate: 1, amount: 0, sat_payment_form_code: '99', reference: '', external_id: '', status: 'pending', notes: '', allocation_entity_type: '', allocation_entity_id: 0, active: true }, payment);
+                this.showModal('modal-payment');
+            },
+            openReceivablePayment(invoice) {
+                this.paymentForm = {
+                    id: 0,
+                    payment_type: 'received',
+                    party_id: invoice.party_id || 0,
+                    bank_account_id: 0,
+                    integration_connection_id: 0,
+                    payment_date: new Date().toISOString().slice(0, 10),
+                    currency_code: invoice.currency_code || 'MXN',
+                    exchange_rate: 1,
+                    amount: invoice.balance_due || invoice.total || 0,
+                    sat_payment_form_code: invoice.sat_payment_form_code || '03',
+                    reference: invoice.folio || '',
+                    external_id: invoice.uuid || '',
+                    status: 'confirmed',
+                    notes: invoice.sat_payment_method_code === 'PPD' ? 'Cobro de factura PPD. Revisar complemento de pago.' : 'Cobro de factura PUE.',
+                    allocation_entity_type: 'billing_invoice',
+                    allocation_entity_id: invoice.id,
+                    active: true
+                };
                 this.showModal('modal-payment');
             },
             openMovement(movement) {
@@ -123,6 +172,7 @@ window.onload = function() {
                 fetch('<?php echo Uri::create('admin/payments/save_payment'); ?>', window.coreAppFetchOptions(this.paymentForm)).then(res => res.json()).then(data => {
                     if (data.error) { this.error = data.error; return; }
                     this.payments = data.payments || [];
+                    this.receivables = data.receivables || this.receivables;
                     this.stats = data.stats || this.stats;
                     this.hideModal('modal-payment');
                 });
@@ -138,6 +188,9 @@ window.onload = function() {
             label(options, value) {
                 const found = (options || []).find(option => String(option.value) === String(value));
                 return found ? found.label : '';
+            },
+            money(value) {
+                return Number(value || 0).toFixed(2);
             },
             showModal(id) {
                 const element = document.getElementById(id);

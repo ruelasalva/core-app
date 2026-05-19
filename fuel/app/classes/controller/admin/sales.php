@@ -77,6 +77,8 @@ class Controller_Admin_Sales extends Controller_Adminbase
                 'quotes' => $this->quotes(),
                 'stats' => $this->stats(),
                 'options' => $this->options(),
+                'orders' => $this->orders(),
+                'deliveries' => $this->deliveries(),
             ]);
         } catch (\Exception $e) {
             \Log::error('Error cargando ventas: '.$e->getMessage());
@@ -154,6 +156,8 @@ class Controller_Admin_Sales extends Controller_Adminbase
                         'offline_uuid' => $offline_uuid,
                         'folio' => (string) $existing['folio'],
                         'quotes' => $this->quotes(),
+                        'orders' => $this->orders(),
+                        'deliveries' => $this->deliveries(),
                         'stats' => $this->stats(),
                     ]);
                 }
@@ -226,7 +230,7 @@ class Controller_Admin_Sales extends Controller_Adminbase
             $quote->save();
             $this->log_offline_sync($offline_uuid, 'sales_quote', (int) $quote->id, $val);
 
-            return $this->json_response(['status' => 'ok', 'offline_uuid' => $offline_uuid, 'folio' => $quote->folio, 'quotes' => $this->quotes(), 'stats' => $this->stats()]);
+            return $this->json_response(['status' => 'ok', 'offline_uuid' => $offline_uuid, 'folio' => $quote->folio, 'quotes' => $this->quotes(), 'orders' => $this->orders(), 'deliveries' => $this->deliveries(), 'stats' => $this->stats()]);
         } catch (\Exception $e) {
             \Log::error('Error creando cotizacion manual: '.$e->getMessage());
             return $this->json_response(['error' => 'No se pudo crear la cotizacion.'], 400);
@@ -302,7 +306,7 @@ class Controller_Admin_Sales extends Controller_Adminbase
                 ]);
             }
 
-            return $this->json_response(['status' => 'ok', 'quotes' => $this->quotes(), 'stats' => $this->stats()]);
+            return $this->json_response(['status' => 'ok', 'quotes' => $this->quotes(), 'orders' => $this->orders(), 'deliveries' => $this->deliveries(), 'stats' => $this->stats()]);
         } catch (\Exception $e) {
             \Log::error('Error actualizando cotizacion: '.$e->getMessage());
             return $this->json_response(['error' => 'No se pudo actualizar la cotizacion.'], 400);
@@ -413,7 +417,7 @@ class Controller_Admin_Sales extends Controller_Adminbase
                 ]);
             }
 
-            return $this->json_response(['status' => 'ok', 'quotes' => $this->quotes(), 'stats' => $this->stats()]);
+            return $this->json_response(['status' => 'ok', 'quotes' => $this->quotes(), 'orders' => $this->orders(), 'deliveries' => $this->deliveries(), 'stats' => $this->stats()]);
         } catch (\Exception $e) {
             \Log::error('Error cerrando precotizacion: '.$e->getMessage());
             return $this->json_response(['error' => 'No se pudo cerrar la precotizacion.'], 400);
@@ -498,7 +502,7 @@ class Controller_Admin_Sales extends Controller_Adminbase
             $quote->save();
             $this->audit_flow('create_order_from_quote', 'Pedido '.$order->folio.' creado desde cotizacion '.$quote->folio, 'sales_order', (int) $order->id, $order->to_array());
 
-            return $this->json_response(['status' => 'ok', 'folio' => $order->folio, 'quotes' => $this->quotes(), 'stats' => $this->stats()]);
+            return $this->json_response(['status' => 'ok', 'folio' => $order->folio, 'quotes' => $this->quotes(), 'orders' => $this->orders(), 'deliveries' => $this->deliveries(), 'stats' => $this->stats()]);
         } catch (\Exception $e) {
             \Log::error('Error creando pedido desde cotizacion: '.$e->getMessage());
             return $this->json_response(['error' => 'No se pudo crear el pedido.'], 400);
@@ -583,7 +587,7 @@ class Controller_Admin_Sales extends Controller_Adminbase
             $order->save();
             $this->audit_flow('create_delivery_from_order', 'Entrega '.$delivery->folio.' creada desde pedido '.$order->folio, 'sales_delivery', (int) $delivery->id, $delivery->to_array());
 
-            return $this->json_response(['status' => 'ok', 'folio' => $delivery->folio, 'quotes' => $this->quotes(), 'stats' => $this->stats()]);
+            return $this->json_response(['status' => 'ok', 'folio' => $delivery->folio, 'quotes' => $this->quotes(), 'orders' => $this->orders(), 'deliveries' => $this->deliveries(), 'stats' => $this->stats()]);
         } catch (\Exception $e) {
             \Log::error('Error creando entrega desde pedido: '.$e->getMessage());
             return $this->json_response(['error' => 'No se pudo crear la entrega.'], 400);
@@ -735,12 +739,47 @@ class Controller_Admin_Sales extends Controller_Adminbase
         # SE REGRESAN CONTADORES GENERALES
         return [
             'quotes' => (int) \DB::count_records('core_sales_quotes'),
+            'orders' => (int) \DB::count_records('core_sales_orders'),
+            'deliveries' => (int) \DB::count_records('core_sales_deliveries'),
             'prequote' => (int) \DB::select()->from('core_sales_quotes')->where('status', '=', 'prequote')->execute()->count(),
             'requested' => (int) \DB::select()->from('core_sales_quotes')->where('status', '=', 'requested')->execute()->count(),
             'reviewed' => (int) \DB::select()->from('core_sales_quotes')->where('status', '=', 'reviewed')->execute()->count(),
             'approved' => (int) \DB::select()->from('core_sales_quotes')->where('status', '=', 'approved')->execute()->count(),
             'rejected' => (int) \DB::select()->from('core_sales_quotes')->where('status', '=', 'rejected')->execute()->count(),
         ];
+    }
+
+    protected function orders()
+    {
+        $query = \DB::select(['o.id', 'id'], ['o.folio', 'folio'], ['o.status', 'status'], ['o.order_date', 'order_date'], ['o.currency_code', 'currency_code'], ['o.total', 'total'], ['o.delivered_total', 'delivered_total'], ['o.billed_total', 'billed_total'], ['q.folio', 'quote_folio'], ['p.name', 'party_name'])
+            ->from(['core_sales_orders', 'o'])
+            ->join(['core_sales_quotes', 'q'], 'left')->on('o.source_quote_id', '=', 'q.id')
+            ->join(['core_parties', 'p'], 'left')->on('o.party_id', '=', 'p.id')
+            ->where('o.active', '=', 1);
+        $this->apply_party_scope($query, 'p', 'sales');
+
+        return $query
+            ->order_by('o.id', 'desc')
+            ->limit(200)
+            ->execute()
+            ->as_array();
+    }
+
+    protected function deliveries()
+    {
+        $query = \DB::select(['d.id', 'id'], ['d.folio', 'folio'], ['d.status', 'status'], ['d.delivery_date', 'delivery_date'], ['d.currency_code', 'currency_code'], ['d.total', 'total'], ['d.billing_invoice_id', 'billing_invoice_id'], ['o.folio', 'order_folio'], ['p.name', 'party_name'], ['w.name', 'warehouse_name'])
+            ->from(['core_sales_deliveries', 'd'])
+            ->join(['core_sales_orders', 'o'], 'left')->on('d.order_id', '=', 'o.id')
+            ->join(['core_parties', 'p'], 'left')->on('d.party_id', '=', 'p.id')
+            ->join(['core_inventory_warehouses', 'w'], 'left')->on('d.warehouse_id', '=', 'w.id')
+            ->where('d.active', '=', 1);
+        $this->apply_party_scope($query, 'p', 'sales');
+
+        return $query
+            ->order_by('d.id', 'desc')
+            ->limit(200)
+            ->execute()
+            ->as_array();
     }
 
     /**
