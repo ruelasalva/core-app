@@ -5,6 +5,7 @@
     if (!in_array($initial_view, ['quotes', 'orders', 'deliveries'], true)) {
         $initial_view = 'quotes';
     }
+    $capture_mode = Input::get('mode', 'quote') === 'prequote' ? 'prequote' : 'quote';
     $no_image_svg = 'data:image/svg+xml;charset=UTF-8,'.rawurlencode('<svg xmlns="http://www.w3.org/2000/svg" width="360" height="260" viewBox="0 0 360 260"><rect width="360" height="260" fill="#eef3f7"/><path d="M72 178h216l-64-82-48 60-34-44-70 66z" fill="#cbd5e1"/><circle cx="130" cy="86" r="24" fill="#cbd5e1"/><text x="180" y="226" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="20" fill="#64748b">Sin imagen</text></svg>');
     ?>
     <style>
@@ -39,6 +40,8 @@
         .quote-page-capture { margin: -10px -7.5px 0; }
         .quote-page-capture .modal-content { min-height: calc(100vh - 150px); border: 0; border-radius: 0; box-shadow: none; }
         .quote-page-capture .modal-body { min-height: calc(100vh - 280px); overflow: visible; }
+        .quote-page-capture .quote-product-grid { max-height: none; overflow: visible; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); }
+        .quote-page-capture .quote-workbench { grid-template-columns: minmax(0, 1fr) 360px; }
         .price-hidden .money-cell, .price-hidden .price-text { display: none; }
         .range-chip { display: inline-block; border: 1px solid #dee2e6; border-radius: 999px; padding: 2px 7px; margin: 2px 2px 0 0; font-size: .72rem; color: #495057; background: #f8f9fa; cursor: pointer; }
         .range-chip:hover { border-color: #007bff; color: #0056b3; }
@@ -103,9 +106,9 @@
                 <button class="btn btn-outline-info btn-sm mr-2" @click="syncDrafts" :disabled="offline.syncing || offline.drafts.length === 0">
                     <i class="bi bi-arrow-repeat"></i> Sincronizar {{ offline.drafts.length || '' }}
                 </button>
-                <button class="btn btn-outline-secondary btn-sm mr-1" @click="newPrequote">
+                <a class="btn btn-outline-secondary btn-sm mr-1" href="<?php echo Uri::create('admin/sales/create?mode=prequote'); ?>">
                     <i class="bi bi-bag-plus"></i> Vista cliente / catalogo
-                </button>
+                </a>
                 <a class="btn btn-primary btn-sm" href="<?php echo Uri::create('admin/sales/create'); ?>">
                     <i class="bi bi-plus-lg"></i> Nueva cotizacion
                 </a>
@@ -671,6 +674,7 @@ window.onload = function() {
             searchTimer: null,
             noImage: <?php echo json_encode($no_image_svg); ?>,
             capturePage: <?php echo $capture_page ? 'true' : 'false'; ?>,
+            captureMode: <?php echo json_encode($capture_mode); ?>,
             offline: { online: navigator.onLine, drafts: [], syncing: false, saveTimer: null, lastSaved: '' }
         },
         computed: {
@@ -702,7 +706,7 @@ window.onload = function() {
         },
         mounted() {
             if (this.capturePage) {
-                this.prepareQuoteForm('quote');
+                this.prepareQuoteForm(this.captureMode || 'quote');
             }
             this.loadData();
             this.loadDrafts();
@@ -912,11 +916,12 @@ window.onload = function() {
                     });
             },
             invoiceDelivery(delivery) {
+                this.error = '';
                 fetch('<?php echo Uri::create('admin/billing/create_from_delivery'); ?>', window.coreAppFetchOptions({ delivery_id: delivery.id }))
                     .then(res => window.coreAppJson ? window.coreAppJson(res) : res.json())
                     .then(data => {
                         if (data.error) {
-                            alert(data.error);
+                            this.error = data.error;
                             return;
                         }
                         alert('Factura creada: ' + data.folio);

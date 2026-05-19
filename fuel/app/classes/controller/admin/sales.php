@@ -472,8 +472,8 @@ class Controller_Admin_Sales extends Controller_Adminbase
 
             return $this->json_response(['status' => 'ok', 'folio' => $order->folio, 'quotes' => $this->quotes(), 'orders' => $this->orders(), 'deliveries' => $this->deliveries(), 'stats' => $this->stats()]);
         } catch (\Exception $e) {
-            \Log::error('Error creando pedido desde cotizacion: '.$e->getMessage());
-            return $this->json_response(['error' => 'No se pudo crear el pedido.'], 400);
+            \Log::error('Error creando pedido desde cotizacion: '.$e->getMessage().' | payload='.json_encode((array) \Input::json()).' | trace='.$e->getTraceAsString());
+            return $this->json_response(['error' => 'No se pudo crear el pedido: '.$e->getMessage()], 400);
         }
     }
 

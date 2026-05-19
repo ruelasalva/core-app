@@ -378,10 +378,13 @@ class Controller_Admin_Billing extends Controller_Adminbase
     public function action_create_from_delivery()
     {
         $this->require_access('billing.access[edit]');
+        $transaction_started = false;
 
         try {
             $val = (array) \Input::json();
             $delivery_id = (int) \Arr::get($val, 'delivery_id', 0);
+            \Log::info('Facturacion: inicio crear factura desde entrega id='.$delivery_id.' payload='.json_encode($val));
+
             $delivery = \DB::select()->from('core_sales_deliveries')->where('id', '=', $delivery_id)->where('active', '=', 1)->execute()->current();
             if (!$delivery) {
                 return $this->json_response(['error' => 'Entrega no encontrada.'], 404);
@@ -391,6 +394,18 @@ class Controller_Admin_Billing extends Controller_Adminbase
             }
 
             $party = Model_Core_Party::find((int) $delivery['party_id']);
+            if (!$party) {
+                return $this->json_response(['error' => 'La entrega no tiene cliente valido. Revisa el pedido de origen.'], 422);
+            }
+
+            $delivery_items = \DB::select()->from('core_sales_delivery_items')->where('delivery_id', '=', $delivery_id)->order_by('sort_order', 'asc')->execute()->as_array();
+            if (empty($delivery_items)) {
+                return $this->json_response(['error' => 'La entrega no tiene partidas para facturar. Revisa Ventas > Entregas.'], 422);
+            }
+
+            \DB::start_transaction();
+            $transaction_started = true;
+
             $invoice = Model_Core_Billing_Invoice::forge([
                 'folio' => $this->next_invoice_folio(),
                 'invoice_type' => 'sale',
@@ -415,7 +430,8 @@ class Controller_Admin_Billing extends Controller_Adminbase
             $invoice->save();
 
             $sort = 10;
-            foreach (\DB::select()->from('core_sales_delivery_items')->where('delivery_id', '=', $delivery_id)->order_by('sort_order', 'asc')->execute() as $item) {
+            $item_count = 0;
+            foreach ($delivery_items as $item) {
                 $product = $item['product_id'] ? Model_Core_Commerce_Product::find((int) $item['product_id']) : null;
                 $tax_rate = $this->tax_rate($product ? (string) $product->tax_code : 'iva_16');
                 $base = (float) $item['quantity'] * (float) $item['unit_price'];
@@ -440,6 +456,7 @@ class Controller_Admin_Billing extends Controller_Adminbase
                     'active' => 1,
                 ])->save();
                 $sort += 10;
+                $item_count++;
             }
 
             $this->recalculate_invoice((int) $invoice->id);
@@ -447,10 +464,18 @@ class Controller_Admin_Billing extends Controller_Adminbase
             $this->refresh_sales_order_billing((int) $delivery['order_id']);
 
             $this->log_invoice_event((int) $invoice->id, 'create_from_delivery', 'Factura creada desde entrega '.$delivery['folio'], $delivery);
+            \Log::info('Facturacion: factura '.$invoice->folio.' creada desde entrega '.$delivery['folio'].' partidas='.$item_count.' invoice_id='.(int) $invoice->id);
+
+            \DB::commit_transaction();
+            $transaction_started = false;
+
             return $this->json_response(['status' => 'ok', 'folio' => $invoice->folio, 'invoice_id' => (int) $invoice->id, 'invoices' => $this->get_invoices(), 'pending_deliveries' => $this->get_pending_deliveries(), 'stats' => $this->get_stats()]);
         } catch (\Exception $e) {
-            \Log::error('Error creando factura desde entrega: '.$e->getMessage());
-            return $this->json_response(['error' => 'No se pudo crear la factura desde entrega.'], 400);
+            if ($transaction_started) {
+                \DB::rollback_transaction();
+            }
+            \Log::error('Error creando factura desde entrega: '.$e->getMessage().' | payload='.json_encode((array) \Input::json()).' | trace='.$e->getTraceAsString());
+            return $this->json_response(['error' => 'No se pudo crear la factura desde entrega: '.$e->getMessage()], 400);
         }
     }
 
