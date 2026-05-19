@@ -98,10 +98,21 @@ window.coreAppFetchOptions = function(data) {
 
     return {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': data[window.coreAppCsrfKey] },
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-Token': data[window.coreAppCsrfKey] },
         credentials: 'same-origin',
         body: JSON.stringify(data)
     };
+};
+window.coreAppJson = function(response) {
+    return response.json().then(function(json) {
+        if (json && json.csrf_token) {
+            window.coreAppCsrfToken = json.csrf_token;
+        }
+        if (!response.ok) {
+            throw json;
+        }
+        return json;
+    });
 };
 </script>
 </body>

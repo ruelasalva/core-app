@@ -722,7 +722,7 @@ window.onload = function() {
                 this.loading = true;
                 this.error = '';
                 fetch('<?php echo Uri::create('admin/sales/data'); ?>')
-                    .then(res => res.json())
+                    .then(res => window.coreAppJson ? window.coreAppJson(res) : res.json())
                     .then(data => {
                         this.loading = false;
                         if (data.error) {
@@ -810,7 +810,7 @@ window.onload = function() {
                     status: status,
                     internal_notes: quote.internal_notes || ''
                 }))
-                    .then(res => res.json())
+                    .then(res => window.coreAppJson ? window.coreAppJson(res) : res.json())
                     .then(data => {
                         if (data.error) {
                             this.error = data.error;
@@ -834,7 +834,7 @@ window.onload = function() {
                     party_id: this.closeForm.party_id,
                     internal_notes: this.selected.internal_notes || ''
                 }))
-                    .then(res => res.json())
+                    .then(res => window.coreAppJson ? window.coreAppJson(res) : res.json())
                     .then(data => {
                         if (data.error) {
                             alert(data.error);
@@ -851,7 +851,7 @@ window.onload = function() {
                 if (!this.selected) return;
                 this.error = '';
                 fetch('<?php echo Uri::create('admin/sales/create_order_from_quote'); ?>', window.coreAppFetchOptions({ id: this.selected.id }))
-                    .then(res => res.json())
+                    .then(res => window.coreAppJson ? window.coreAppJson(res) : res.json())
                     .then(data => {
                         if (data.error) {
                             this.error = data.error;
@@ -893,7 +893,7 @@ window.onload = function() {
                     warehouse_id: this.deliveryForm.warehouse_id,
                     items: this.deliveryForm.items
                 }))
-                    .then(res => res.json())
+                    .then(res => window.coreAppJson ? window.coreAppJson(res) : res.json())
                     .then(data => {
                         if (data.error) {
                             this.error = data.error;
@@ -913,7 +913,7 @@ window.onload = function() {
             },
             invoiceDelivery(delivery) {
                 fetch('<?php echo Uri::create('admin/billing/create_from_delivery'); ?>', window.coreAppFetchOptions({ delivery_id: delivery.id }))
-                    .then(res => res.json())
+                    .then(res => window.coreAppJson ? window.coreAppJson(res) : res.json())
                     .then(data => {
                         if (data.error) {
                             alert(data.error);
@@ -971,7 +971,7 @@ window.onload = function() {
                     + '?q=' + encodeURIComponent(q)
                     + '&limit=25';
                 fetch(url)
-                    .then(res => res.json())
+                    .then(res => window.coreAppJson ? window.coreAppJson(res) : res.json())
                     .then(data => {
                         if (data.error) return;
                         this.lineForm.search_results = data.products || [];
@@ -994,7 +994,7 @@ window.onload = function() {
                     + '&stock=' + encodeURIComponent(this.filters.stock || '')
                     + '&limit=120';
                 fetch(url)
-                    .then(res => res.json())
+                    .then(res => window.coreAppJson ? window.coreAppJson(res) : res.json())
                     .then(data => {
                         if (data.error) {
                             alert(data.error);
@@ -1044,7 +1044,7 @@ window.onload = function() {
                     + '?brand_id=' + encodeURIComponent(brandId)
                     + '&limit=120';
                 fetch(url)
-                    .then(res => res.json())
+                    .then(res => window.coreAppJson ? window.coreAppJson(res) : res.json())
                     .then(data => {
                         if (data.error) return;
                         this.mergeProducts(data.products || []);
@@ -1057,7 +1057,7 @@ window.onload = function() {
                     + '?category_id=' + encodeURIComponent(this.filters.category_id)
                     + '&limit=120';
                 fetch(url)
-                    .then(res => res.json())
+                    .then(res => window.coreAppJson ? window.coreAppJson(res) : res.json())
                     .then(data => {
                         if (data.error) return;
                         this.mergeProducts(data.products || []);
@@ -1110,6 +1110,9 @@ window.onload = function() {
                 this.ensureOfflineUuid();
                 fetch('<?php echo Uri::create('admin/sales/create_quote'); ?>', window.coreAppFetchOptions(this.quoteForm))
                     .then(res => {
+                        if (window.coreAppJson) {
+                            return window.coreAppJson(res);
+                        }
                         if (!res.ok) {
                             return res.text().then(text => {
                                 let message = 'Error HTTP ' + res.status;

@@ -65,11 +65,17 @@ class Controller_Welcome extends Controller
 	{
 		$content_type = (string) Input::headers('Content-Type', '');
 		$accept = (string) Input::headers('Accept', '');
-		$is_json = stripos($content_type, 'application/json') !== false || stripos($accept, 'application/json') !== false;
+		$uri = trim((string) Input::uri(), '/');
+		$is_json = stripos($content_type, 'application/json') !== false
+			|| stripos($accept, 'application/json') !== false
+			|| preg_match('#^(admin|clientes|proveedores|socios|revendedores)/#', $uri);
 
 		if ($is_json) {
 			return Response::forge(
-				json_encode(['error' => 'La solicitud no paso la validacion de seguridad. Recarga la pantalla e intenta de nuevo.']),
+				json_encode([
+					'error' => 'La solicitud no paso la validacion de seguridad. Recarga la pantalla e intenta de nuevo.',
+					'csrf_token' => Security::fetch_token(),
+				]),
 				400,
 				['Content-Type' => 'application/json']
 			);

@@ -506,6 +506,7 @@ class Controller_Admin_Sales extends Controller_Adminbase
     public function post_create_delivery_from_order()
     {
         $this->require_access('sales.access[edit]');
+        $transaction_started = false;
 
         try {
             $payload = (array) \Input::json();
@@ -529,6 +530,10 @@ class Controller_Admin_Sales extends Controller_Adminbase
             if (!$allow_negative) {
                 $this->validate_delivery_stock($order, $warehouse_id, $requested_items);
             }
+
+            \DB::start_transaction();
+            $transaction_started = true;
+
             $delivery = Model_Core_Sales_Delivery::forge([
                 'folio' => $this->next_flow_folio('ENT', 'core_sales_deliveries'),
                 'order_id' => (int) $order->id,
@@ -573,7 +578,8 @@ class Controller_Admin_Sales extends Controller_Adminbase
             }
 
             if (!$delivered_any) {
-                $delivery->delete();
+                \DB::rollback_transaction();
+                $transaction_started = false;
                 return $this->json_response(['error' => 'Captura al menos una cantidad a surtir.'], 422);
             }
 
@@ -587,8 +593,14 @@ class Controller_Admin_Sales extends Controller_Adminbase
             \Log::info('Ventas: entrega '.$delivery->folio.' creada desde pedido '.$order->folio.' total='.$delivery->total.' restante='.$remaining);
             $this->audit_flow('create_delivery_from_order', 'Entrega '.$delivery->folio.' creada desde pedido '.$order->folio, 'sales_delivery', (int) $delivery->id, $delivery->to_array());
 
+            \DB::commit_transaction();
+            $transaction_started = false;
+
             return $this->json_response(['status' => 'ok', 'folio' => $delivery->folio, 'quotes' => $this->quotes(), 'orders' => $this->orders(), 'deliveries' => $this->deliveries(), 'stats' => $this->stats()]);
         } catch (\Exception $e) {
+            if ($transaction_started) {
+                \DB::rollback_transaction();
+            }
             \Log::error('Error creando entrega desde pedido: '.$e->getMessage().' | payload='.json_encode((array) \Input::json()));
             return $this->json_response(['error' => 'No se pudo crear la entrega: '.$e->getMessage()], 400);
         }
@@ -1205,6 +1217,7 @@ class Controller_Admin_Sales extends Controller_Adminbase
             'product_id' => (int) $product_id,
             'movement_type' => 'delivery_out',
             'quantity' => -abs((float) $quantity),
+            'unit_cost' => $this->inventory_unit_cost((int) $product_id),
             'related_module' => 'sales',
             'related_entity_type' => $entity_type,
             'related_entity_id' => (int) $entity_id,
@@ -1223,8 +1236,30 @@ class Controller_Admin_Sales extends Controller_Adminbase
                 ->value('stock_quantity', $stock_expr)
                 ->value('stock_updated_at', time())
                 ->where('id', '=', (int) $product_id)
-                ->execute();
+            ->execute();
         }
+    }
+
+    protected function inventory_unit_cost($product_id)
+    {
+        $row = \DB::select('sku', 'name', 'cost')
+            ->from('core_commerce_products')
+            ->where('id', '=', (int) $product_id)
+            ->execute()
+            ->current();
+
+        if (!$row) {
+            \Log::warning('Ventas: no se encontro producto para costo inventario product_id='.(int) $product_id);
+            return 0;
+        }
+
+        $cost = (float) $row['cost'];
+        if ($cost <= 0) {
+            \Log::warning('Ventas: producto sin costo para salida inventario product_id='.(int) $product_id.' sku='.(string) $row['sku'].' nombre='.(string) $row['name'].'. El responsable de catalogo/compras debe capturar costo en Comercial > Productos.');
+            return 0;
+        }
+
+        return $cost;
     }
 
     protected function adjust_inventory_balance($warehouse_id, $product_id, $quantity)
