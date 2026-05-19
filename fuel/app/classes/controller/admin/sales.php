@@ -72,6 +72,7 @@ class Controller_Admin_Sales extends Controller_Adminbase
         try {
             # SE VALIDA ESQUEMA BASE
             $this->assert_schema_ready();
+            $this->sync_approved_quotes_to_orders();
 
             return $this->json_response([
                 'quotes' => $this->quotes(),
@@ -1101,6 +1102,34 @@ class Controller_Admin_Sales extends Controller_Adminbase
         $this->audit_flow('create_order_from_quote', 'Pedido '.$order->folio.' creado desde cotizacion '.$quote->folio, 'sales_order', (int) $order->id, $order->to_array());
 
         return $order;
+    }
+
+    protected function sync_approved_quotes_to_orders()
+    {
+        $rows = \DB::select('id')
+            ->from('core_sales_quotes')
+            ->where('status', '=', 'approved')
+            ->where('party_id', '>', 0)
+            ->where('total', '>', 0)
+            ->limit(50)
+            ->execute()
+            ->as_array();
+
+        foreach ($rows as $row) {
+            $existing = \DB::select('id')
+                ->from('core_sales_orders')
+                ->where('source_quote_id', '=', (int) $row['id'])
+                ->where('active', '=', 1)
+                ->execute()
+                ->current();
+            if ($existing) {
+                continue;
+            }
+            $quote = Model_Core_Sales_Quote::find((int) $row['id']);
+            if ($quote) {
+                $this->create_order_for_quote($quote);
+            }
+        }
     }
 
     protected function order_pending_quantity($order_id)
