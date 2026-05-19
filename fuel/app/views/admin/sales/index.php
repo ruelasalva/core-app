@@ -163,7 +163,6 @@
                         <td class="text-center">
                             <div class="btn-group btn-group-sm">
                                 <button class="btn btn-outline-primary" @click="openDetail(quote)">Detalle</button>
-                                <button class="btn btn-outline-secondary" @click="setStatus(quote, 'reviewed')">Revisada</button>
                                 <button class="btn btn-outline-success" @click="setStatus(quote, 'approved')">Aprobar</button>
                                 <button class="btn btn-outline-danger" @click="setStatus(quote, 'rejected')">Rechazar</button>
                             </div>
@@ -184,7 +183,8 @@
                         <th>Fecha</th>
                         <th>Estado</th>
                         <th>Total</th>
-                        <th>Surtido</th>
+                        <th>Pendiente</th>
+                        <th>Backorder</th>
                         <th class="text-center">Acciones</th>
                     </tr>
                 </thead>
@@ -194,17 +194,18 @@
                         <td>{{ order.party_name || '-' }}</td>
                         <td>{{ order.quote_folio || '-' }}</td>
                         <td>{{ order.order_date || '-' }}</td>
-                        <td><span class="badge badge-light">{{ order.status }}</span></td>
+                        <td><span class="badge" :class="statusClass(order.status)">{{ statusLabel(order.status) }}</span></td>
                         <td>{{ order.currency_code }} {{ money(order.total) }}</td>
-                        <td>{{ order.currency_code }} {{ money(order.delivered_total) }}</td>
+                        <td>{{ money(order.pending_quantity) }}</td>
+                        <td><span class="badge" :class="order.backorder == 1 ? 'badge-warning' : 'badge-light'">{{ order.backorder == 1 ? 'Si' : 'No' }}</span></td>
                         <td class="text-center">
-                            <button class="btn btn-xs btn-outline-success" @click="createDeliveryFromOrder(order)" :disabled="order.status === 'delivered' || order.status === 'closed' || order.status === 'billed'">
-                                Crear entrega
+                            <button class="btn btn-xs btn-outline-success" @click="openFulfillment(order)" :disabled="order.status === 'delivered' || order.status === 'closed' || order.status === 'billed' || Number(order.pending_quantity || 0) <= 0">
+                                Surtir
                             </button>
                         </td>
                     </tr>
                     <tr v-if="orders.length === 0">
-                        <td colspan="8" class="text-center text-muted">Todavia no hay pedidos.</td>
+                        <td colspan="9" class="text-center text-muted">Todavia no hay pedidos.</td>
                     </tr>
                 </tbody>
             </table>
@@ -229,7 +230,7 @@
                         <td>{{ delivery.order_folio || '-' }}</td>
                         <td>{{ delivery.warehouse_name || '-' }}</td>
                         <td>{{ delivery.delivery_date || '-' }}</td>
-                        <td><span class="badge badge-light">{{ delivery.status }}</span></td>
+                        <td><span class="badge" :class="statusClass(delivery.status)">{{ statusLabel(delivery.status) }}</span></td>
                         <td>{{ delivery.currency_code }} {{ money(delivery.total) }}</td>
                         <td class="text-center">
                             <button class="btn btn-xs btn-outline-primary" @click="invoiceDelivery(delivery)" :disabled="delivery.billing_invoice_id > 0">
@@ -503,11 +504,11 @@
                             <p class="mb-1"><strong>Vence:</strong> {{ selected.expires_label || '-' }}</p>
                             <p class="mb-3"><strong>Total:</strong> {{ selected.currency_code }} {{ money(selected.total) }}</p>
                             <div class="btn-group btn-group-sm">
-                                <button class="btn btn-outline-primary" @click="createOrderFromQuote" :disabled="selected.status === 'prequote' || (selected.orders && selected.orders.length)">
-                                    Crear pedido
+                                <button class="btn btn-outline-success" @click="setStatus(selected, 'approved')" :disabled="selected.status === 'prequote' || selected.status === 'approved' || (selected.orders && selected.orders.length)">
+                                    Aprobar y mandar a pedido
                                 </button>
-                                <button class="btn btn-outline-success" v-if="selected.orders && selected.orders.length" @click="createDeliveryFromOrder(selected.orders[0])" :disabled="selected.orders[0].status === 'delivered' || selected.orders[0].status === 'closed' || selected.orders[0].status === 'billed'">
-                                    Crear entrega
+                                <button class="btn btn-outline-success" v-if="selected.orders && selected.orders.length" @click="openFulfillment(selected.orders[0])" :disabled="selected.orders[0].status === 'delivered' || selected.orders[0].status === 'closed' || selected.orders[0].status === 'billed'">
+                                    Surtir pedido
                                 </button>
                             </div>
                         </div>
@@ -549,7 +550,6 @@
                         <select class="form-control" v-model="selected.status">
                             <option value="prequote">Precotizacion</option>
                             <option value="requested">Solicitada</option>
-                            <option value="reviewed">Revisada</option>
                             <option value="approved">Aprobada</option>
                             <option value="rejected">Rechazada</option>
                             <option value="converted">Convertida</option>
@@ -558,8 +558,8 @@
                     <div class="border rounded p-3 mb-3 bg-light">
                         <div class="d-flex align-items-center mb-2">
                             <h6 class="mb-0">Flujo comercial</h6>
-                            <button class="btn btn-sm btn-outline-primary ml-auto" @click="createOrderFromQuote" :disabled="selected.status === 'prequote' || (selected.orders && selected.orders.length)">
-                                Crear pedido
+                            <button class="btn btn-sm btn-outline-success ml-auto" @click="setStatus(selected, 'approved')" :disabled="selected.status === 'prequote' || selected.status === 'approved' || (selected.orders && selected.orders.length)">
+                                Aprobar y mandar a pedido
                             </button>
                         </div>
                         <div v-if="!selected.orders || selected.orders.length === 0" class="text-muted small">Sin pedido relacionado.</div>
@@ -567,8 +567,8 @@
                             <div class="d-flex align-items-center">
                                 <strong>{{ order.folio }}</strong>
                                 <span class="badge badge-info ml-2">{{ order.status }}</span>
-                                <button class="btn btn-xs btn-outline-success ml-auto" @click="createDeliveryFromOrder(order)" :disabled="order.status === 'delivered' || order.status === 'closed' || order.status === 'billed'">
-                                    Crear entrega
+                                <button class="btn btn-xs btn-outline-success ml-auto" @click="openFulfillment(order)" :disabled="order.status === 'delivered' || order.status === 'closed' || order.status === 'billed'">
+                                    Surtir
                                 </button>
                             </div>
                             <div v-if="!order.deliveries || order.deliveries.length === 0" class="text-muted small mt-1">Sin entrega.</div>
@@ -603,6 +603,46 @@
             </div>
         </div>
     </div>
+
+    <div class="modal fade" id="modal-fulfillment" tabindex="-1" role="dialog" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content" v-if="selectedOrder">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title">Surtir pedido {{ selectedOrder.folio }}</h5>
+                    <button type="button" class="close text-white" @click="hideModal('modal-fulfillment')"><span>&times;</span></button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label>Almacen de salida</label>
+                        <select class="form-control" v-model="deliveryForm.warehouse_id">
+                            <option v-for="warehouse in options.warehouses" :value="warehouse.value">{{ warehouse.label }}</option>
+                        </select>
+                    </div>
+                    <table class="table table-sm table-bordered">
+                        <thead><tr><th></th><th>SKU</th><th>Producto</th><th>Pedido</th><th>Surtido</th><th>Pendiente</th><th>A surtir</th></tr></thead>
+                        <tbody>
+                            <tr v-for="item in deliveryForm.items" :key="item.order_item_id">
+                                <td><img class="quote-thumb" :src="item.image_url || noImage" :alt="item.name"></td>
+                                <td>{{ item.sku }}</td>
+                                <td>{{ item.name }}<div class="text-muted small">Disponible catalogo: {{ money(item.available_stock) }}</div></td>
+                                <td>{{ money(item.ordered_quantity) }}</td>
+                                <td>{{ money(item.delivered_quantity) }}</td>
+                                <td><strong>{{ money(item.pending_quantity) }}</strong></td>
+                                <td><input class="form-control form-control-sm" type="number" min="0" :max="item.pending_quantity" step="1" v-model.number="item.quantity"></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <div class="alert alert-warning py-2 mb-0">
+                        Si surtimos menos del pendiente, el pedido queda parcial y el resto queda en backorder esperando inventario.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @click="hideModal('modal-fulfillment')">Cerrar</button>
+                    <button class="btn btn-success" @click="createDeliveryFromOrder()">Crear entrega</button>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
 <script>
@@ -616,11 +656,13 @@ window.onload = function() {
             deliveries: [],
             viewMode: '<?php echo $initial_view; ?>',
             selected: null,
-            stats: { quotes: 0, orders: 0, deliveries: 0, prequote: 0, requested: 0, reviewed: 0, approved: 0, rejected: 0 },
-            options: { customers: [], products: [], brands: [], categories: [] },
+            selectedOrder: null,
+            stats: { quotes: 0, orders: 0, deliveries: 0, prequote: 0, requested: 0, approved: 0, rejected: 0 },
+            options: { customers: [], products: [], brands: [], categories: [], warehouses: [] },
             quoteForm: { party_id: '', quote_mode: 'quote', items: [], customer_notes: '', internal_notes: '', offline_uuid: '' },
             lineForm: { product_id: '', product_query: '', product_type: 'product', quantity: 1, search_open: false, search_results: [] },
             closeForm: { party_id: '' },
+            deliveryForm: { order_id: 0, warehouse_id: '', items: [] },
             filters: { q: '', brand_id: '', category_id: '', stock: '' },
             searchTimer: null,
             noImage: <?php echo json_encode($no_image_svg); ?>,
@@ -720,10 +762,14 @@ window.onload = function() {
                 const labels = {
                     prequote: 'Precotizacion',
                     requested: 'Solicitada',
-                    reviewed: 'Revisada',
                     approved: 'Aprobada',
                     rejected: 'Rechazada',
-                    converted: 'Convertida'
+                    converted: 'Convertida',
+                    open: 'Abierto',
+                    partial: 'Parcial / backorder',
+                    delivered: 'Entregado',
+                    billed: 'Facturado',
+                    closed: 'Cerrado'
                 };
                 return labels[status] || status;
             },
@@ -731,10 +777,14 @@ window.onload = function() {
                 const classes = {
                     prequote: 'badge-secondary',
                     requested: 'badge-warning',
-                    reviewed: 'badge-info',
                     approved: 'badge-success',
                     rejected: 'badge-danger',
-                    converted: 'badge-primary'
+                    converted: 'badge-primary',
+                    open: 'badge-info',
+                    partial: 'badge-warning',
+                    delivered: 'badge-success',
+                    billed: 'badge-primary',
+                    closed: 'badge-secondary'
                 };
                 return classes[status] || 'badge-secondary';
             },
@@ -807,8 +857,33 @@ window.onload = function() {
                         this.viewMode = 'orders';
                     });
             },
-            createDeliveryFromOrder(order) {
-                fetch('<?php echo Uri::create('admin/sales/create_delivery_from_order'); ?>', window.coreAppFetchOptions({ id: order.id }))
+            openFulfillment(order) {
+                this.selectedOrder = JSON.parse(JSON.stringify(order));
+                const defaultWarehouse = (this.options.warehouses || [])[0] || {};
+                this.deliveryForm = {
+                    order_id: order.id,
+                    warehouse_id: defaultWarehouse.value || '',
+                    items: (order.items || []).filter(item => Number(item.pending_quantity || 0) > 0).map(item => ({
+                        order_item_id: item.id,
+                        product_id: item.product_id,
+                        sku: item.sku,
+                        name: item.name,
+                        image_url: item.image_url,
+                        available_stock: item.available_stock,
+                        ordered_quantity: item.quantity,
+                        delivered_quantity: item.delivered_quantity,
+                        pending_quantity: item.pending_quantity,
+                        quantity: item.pending_quantity
+                    }))
+                };
+                this.showModal('modal-fulfillment');
+            },
+            createDeliveryFromOrder() {
+                fetch('<?php echo Uri::create('admin/sales/create_delivery_from_order'); ?>', window.coreAppFetchOptions({
+                    id: this.deliveryForm.order_id,
+                    warehouse_id: this.deliveryForm.warehouse_id,
+                    items: this.deliveryForm.items
+                }))
                     .then(res => res.json())
                     .then(data => {
                         if (data.error) {
@@ -822,7 +897,9 @@ window.onload = function() {
                         if (this.selected) {
                             this.selected = this.quotes.find(item => Number(item.id) === Number(this.selected.id)) || this.selected;
                         }
+                        this.selectedOrder = null;
                         this.viewMode = 'deliveries';
+                        this.hideModal('modal-fulfillment');
                     });
             },
             invoiceDelivery(delivery) {

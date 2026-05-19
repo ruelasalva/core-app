@@ -173,7 +173,7 @@ class Controller_Admin_Sales extends Controller_Adminbase
                 'cart_id' => 0,
                 'user_id' => $this->current_user_id(),
                 'party_id' => $party_id,
-                'status' => $prequote ? 'prequote' : 'reviewed',
+                'status' => $prequote ? 'prequote' : 'requested',
                 'currency_code' => 'MXN',
                 'subtotal' => 0,
                 'discount_total' => 0,
@@ -278,11 +278,11 @@ class Controller_Admin_Sales extends Controller_Adminbase
 
             # SE VALIDA ESTADO PERMITIDO
             $status = trim((string) \Arr::get($val, 'status', ''));
-            $allowed = ['prequote', 'requested', 'reviewed', 'approved', 'rejected', 'converted'];
+            $allowed = ['prequote', 'requested', 'approved', 'rejected', 'converted'];
             if (!in_array($status, $allowed, true)) {
                 return $this->json_response(['error' => 'Estado no valido.'], 422);
             }
-            if ($quote->status === 'prequote' && in_array($status, ['reviewed', 'approved', 'converted'], true)) {
+            if ($quote->status === 'prequote' && in_array($status, ['approved', 'converted'], true)) {
                 return $this->json_response(['error' => 'Primero cierra la precotizacion con cliente y precios.'], 422);
             }
 
@@ -290,6 +290,10 @@ class Controller_Admin_Sales extends Controller_Adminbase
             $quote->status = $status;
             $quote->internal_notes = trim((string) \Arr::get($val, 'internal_notes', $quote->internal_notes));
             $quote->save();
+
+            if ($status === 'approved') {
+                $this->create_order_for_quote($quote);
+            }
 
             # SE AUDITA CAMBIO DE ESTADO COMERCIAL
             if (class_exists('Helper_Core_Audit')) {
@@ -395,7 +399,7 @@ class Controller_Admin_Sales extends Controller_Adminbase
 
             # SE ACTUALIZA ENCABEZADO
             $quote->party_id = $party_id;
-            $quote->status = 'reviewed';
+            $quote->status = 'requested';
             $quote->currency_code = $currency;
             $quote->subtotal = round($subtotal, 2);
             $quote->total = round($subtotal, 2);
@@ -412,7 +416,7 @@ class Controller_Admin_Sales extends Controller_Adminbase
                     'table_name' => 'core_sales_quotes',
                     'record_pk' => (int) $quote->id,
                     'description' => 'Precotizacion cerrada con precios',
-                    'new_values' => ['party_id' => $party_id, 'status' => 'reviewed', 'total' => $quote->total],
+                    'new_values' => ['party_id' => $party_id, 'status' => 'requested', 'total' => $quote->total],
                     'severity' => 'info',
                 ]);
             }
@@ -462,45 +466,7 @@ class Controller_Admin_Sales extends Controller_Adminbase
             if ((int) $quote->party_id < 1 || (float) $quote->total <= 0) {
                 return $this->json_response(['error' => 'La cotizacion debe tener cliente y total para pasar a pedido.'], 422);
             }
-            $existing = \DB::select('id')->from('core_sales_orders')->where('source_quote_id', '=', (int) $quote->id)->execute()->current();
-            if ($existing) {
-                return $this->json_response(['error' => 'Esta cotizacion ya tiene pedido.'], 422);
-            }
-
-            $order = Model_Core_Sales_Order::forge([
-                'folio' => $this->next_flow_folio('PED', 'core_sales_orders'),
-                'source_quote_id' => (int) $quote->id,
-                'party_id' => (int) $quote->party_id,
-                'status' => 'open',
-                'order_date' => date('Y-m-d'),
-                'currency_code' => (string) $quote->currency_code,
-                'subtotal' => (float) $quote->subtotal,
-                'discount_total' => (float) $quote->discount_total,
-                'tax_total' => (float) $quote->tax_total,
-                'total' => (float) $quote->total,
-                'notes' => 'Pedido creado desde cotizacion '.$quote->folio,
-                'created_by' => $this->current_user_id(),
-            ]);
-            $order->save();
-
-            foreach (\DB::select()->from('core_sales_quote_items')->where('quote_id', '=', (int) $quote->id)->order_by('sort_order', 'asc')->execute() as $row) {
-                Model_Core_Sales_Order_Item::forge([
-                    'order_id' => (int) $order->id,
-                    'quote_item_id' => (int) $row['id'],
-                    'product_id' => (int) $row['product_id'],
-                    'sku' => (string) $row['sku'],
-                    'name' => (string) $row['name'],
-                    'currency_code' => (string) $row['currency_code'],
-                    'unit_price' => (float) $row['unit_price'],
-                    'quantity' => (float) $row['quantity'],
-                    'line_total' => (float) $row['line_total'],
-                    'sort_order' => (int) $row['sort_order'],
-                ])->save();
-            }
-
-            $quote->status = 'converted';
-            $quote->save();
-            $this->audit_flow('create_order_from_quote', 'Pedido '.$order->folio.' creado desde cotizacion '.$quote->folio, 'sales_order', (int) $order->id, $order->to_array());
+            $order = $this->create_order_for_quote($quote);
 
             return $this->json_response(['status' => 'ok', 'folio' => $order->folio, 'quotes' => $this->quotes(), 'orders' => $this->orders(), 'deliveries' => $this->deliveries(), 'stats' => $this->stats()]);
         } catch (\Exception $e) {
@@ -540,14 +506,22 @@ class Controller_Admin_Sales extends Controller_Adminbase
         $this->require_access('sales.access[edit]');
 
         try {
-            $order = Model_Core_Sales_Order::find((int) \Arr::get((array) \Input::json(), 'id', 0));
+            $payload = (array) \Input::json();
+            $order = Model_Core_Sales_Order::find((int) \Arr::get($payload, 'id', 0));
             if (!$order) {
                 return $this->json_response(['error' => 'Pedido no encontrado.'], 404);
             }
-            if ($order->status === 'closed') {
-                return $this->json_response(['error' => 'El pedido ya esta cerrado.'], 422);
+            if (in_array($order->status, ['closed', 'delivered', 'billed'], true)) {
+                return $this->json_response(['error' => 'El pedido ya no tiene pendientes por surtir.'], 422);
             }
-            $warehouse_id = $this->default_warehouse_id();
+            $warehouse_id = (int) \Arr::get($payload, 'warehouse_id', 0);
+            if ($warehouse_id < 1) {
+                $warehouse_id = $this->default_warehouse_id();
+            }
+            $requested_items = [];
+            foreach ((array) \Arr::get($payload, 'items', []) as $item) {
+                $requested_items[(int) \Arr::get((array) $item, 'order_item_id', 0)] = max(0, (float) \Arr::get((array) $item, 'quantity', 0));
+            }
             $delivery = Model_Core_Sales_Delivery::forge([
                 'folio' => $this->next_flow_folio('ENT', 'core_sales_deliveries'),
                 'order_id' => (int) $order->id,
@@ -556,34 +530,50 @@ class Controller_Admin_Sales extends Controller_Adminbase
                 'status' => 'delivered',
                 'delivery_date' => date('Y-m-d'),
                 'currency_code' => (string) $order->currency_code,
-                'total' => (float) $order->total,
+                'total' => 0,
                 'notes' => 'Entrega creada desde pedido '.$order->folio,
                 'created_by' => $this->current_user_id(),
             ]);
             $delivery->save();
 
+            $delivery_total = 0;
+            $delivered_any = false;
             foreach (\DB::select()->from('core_sales_order_items')->where('order_id', '=', (int) $order->id)->order_by('sort_order', 'asc')->execute() as $row) {
                 $pending = max(0, (float) $row['quantity'] - (float) $row['delivered_quantity']);
-                if ($pending <= 0) {
+                $requested = array_key_exists((int) $row['id'], $requested_items) ? $requested_items[(int) $row['id']] : $pending;
+                $quantity = min($pending, $requested);
+                if ($pending <= 0 || $quantity <= 0) {
                     continue;
                 }
+                $line_total = round($quantity * (float) $row['unit_price'], 2);
                 Model_Core_Sales_Delivery_Item::forge([
                     'delivery_id' => (int) $delivery->id,
                     'order_item_id' => (int) $row['id'],
                     'product_id' => (int) $row['product_id'],
                     'sku' => (string) $row['sku'],
                     'name' => (string) $row['name'],
-                    'quantity' => $pending,
+                    'quantity' => $quantity,
                     'unit_price' => (float) $row['unit_price'],
-                    'line_total' => round($pending * (float) $row['unit_price'], 2),
+                    'line_total' => $line_total,
                     'sort_order' => (int) $row['sort_order'],
                 ])->save();
-                \DB::update('core_sales_order_items')->set(['delivered_quantity' => (float) $row['delivered_quantity'] + $pending, 'updated_at' => time()])->where('id', '=', (int) $row['id'])->execute();
-                $this->inventory_out((int) $row['product_id'], $warehouse_id, $pending, 'sales_delivery', (int) $delivery->id, 'Salida por entrega '.$delivery->folio);
+                \DB::update('core_sales_order_items')->set(['delivered_quantity' => (float) $row['delivered_quantity'] + $quantity, 'updated_at' => time()])->where('id', '=', (int) $row['id'])->execute();
+                $this->inventory_out((int) $row['product_id'], $warehouse_id, $quantity, 'sales_delivery', (int) $delivery->id, 'Salida por entrega '.$delivery->folio);
+                $delivery_total += $line_total;
+                $delivered_any = true;
             }
 
-            $order->status = 'delivered';
-            $order->delivered_total = (float) $order->total;
+            if (!$delivered_any) {
+                $delivery->delete();
+                return $this->json_response(['error' => 'Captura al menos una cantidad a surtir.'], 422);
+            }
+
+            $delivery->total = round($delivery_total, 2);
+            $delivery->save();
+
+            $remaining = $this->order_pending_quantity((int) $order->id);
+            $order->status = $remaining > 0 ? 'partial' : 'delivered';
+            $order->delivered_total = round($this->order_delivered_total((int) $order->id), 2);
             $order->save();
             $this->audit_flow('create_delivery_from_order', 'Entrega '.$delivery->folio.' creada desde pedido '.$order->folio, 'sales_delivery', (int) $delivery->id, $delivery->to_array());
 
@@ -673,6 +663,7 @@ class Controller_Admin_Sales extends Controller_Adminbase
             return $orders;
         }
         foreach (\DB::select('id', 'folio', 'status', 'total')->from('core_sales_orders')->where('source_quote_id', '=', (int) $quote_id)->where('active', '=', 1)->execute() as $order) {
+            $order['items'] = $this->order_items((int) $order['id']);
             $order['deliveries'] = $this->order_deliveries((int) $order['id']);
             $orders[] = $order;
         }
@@ -686,6 +677,37 @@ class Controller_Admin_Sales extends Controller_Adminbase
             $deliveries[] = $delivery;
         }
         return $deliveries;
+    }
+
+    protected function order_items($order_id)
+    {
+        $items = [];
+        foreach (\DB::select(
+                ['i.id', 'id'],
+                ['i.product_id', 'product_id'],
+                ['i.sku', 'sku'],
+                ['i.name', 'name'],
+                ['i.currency_code', 'currency_code'],
+                ['i.unit_price', 'unit_price'],
+                ['i.quantity', 'quantity'],
+                ['i.delivered_quantity', 'delivered_quantity'],
+                ['i.billed_quantity', 'billed_quantity'],
+                ['p.main_image_path', 'image_path'],
+                ['p.stock_quantity', 'stock_quantity'],
+                ['p.stock_reserved', 'stock_reserved']
+            )
+            ->from(['core_sales_order_items', 'i'])
+            ->join(['core_commerce_products', 'p'], 'left')->on('i.product_id', '=', 'p.id')
+            ->where('i.order_id', '=', (int) $order_id)
+            ->order_by('i.sort_order', 'asc')
+            ->order_by('i.id', 'asc')
+            ->execute() as $row) {
+            $row['pending_quantity'] = max(0, (float) $row['quantity'] - (float) $row['delivered_quantity']);
+            $row['available_stock'] = max(0, (float) $row['stock_quantity'] - (float) $row['stock_reserved']);
+            $row['image_url'] = $this->media_url((string) $row['image_path']);
+            $items[] = $row;
+        }
+        return $items;
     }
 
     /**
@@ -743,7 +765,6 @@ class Controller_Admin_Sales extends Controller_Adminbase
             'deliveries' => (int) \DB::count_records('core_sales_deliveries'),
             'prequote' => (int) \DB::select()->from('core_sales_quotes')->where('status', '=', 'prequote')->execute()->count(),
             'requested' => (int) \DB::select()->from('core_sales_quotes')->where('status', '=', 'requested')->execute()->count(),
-            'reviewed' => (int) \DB::select()->from('core_sales_quotes')->where('status', '=', 'reviewed')->execute()->count(),
             'approved' => (int) \DB::select()->from('core_sales_quotes')->where('status', '=', 'approved')->execute()->count(),
             'rejected' => (int) \DB::select()->from('core_sales_quotes')->where('status', '=', 'rejected')->execute()->count(),
         ];
@@ -758,11 +779,24 @@ class Controller_Admin_Sales extends Controller_Adminbase
             ->where('o.active', '=', 1);
         $this->apply_party_scope($query, 'p', 'sales');
 
-        return $query
+        $rows = $query
             ->order_by('o.id', 'desc')
             ->limit(200)
             ->execute()
             ->as_array();
+
+        foreach ($rows as &$row) {
+            $row['items'] = $this->order_items((int) $row['id']);
+            $pending = 0;
+            foreach ($row['items'] as $item) {
+                $pending += (float) $item['pending_quantity'];
+            }
+            $row['pending_quantity'] = $pending;
+            $row['backorder'] = $pending > 0 && (float) $row['delivered_total'] > 0 ? 1 : 0;
+        }
+        unset($row);
+
+        return $rows;
     }
 
     protected function deliveries()
@@ -798,6 +832,7 @@ class Controller_Admin_Sales extends Controller_Adminbase
             'products' => $this->product_options(['limit' => 60]),
             'brands' => $this->select_rows('core_commerce_brands', 'id', 'name'),
             'categories' => $this->select_rows('core_commerce_categories', 'id', 'name'),
+            'warehouses' => $this->select_rows('core_inventory_warehouses', 'id', 'name'),
         ];
     }
 
@@ -1013,6 +1048,73 @@ class Controller_Admin_Sales extends Controller_Adminbase
             ->execute()
             ->current();
         return $prefix.str_pad(((int) $row['total']) + 1, 5, '0', STR_PAD_LEFT);
+    }
+
+    protected function create_order_for_quote(Model_Core_Sales_Quote $quote)
+    {
+        $existing = \DB::select('id')->from('core_sales_orders')->where('source_quote_id', '=', (int) $quote->id)->where('active', '=', 1)->execute()->current();
+        if ($existing) {
+            return Model_Core_Sales_Order::find((int) $existing['id']);
+        }
+
+        if ((int) $quote->party_id < 1 || (float) $quote->total <= 0) {
+            throw new \RuntimeException('La cotizacion debe tener cliente y total para pasar a pedido.');
+        }
+
+        $order = Model_Core_Sales_Order::forge([
+            'folio' => $this->next_flow_folio('PED', 'core_sales_orders'),
+            'source_quote_id' => (int) $quote->id,
+            'party_id' => (int) $quote->party_id,
+            'status' => 'open',
+            'order_date' => date('Y-m-d'),
+            'currency_code' => (string) $quote->currency_code,
+            'subtotal' => (float) $quote->subtotal,
+            'discount_total' => (float) $quote->discount_total,
+            'tax_total' => (float) $quote->tax_total,
+            'total' => (float) $quote->total,
+            'notes' => 'Pedido creado desde cotizacion '.$quote->folio,
+            'created_by' => $this->current_user_id(),
+        ]);
+        $order->save();
+
+        foreach (\DB::select()->from('core_sales_quote_items')->where('quote_id', '=', (int) $quote->id)->order_by('sort_order', 'asc')->execute() as $row) {
+            Model_Core_Sales_Order_Item::forge([
+                'order_id' => (int) $order->id,
+                'quote_item_id' => (int) $row['id'],
+                'product_id' => (int) $row['product_id'],
+                'sku' => (string) $row['sku'],
+                'name' => (string) $row['name'],
+                'currency_code' => (string) $row['currency_code'],
+                'unit_price' => (float) $row['unit_price'],
+                'quantity' => (float) $row['quantity'],
+                'line_total' => (float) $row['line_total'],
+                'sort_order' => (int) $row['sort_order'],
+            ])->save();
+        }
+
+        $quote->status = 'approved';
+        $quote->save();
+        $this->audit_flow('create_order_from_quote', 'Pedido '.$order->folio.' creado desde cotizacion '.$quote->folio, 'sales_order', (int) $order->id, $order->to_array());
+
+        return $order;
+    }
+
+    protected function order_pending_quantity($order_id)
+    {
+        $pending = 0;
+        foreach (\DB::select('quantity', 'delivered_quantity')->from('core_sales_order_items')->where('order_id', '=', (int) $order_id)->execute() as $row) {
+            $pending += max(0, (float) $row['quantity'] - (float) $row['delivered_quantity']);
+        }
+        return $pending;
+    }
+
+    protected function order_delivered_total($order_id)
+    {
+        $total = 0;
+        foreach (\DB::select('delivered_quantity', 'unit_price')->from('core_sales_order_items')->where('order_id', '=', (int) $order_id)->execute() as $row) {
+            $total += (float) $row['delivered_quantity'] * (float) $row['unit_price'];
+        }
+        return $total;
     }
 
     protected function default_warehouse_id()
