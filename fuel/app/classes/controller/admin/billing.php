@@ -129,7 +129,7 @@ class Controller_Admin_Billing extends Controller_Adminbase
                 $old = [];
                 $data['folio'] = $this->next_invoice_folio();
                 $data['created_by'] = $this->user_id;
-                $invoice = Model_Core_Billing_Invoice::forge($data);
+                $invoice = Model_Core_Billing_Invoice::forge($this->invoice_defaults($data));
             }
             $invoice->save();
             $this->recalculate_invoice((int) $invoice->id);
@@ -410,6 +410,7 @@ class Controller_Admin_Billing extends Controller_Adminbase
                 'folio' => $this->next_invoice_folio(),
                 'invoice_type' => 'sale',
                 'party_id' => (int) $delivery['party_id'],
+                'cfdi_id' => 0,
                 'source_module' => 'sales',
                 'source_entity_type' => 'sales_delivery',
                 'source_entity_id' => $delivery_id,
@@ -422,6 +423,26 @@ class Controller_Admin_Billing extends Controller_Adminbase
                 'sat_payment_form_code' => '99',
                 'sat_payment_method_code' => 'PPD',
                 'pac_provider_code' => 'factura_com',
+                'pac_connection_id' => 0,
+                'pac_series_id' => '',
+                'pac_receptor_uid' => '',
+                'pac_uid' => '',
+                'uuid' => '',
+                'sat_status' => '',
+                'stamped_at' => 0,
+                'cancelled_at' => 0,
+                'cancel_motive' => '',
+                'cancel_substitute_uuid' => '',
+                'pac_request_json' => null,
+                'pac_response_json' => null,
+                'xml_path' => '',
+                'pdf_path' => '',
+                'subtotal' => 0,
+                'discount_total' => 0,
+                'tax_total' => 0,
+                'retention_total' => 0,
+                'total' => 0,
+                'balance_due' => 0,
                 'status' => 'draft',
                 'notes' => 'Factura creada desde entrega '.$delivery['folio'],
                 'created_by' => (int) $this->user_id,
@@ -451,6 +472,8 @@ class Controller_Admin_Billing extends Controller_Adminbase
                     'tax_rate' => $tax_rate,
                     'tax_amount' => $tax_amount,
                     'retention_amount' => 0,
+                    'retention_tax_code' => '',
+                    'retention_rate' => 0,
                     'line_total' => round($base + $tax_amount, 2),
                     'sort_order' => $sort,
                     'active' => 1,
@@ -1039,6 +1062,63 @@ class Controller_Admin_Billing extends Controller_Adminbase
         }
         $row = \DB::select('name')->from('core_catalog_payment_terms')->where('id', '=', $id)->execute()->current();
         return $row ? (string) $row['name'] : '';
+    }
+
+    /**
+     * INVOICE DEFAULTS
+     *
+     * COMPLETA VALORES BASE PARA QUE ORM NO INSERTE NULL EN BORRADORES.
+     *
+     * @access  protected
+     * @return  Array
+     */
+    protected function invoice_defaults(array $data = [])
+    {
+        # SE DEFINEN VALORES DE BORRADOR ANTES DE TIMBRAR CFDI
+        $defaults = [
+            'folio' => '',
+            'invoice_type' => 'sale',
+            'party_id' => 0,
+            'cfdi_id' => 0,
+            'pac_provider_code' => 'factura_com',
+            'pac_connection_id' => 0,
+            'pac_series_id' => '',
+            'pac_receptor_uid' => '',
+            'pac_uid' => '',
+            'uuid' => '',
+            'sat_status' => '',
+            'stamped_at' => 0,
+            'cancelled_at' => 0,
+            'cancel_motive' => '',
+            'cancel_substitute_uuid' => '',
+            'pac_request_json' => null,
+            'pac_response_json' => null,
+            'xml_path' => '',
+            'pdf_path' => '',
+            'source_module' => 'manual',
+            'source_entity_type' => '',
+            'source_entity_id' => 0,
+            'issue_date' => date('Y-m-d'),
+            'due_date' => '',
+            'currency_code' => 'MXN',
+            'exchange_rate' => 1,
+            'payment_term_id' => 0,
+            'sat_cfdi_use_code' => 'G03',
+            'sat_payment_form_code' => '99',
+            'sat_payment_method_code' => 'PPD',
+            'subtotal' => 0,
+            'discount_total' => 0,
+            'tax_total' => 0,
+            'retention_total' => 0,
+            'total' => 0,
+            'balance_due' => 0,
+            'status' => 'draft',
+            'notes' => '',
+            'created_by' => (int) $this->user_id,
+            'active' => 1,
+        ];
+
+        return array_merge($defaults, $data);
     }
 
     protected function tax_rate($tax_code)
