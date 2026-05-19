@@ -295,9 +295,11 @@ class Controller_Admin_Frontend extends Controller_Adminbase
                     ['name' => 'code', 'label' => 'Codigo', 'type' => 'text', 'default' => ''],
                     ['name' => 'name', 'label' => 'Nombre', 'type' => 'text', 'default' => ''],
                     ['name' => 'layout_key', 'label' => 'Layout', 'type' => 'select_static', 'options' => [
-                        ['value' => 'commerce_default', 'label' => 'Comercial default'],
-                        ['value' => 'corporate', 'label' => 'Corporativo'],
+                        ['value' => 'commerce_default', 'label' => 'Comercial limpio'],
+                        ['value' => 'corporate', 'label' => 'Corporativo institucional'],
                         ['value' => 'catalog_dense', 'label' => 'Catalogo denso'],
+                        ['value' => 'editorial_showcase', 'label' => 'Editorial / marca'],
+                        ['value' => 'industrial_b2b', 'label' => 'Industrial B2B'],
                     ], 'default' => 'commerce_default'],
                     ['name' => 'color_primary', 'label' => 'Color primario', 'type' => 'color', 'default' => '#0f766e'],
                     ['name' => 'color_secondary', 'label' => 'Color secundario', 'type' => 'color', 'default' => '#172033'],

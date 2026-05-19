@@ -1620,6 +1620,88 @@ class Configsetup
             'updated_at' => time(),
         ]);
 
+        $frontend_theme_presets = [
+            [
+                'code' => 'core_corporate',
+                'name' => 'Corporativo institucional',
+                'layout_key' => 'corporate',
+                'color_primary' => '#0b7285',
+                'color_secondary' => '#1f2937',
+                'color_accent' => '#d97706',
+                'color_background' => '#ffffff',
+                'color_surface' => '#eef2f7',
+                'color_text' => '#172033',
+                'color_muted' => '#5b6677',
+            ],
+            [
+                'code' => 'core_catalog_dense',
+                'name' => 'Catalogo denso',
+                'layout_key' => 'catalog_dense',
+                'color_primary' => '#047857',
+                'color_secondary' => '#263238',
+                'color_accent' => '#ca8a04',
+                'color_background' => '#ffffff',
+                'color_surface' => '#f3f6f8',
+                'color_text' => '#172033',
+                'color_muted' => '#64748b',
+            ],
+            [
+                'code' => 'core_editorial_showcase',
+                'name' => 'Editorial / marca',
+                'layout_key' => 'editorial_showcase',
+                'color_primary' => '#9f1239',
+                'color_secondary' => '#27272a',
+                'color_accent' => '#0f766e',
+                'color_background' => '#ffffff',
+                'color_surface' => '#f6f4f1',
+                'color_text' => '#1f2937',
+                'color_muted' => '#6b7280',
+            ],
+            [
+                'code' => 'core_industrial_b2b',
+                'name' => 'Industrial B2B',
+                'layout_key' => 'industrial_b2b',
+                'color_primary' => '#0f766e',
+                'color_secondary' => '#111827',
+                'color_accent' => '#f59e0b',
+                'color_background' => '#f8fafc',
+                'color_surface' => '#eef2f7',
+                'color_text' => '#172033',
+                'color_muted' => '#64748b',
+            ],
+        ];
+
+        foreach ($frontend_theme_presets as $preset) {
+            $this->insert_if_missing('core_frontend_themes', 'code', $preset['code'], [
+                'code' => $preset['code'],
+                'name' => $preset['name'],
+                'layout_key' => $preset['layout_key'],
+                'color_primary' => $preset['color_primary'],
+                'color_secondary' => $preset['color_secondary'],
+                'color_accent' => $preset['color_accent'],
+                'color_background' => $preset['color_background'],
+                'color_surface' => $preset['color_surface'],
+                'color_text' => $preset['color_text'],
+                'color_muted' => $preset['color_muted'],
+                'font_family' => 'Arial, Helvetica, sans-serif',
+                'heading_font_family' => 'Arial, Helvetica, sans-serif',
+                'logo_path' => '',
+                'favicon_path' => '',
+                'site_name' => 'Core-App ERP',
+                'seo_title_suffix' => 'Core-App ERP',
+                'default_seo_description' => 'Catalogo y portal administrable de Core-App.',
+                'og_image_path' => '',
+                'robots' => 'index,follow',
+                'header_style' => 'standard',
+                'footer_style' => 'standard',
+                'custom_css' => '',
+                'is_active' => 0,
+                'active' => 1,
+                'created_at' => time(),
+                'updated_at' => time(),
+            ]);
+        }
+
         $theme = \DB::select('id', 'site_name', 'seo_title_suffix', 'default_seo_description', 'robots')
             ->from('core_frontend_themes')
             ->where('code', '=', 'core_default')
@@ -2017,6 +2099,18 @@ class Configsetup
             'summary' => 'Como administrar el footer publico con bloques de marca, contacto, links, legales, redes y distintivos sin tocar codigo.',
             'content' => '<h3>Objetivo</h3><p>El footer del sitio publico funciona como una pieza CMS: se administra desde <strong>Admin &gt; Frontend &gt; Footer</strong> y no requiere programador para cambiar textos, enlaces, datos de contacto o redes.</p><h4>Tipos disponibles</h4><ul><li><strong>Marca / resumen</strong>: descripcion corta de la empresa o sitio.</li><li><strong>Contacto</strong>: telefono, correo, direccion, horarios o WhatsApp con iconos.</li><li><strong>Links</strong>: enlaces del mapa del sitio.</li><li><strong>Legales</strong>: aviso de privacidad, terminos, cookies u otros documentos.</li><li><strong>Redes sociales</strong>: botones circulares con iconos.</li><li><strong>Distintivos</strong>: sellos, certificaciones o mensajes de confianza.</li><li><strong>Texto libre</strong>: contenido administrable con editor enriquecido.</li></ul><h4>Como editarlo</h4><ol><li>Entra a <strong>Admin &gt; Frontend</strong>.</li><li>Selecciona <strong>Footer</strong>.</li><li>Crea o edita una columna.</li><li>Elige el <strong>Tipo</strong>.</li><li>Usa el constructor visual para agregar items con etiqueta, URL e icono.</li><li>Guarda y abre el sitio publico con <strong>Ver sitio</strong>.</li></ol><h4>Iconos</h4><p>Los iconos usan clases de Bootstrap Icons, por ejemplo <code>bi bi-telephone</code>, <code>bi bi-envelope</code>, <code>bi bi-facebook</code> o <code>bi bi-whatsapp</code>.</p><h4>Regla de crecimiento</h4><p>Si hace falta una pieza nueva del footer, primero intenta resolverla como tipo, item o bloque editable. Solo se debe tocar plantilla cuando se agrega una capacidad nueva reutilizable.</p>',
             'sort_order' => 16,
+            'active' => 1,
+            'created_at' => time(),
+            'updated_at' => time(),
+        ]);
+
+        $this->upsert_seed('core_knowledge_articles', 'code', 'frontend_templates_publicos', [
+            'code' => 'frontend_templates_publicos',
+            'title' => 'Frontend: plantillas visuales del sitio publico',
+            'category' => 'Frontend',
+            'summary' => 'Como cambiar la vista publica con 5 layouts base sin duplicar paginas ni depender de programador para cada ajuste.',
+            'content' => '<h3>Objetivo</h3><p>El sitio publico usa plantillas visuales administrables para que los datos capturados en paginas, secciones, menus, productos y footer se reutilicen en distintas vistas. No se deben copiar sitios completos dentro del proyecto; se cambia el <strong>Layout</strong> del tema activo y el contenido se mantiene.</p><h4>Plantillas incluidas</h4><ul><li><strong>Comercial limpio</strong>: base equilibrada para catalogo, productos y paginas generales.</li><li><strong>Corporativo institucional</strong>: encabezado mas formal, hero amplio y secciones con mas aire para empresas B2B.</li><li><strong>Catalogo denso</strong>: compacto para muchos productos, filtros y navegacion rapida.</li><li><strong>Editorial / marca</strong>: vista mas visual para marcas, lanzamientos o contenido comercial destacado.</li><li><strong>Industrial B2B</strong>: header oscuro, bloques firmes y estilo operativo para empresas industriales o distribuidoras.</li></ul><h4>Como cambiar de plantilla</h4><ol><li>Entra a <strong>Admin &gt; Frontend &gt; Apariencia</strong>.</li><li>Edita el tema activo o crea una copia de tema.</li><li>Selecciona <strong>Layout</strong>.</li><li>Ajusta colores, logo, favicon, tipografias, SEO y CSS controlado si hace falta.</li><li>Guarda y abre el sitio publico para validar inicio, productos, pagina de empresa, contacto y footer.</li></ol><h4>Reglas de mantenimiento</h4><ul><li>Primero cambia contenido desde paginas, secciones y footer; usa CSS custom solo para ajustes finos.</li><li>Si se necesita una vista nueva, debe agregarse como layout reutilizable, no como pagina PHP copiada.</li><li>Las plantillas usan los assets locales del sistema y no descargan librerias externas en produccion.</li><li>Los presets se inspiraron en patrones comunes de Bootstrap, HTML5 UP y sitios responsive gratuitos, pero el codigo queda propio para evitar deuda de licencias y parches.</li></ul><h4>Checklist</h4><ul><li>Solo un tema debe estar marcado como <strong>Tema activo</strong>.</li><li>El layout se ve bien en inicio, productos y contacto.</li><li>El logo no rompe el header en celular.</li><li>Las imagenes tienen rutas publicas validas.</li><li>El footer conserva contacto, legales y redes.</li></ul>',
+            'sort_order' => 17,
             'active' => 1,
             'created_at' => time(),
             'updated_at' => time(),
