@@ -33,6 +33,7 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
                 'stats' => $this->stats($filters),
                 'items' => $this->items($filters),
                 'selected' => $this->selected_context(),
+                'options' => $this->options(),
             ]);
         } catch (\Exception $e) {
             \Log::error('Error cargando auditoria SAT: '.$e->getMessage());
@@ -107,8 +108,12 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
             if (!\DBUtil::table_exists('core_purchase_orders') || !\DBUtil::table_exists('core_purchase_invoices')) {
                 throw new \RuntimeException('Falta ejecutar migraciones de Compras.');
             }
+            if (!\DBUtil::table_exists('core_purchase_cfdi_line_mappings')) {
+                throw new \RuntimeException('Falta ejecutar migraciones de mapeo XML de Compras.');
+            }
 
-            $id = (int) \Arr::get((array) \Input::json(), 'cfdi_id', 0);
+            $payload = (array) \Input::json();
+            $id = (int) \Arr::get($payload, 'cfdi_id', 0);
             $cfdi = Model_Core_Sat_Cfdi::find($id);
             if (!$cfdi || !$this->can_access_cfdi((int) $cfdi->id)) {
                 return $this->json_response(['error' => 'CFDI no encontrado o sin permiso.'], 404);
@@ -133,10 +138,13 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
                 return $this->json_response(['error' => 'Este CFDI ya esta ligado a una factura de compra.'], 422);
             }
 
+            $line_mappings = $this->normalize_purchase_mappings($cfdi, (array) \Arr::get($payload, 'mappings', []));
+
             \DB::start_transaction();
             $transaction_started = true;
-            $order = $this->create_purchase_order_from_cfdi($cfdi, $party_id);
+            $order = $this->create_purchase_order_from_cfdi($cfdi, $party_id, $line_mappings);
             $invoice = $this->create_purchase_invoice_from_cfdi($cfdi, $party_id, (int) $order->id);
+            $this->link_purchase_mappings_to_invoice((int) $cfdi->id, (int) $invoice->id);
             $this->recalculate_purchase_order((int) $order->id);
             $cfdi->purchase_status = 'linked';
             $cfdi->reviewed_by = (int) $this->user_id;
@@ -154,6 +162,7 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
                 'new_values' => [
                     'purchase_order_id' => (int) $order->id,
                     'purchase_invoice_id' => (int) $invoice->id,
+                    'mapped_lines' => count($line_mappings),
                 ],
             ]);
 
@@ -253,6 +262,44 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
             'relations' => $this->relations($cfdi_id),
             'linked' => $this->linked_records($cfdi_id),
         ];
+    }
+
+    protected function options()
+    {
+        return [
+            'products' => $this->product_options(),
+            'warehouses' => $this->warehouse_options(),
+        ];
+    }
+
+    protected function product_options()
+    {
+        if (!\DBUtil::table_exists('core_commerce_products')) {
+            return [];
+        }
+
+        return \DB::select('id', 'sku', 'name', 'unit_code', 'cost')
+            ->from('core_commerce_products')
+            ->where('active', '=', 1)
+            ->order_by('name', 'asc')
+            ->limit(800)
+            ->execute()
+            ->as_array();
+    }
+
+    protected function warehouse_options()
+    {
+        if (!\DBUtil::table_exists('core_inventory_warehouses')) {
+            return [];
+        }
+
+        return \DB::select('id', 'code', 'name', 'is_default')
+            ->from('core_inventory_warehouses')
+            ->where('active', '=', 1)
+            ->order_by('is_default', 'desc')
+            ->order_by('name', 'asc')
+            ->execute()
+            ->as_array();
     }
 
     protected function details($cfdi_id)
@@ -423,7 +470,7 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
             && (string) $row['purchase_status'] !== 'linked';
     }
 
-    protected function create_purchase_order_from_cfdi(Model_Core_Sat_Cfdi $cfdi, $party_id)
+    protected function create_purchase_order_from_cfdi(Model_Core_Sat_Cfdi $cfdi, $party_id, array $line_mappings = [])
     {
         $order = Model_Core_Purchase_Order::forge([
             'folio' => $this->next_folio('OC-SAT', 'core_purchase_orders'),
@@ -457,11 +504,36 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
             if ($line['line_type'] !== 'concept') {
                 continue;
             }
+            $mapping = isset($line_mappings[(int) $line['id']])
+                ? $line_mappings[(int) $line['id']]
+                : $this->default_purchase_mapping($line);
+            $product_id = (int) $mapping['product_id'];
+            $warehouse_id = (int) $mapping['warehouse_id'];
+            $line_class = (string) $mapping['line_class'];
+
+            if ($line_class === 'inventory_product') {
+                if ($product_id < 1 && (int) $mapping['create_product'] === 1) {
+                    $product_id = $this->create_product_from_cfdi_line($cfdi, $line, $mapping);
+                    $mapping['product_id'] = $product_id;
+                }
+                if ($product_id < 1) {
+                    throw new \RuntimeException('Selecciona o crea un SKU interno para la partida: '.(string) $line['description']);
+                }
+                if ($warehouse_id < 1) {
+                    $warehouse_id = $this->default_warehouse_id();
+                    $mapping['warehouse_id'] = $warehouse_id;
+                }
+            }
+
+            $product = $product_id > 0 ? Model_Core_Commerce_Product::find($product_id) : null;
+            $sku = $product ? (string) $product->sku : (string) $line['identification_number'];
+            $description = $product && $line_class === 'inventory_product' ? (string) $product->name : ((string) $line['description'] ?: 'Concepto CFDI');
+
             Model_Core_Purchase_Order_Item::forge([
                 'order_id' => (int) $order->id,
-                'product_id' => 0,
-                'sku' => (string) $line['identification_number'],
-                'description' => (string) $line['description'] ?: 'Concepto CFDI',
+                'product_id' => $product_id,
+                'sku' => $sku,
+                'description' => $description,
                 'quantity' => max(0.0001, (float) $line['quantity']),
                 'unit_code' => (string) $line['unit_code'] ?: 'H87',
                 'unit_price' => max(0, (float) $line['unit_value']),
@@ -473,10 +545,269 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
                 'sort_order' => $sort,
                 'active' => 1,
             ])->save();
+            $item = \DB::select('id')
+                ->from('core_purchase_order_items')
+                ->where('order_id', '=', (int) $order->id)
+                ->where('sort_order', '=', $sort)
+                ->execute()
+                ->current();
+            $item_id = $item ? (int) $item['id'] : 0;
+            $movement_id = 0;
+            if ($line_class === 'inventory_product') {
+                $movement_id = $this->inventory_in_from_purchase($product_id, $warehouse_id, max(0.0001, (float) $line['quantity']), max(0, (float) $line['unit_value']), $item_id, 'Entrada desde CFDI '.$cfdi->uuid);
+                \DB::update('core_purchase_order_items')
+                    ->set(['received_quantity' => max(0.0001, (float) $line['quantity'])])
+                    ->where('id', '=', $item_id)
+                    ->execute();
+            }
+            $this->save_cfdi_line_mapping($cfdi, $line, $mapping, (int) $order->id, $item_id, $movement_id);
             $sort += 10;
         }
 
         return $order;
+    }
+
+    protected function normalize_purchase_mappings(Model_Core_Sat_Cfdi $cfdi, array $mappings)
+    {
+        $concept_ids = [];
+        foreach ($this->details((int) $cfdi->id) as $line) {
+            if ($line['line_type'] === 'concept') {
+                $concept_ids[(int) $line['id']] = $line;
+            }
+        }
+
+        $normalized = [];
+        foreach ($mappings as $mapping) {
+            $mapping = (array) $mapping;
+            $detail_id = (int) \Arr::get($mapping, 'cfdi_detail_id', 0);
+            if (!isset($concept_ids[$detail_id])) {
+                continue;
+            }
+
+            $line_class = (string) \Arr::get($mapping, 'line_class', 'internal_purchase');
+            if (!in_array($line_class, ['service', 'internal_purchase', 'inventory_product'], true)) {
+                $line_class = 'internal_purchase';
+            }
+
+            $normalized[$detail_id] = [
+                'cfdi_detail_id' => $detail_id,
+                'line_class' => $line_class,
+                'product_id' => max(0, (int) \Arr::get($mapping, 'product_id', 0)),
+                'warehouse_id' => max(0, (int) \Arr::get($mapping, 'warehouse_id', 0)),
+                'create_product' => (int) \Arr::get($mapping, 'create_product', 0) === 1 ? 1 : 0,
+                'new_sku' => trim((string) \Arr::get($mapping, 'new_sku', '')),
+                'new_name' => trim((string) \Arr::get($mapping, 'new_name', '')),
+            ];
+        }
+
+        foreach ($concept_ids as $detail_id => $line) {
+            if (!isset($normalized[$detail_id])) {
+                $normalized[$detail_id] = $this->default_purchase_mapping($line);
+            }
+        }
+
+        return $normalized;
+    }
+
+    protected function default_purchase_mapping(array $line)
+    {
+        return [
+            'cfdi_detail_id' => (int) $line['id'],
+            'line_class' => 'internal_purchase',
+            'product_id' => 0,
+            'warehouse_id' => 0,
+            'create_product' => 0,
+            'new_sku' => (string) $line['identification_number'],
+            'new_name' => (string) $line['description'],
+        ];
+    }
+
+    protected function create_product_from_cfdi_line(Model_Core_Sat_Cfdi $cfdi, array $line, array $mapping)
+    {
+        $sku = $this->unique_product_sku($mapping['new_sku'] ?: (string) $line['identification_number'] ?: 'XML-'.$cfdi->id.'-'.$line['id']);
+        $name = trim((string) $mapping['new_name']) ?: ((string) $line['description'] ?: 'Producto importado XML');
+        $product = Model_Core_Commerce_Product::forge([
+            'sku' => $sku,
+            'name' => $name,
+            'slug' => $this->unique_product_slug($name),
+            'short_description' => 'Creado desde XML de proveedor.',
+            'description' => (string) $line['description'],
+            'brand_id' => null,
+            'category_id' => null,
+            'subcategory_id' => null,
+            'unit_code' => (string) $line['unit_code'] ?: 'H87',
+            'currency_code' => (string) $cfdi->currency ?: 'MXN',
+            'price' => 0,
+            'cost' => max(0, (float) $line['unit_value']),
+            'tax_code' => (float) $line['vat_rate'] > 0 ? 'iva_16' : '',
+            'main_image_path' => '',
+            'show_in_home' => 0,
+            'featured' => 0,
+            'published' => 0,
+            'active' => 1,
+            'sort_order' => 0,
+        ]);
+        $product->save();
+        return (int) $product->id;
+    }
+
+    protected function save_cfdi_line_mapping(Model_Core_Sat_Cfdi $cfdi, array $line, array $mapping, $order_id, $item_id, $movement_id)
+    {
+        $product = (int) $mapping['product_id'] > 0 ? Model_Core_Commerce_Product::find((int) $mapping['product_id']) : null;
+        \DB::insert('core_purchase_cfdi_line_mappings')->set([
+            'cfdi_id' => (int) $cfdi->id,
+            'cfdi_detail_id' => (int) $line['id'],
+            'purchase_order_id' => (int) $order_id,
+            'purchase_order_item_id' => (int) $item_id,
+            'purchase_invoice_id' => 0,
+            'line_class' => (string) $mapping['line_class'],
+            'product_id' => (int) $mapping['product_id'],
+            'warehouse_id' => (int) $mapping['warehouse_id'],
+            'inventory_movement_id' => (int) $movement_id,
+            'supplier_sku' => (string) $line['identification_number'],
+            'supplier_description' => substr((string) $line['description'], 0, 255),
+            'internal_sku' => $product ? (string) $product->sku : '',
+            'internal_name' => $product ? (string) $product->name : '',
+            'quantity' => max(0.0001, (float) $line['quantity']),
+            'unit_code' => (string) $line['unit_code'],
+            'unit_cost' => max(0, (float) $line['unit_value']),
+            'status' => $movement_id > 0 ? 'received' : 'mapped',
+            'created_by' => (int) $this->user_id,
+            'created_at' => time(),
+            'updated_at' => time(),
+        ])->execute();
+    }
+
+    protected function link_purchase_mappings_to_invoice($cfdi_id, $invoice_id)
+    {
+        \DB::update('core_purchase_cfdi_line_mappings')
+            ->set(['purchase_invoice_id' => (int) $invoice_id, 'updated_at' => time()])
+            ->where('cfdi_id', '=', (int) $cfdi_id)
+            ->where('purchase_invoice_id', '=', 0)
+            ->execute();
+    }
+
+    protected function inventory_in_from_purchase($product_id, $warehouse_id, $quantity, $unit_cost, $entity_id, $notes)
+    {
+        $movement = Model_Core_Inventory_Movement::forge([
+            'warehouse_id' => (int) $warehouse_id,
+            'product_id' => (int) $product_id,
+            'movement_type' => 'purchase_in',
+            'quantity' => abs((float) $quantity),
+            'unit_cost' => max(0, (float) $unit_cost),
+            'related_module' => 'purchases',
+            'related_entity_type' => 'purchase_order_item',
+            'related_entity_id' => (int) $entity_id,
+            'notes' => $notes,
+            'created_by' => (int) $this->user_id,
+        ]);
+        $movement->save();
+        $this->adjust_inventory_balance((int) $warehouse_id, (int) $product_id, abs((float) $quantity));
+        $this->refresh_product_stock_from_balances((int) $product_id);
+
+        return (int) $movement->id;
+    }
+
+    protected function default_warehouse_id()
+    {
+        if (!\DBUtil::table_exists('core_inventory_warehouses')) {
+            throw new \RuntimeException('Falta configurar almacenes para recibir producto.');
+        }
+        $row = \DB::select('id')->from('core_inventory_warehouses')->where('is_default', '=', 1)->where('active', '=', 1)->execute()->current();
+        if ($row) {
+            return (int) $row['id'];
+        }
+        $row = \DB::select('id')->from('core_inventory_warehouses')->where('active', '=', 1)->order_by('id', 'asc')->execute()->current();
+        if ($row) {
+            return (int) $row['id'];
+        }
+        throw new \RuntimeException('No hay almacenes activos para recibir producto.');
+    }
+
+    protected function adjust_inventory_balance($warehouse_id, $product_id, $quantity)
+    {
+        if (!\DBUtil::table_exists('core_inventory_stock_balances')) {
+            return;
+        }
+
+        $now = time();
+        $row = \DB::select('id')
+            ->from('core_inventory_stock_balances')
+            ->where('warehouse_id', '=', (int) $warehouse_id)
+            ->where('product_id', '=', (int) $product_id)
+            ->execute()
+            ->current();
+
+        if ($row) {
+            \DB::update('core_inventory_stock_balances')
+                ->set([
+                    'quantity_on_hand' => \DB::expr('quantity_on_hand + '.abs((float) $quantity)),
+                    'last_movement_at' => $now,
+                    'updated_at' => $now,
+                ])
+                ->where('id', '=', (int) $row['id'])
+                ->execute();
+            return;
+        }
+
+        \DB::insert('core_inventory_stock_balances')->set([
+            'warehouse_id' => (int) $warehouse_id,
+            'product_id' => (int) $product_id,
+            'quantity_on_hand' => abs((float) $quantity),
+            'quantity_reserved' => 0,
+            'last_movement_at' => $now,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ])->execute();
+    }
+
+    protected function refresh_product_stock_from_balances($product_id)
+    {
+        if (!\DBUtil::table_exists('core_inventory_stock_balances')) {
+            return;
+        }
+
+        $row = \DB::select([\DB::expr('COALESCE(SUM(quantity_on_hand), 0)'), 'stock'], [\DB::expr('COALESCE(SUM(quantity_reserved), 0)'), 'reserved'])
+            ->from('core_inventory_stock_balances')
+            ->where('product_id', '=', (int) $product_id)
+            ->execute()
+            ->current();
+
+        \DB::update('core_commerce_products')
+            ->set([
+                'stock_quantity' => (float) $row['stock'],
+                'stock_reserved' => (float) $row['reserved'],
+                'stock_updated_at' => time(),
+                'updated_at' => time(),
+            ])
+            ->where('id', '=', (int) $product_id)
+            ->execute();
+    }
+
+    protected function unique_product_sku($seed)
+    {
+        $base = strtoupper(preg_replace('/[^A-Z0-9_-]+/i', '-', trim((string) $seed)));
+        $base = trim($base, '-_') ?: 'XML-PRODUCTO';
+        $sku = substr($base, 0, 80);
+        $i = 2;
+        while (\DB::select('id')->from('core_commerce_products')->where('sku', '=', $sku)->execute()->current()) {
+            $suffix = '-'.$i++;
+            $sku = substr($base, 0, 80 - strlen($suffix)).$suffix;
+        }
+        return $sku;
+    }
+
+    protected function unique_product_slug($seed)
+    {
+        $base = strtolower(preg_replace('/[^a-z0-9]+/i', '-', trim((string) $seed)));
+        $base = trim($base, '-') ?: 'producto-xml';
+        $slug = substr($base, 0, 220);
+        $i = 2;
+        while (\DB::select('id')->from('core_commerce_products')->where('slug', '=', $slug)->execute()->current()) {
+            $suffix = '-'.$i++;
+            $slug = substr($base, 0, 220 - strlen($suffix)).$suffix;
+        }
+        return $slug;
     }
 
     protected function create_purchase_invoice_from_cfdi(Model_Core_Sat_Cfdi $cfdi, $party_id, $order_id)

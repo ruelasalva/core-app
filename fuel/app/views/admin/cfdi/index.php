@@ -145,6 +145,88 @@
             <div class="text-muted small">Mostrando maximo 300 registros. Usa filtros por mes, tipo y busqueda para auditorias grandes.</div>
         </div>
     </div>
+
+    <div class="modal fade" id="cfdi-convert-modal" tabindex="-1" role="dialog" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Convertir XML a compra</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar"><span aria-hidden="true">&times;</span></button>
+                </div>
+                <div class="modal-body">
+                    <div v-if="convertForm.item" class="alert alert-light border py-2">
+                        <strong>{{ convertForm.item.uuid }}</strong>
+                        <span class="text-muted ml-2">{{ counterpartyName(convertForm.item) }}</span>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered align-middle">
+                            <thead>
+                                <tr>
+                                    <th style="min-width: 260px;">Partida XML</th>
+                                    <th style="width: 180px;">Uso</th>
+                                    <th style="min-width: 220px;">SKU interno</th>
+                                    <th style="width: 180px;">Almacen</th>
+                                    <th style="min-width: 210px;">Crear producto</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="row in convertForm.mappings" :key="'map-' + row.cfdi_detail_id">
+                                    <td>
+                                        <strong>{{ row.supplier_sku || 'Sin clave' }}</strong>
+                                        <div>{{ row.supplier_description }}</div>
+                                        <div class="text-muted small">{{ row.quantity }} {{ row.unit_code }} x {{ money(row.unit_cost, convertForm.item ? convertForm.item.currency : 'MXN') }}</div>
+                                    </td>
+                                    <td>
+                                        <select class="form-control form-control-sm" v-model="row.line_class">
+                                            <option value="internal_purchase">Compra interna</option>
+                                            <option value="service">Servicio</option>
+                                            <option value="inventory_product">Producto para venta</option>
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <select class="form-control form-control-sm" v-model="row.product_id" :disabled="row.line_class !== 'inventory_product' || row.create_product">
+                                            <option value="">Seleccionar producto</option>
+                                            <option v-for="product in options.products" :key="product.id" :value="product.id">
+                                                {{ product.sku }} - {{ product.name }}
+                                            </option>
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <select class="form-control form-control-sm" v-model="row.warehouse_id" :disabled="row.line_class !== 'inventory_product'">
+                                            <option value="">Almacen</option>
+                                            <option v-for="warehouse in options.warehouses" :key="warehouse.id" :value="warehouse.id">
+                                                {{ warehouse.name }}
+                                            </option>
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <div class="custom-control custom-checkbox mb-1">
+                                            <input type="checkbox" class="custom-control-input" :id="'create-product-' + row.cfdi_detail_id" v-model="row.create_product" :disabled="row.line_class !== 'inventory_product'">
+                                            <label class="custom-control-label" :for="'create-product-' + row.cfdi_detail_id">Crear pendiente</label>
+                                        </div>
+                                        <input type="text" class="form-control form-control-sm mb-1" placeholder="SKU nuevo" v-model="row.new_sku" :disabled="row.line_class !== 'inventory_product' || !row.create_product">
+                                        <input type="text" class="form-control form-control-sm" placeholder="Nombre interno" v-model="row.new_name" :disabled="row.line_class !== 'inventory_product' || !row.create_product">
+                                    </td>
+                                </tr>
+                                <tr v-if="convertForm.mappings.length === 0">
+                                    <td colspan="5" class="text-muted text-center">Este CFDI no tiene conceptos para convertir.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="text-muted small">
+                        Las partidas marcadas como producto para venta generan entrada de almacen. Servicios y compras internas quedan en la orden/factura sin afectar inventario.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-primary" @click="submitConvertPurchase" :disabled="convertForm.saving || convertForm.mappings.length === 0">
+                        <i class="bi bi-cart-check"></i> Crear compra
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
 <script>
@@ -155,8 +237,10 @@ window.onload = function() {
             filters: { month: '<?php echo date('Y-m'); ?>', tab: 'received', doc_type: 'invoices', q: '' },
             stats: {},
             items: [],
+            options: { products: [], warehouses: [] },
             selected: null,
             selectedContext: { details: [], payments: [], relations: [], linked: [] },
+            convertForm: { item: null, mappings: [], saving: false },
             message: '',
             error: '',
             tabs: [
@@ -205,32 +289,91 @@ window.onload = function() {
                 this.error = '';
                 var params = new URLSearchParams(this.filters);
                 if (extra && extra.cfdi_id) params.set('cfdi_id', extra.cfdi_id);
-                fetch('<?php echo Uri::create('admin/cfdi/data'); ?>?' + params.toString())
+                return fetch('<?php echo Uri::create('admin/cfdi/data'); ?>?' + params.toString())
                     .then(function(res) { return res.json(); })
                     .then(data => {
                         if (data.error) { this.error = data.error; return; }
                         this.stats = data.stats || {};
                         this.items = data.items || [];
+                        this.options = data.options || { products: [], warehouses: [] };
                         this.selectedContext = data.selected || { details: [], payments: [], relations: [], linked: [] };
                     })
                     .catch(() => { this.error = 'No se pudo cargar Auditoria SAT.'; });
             },
             openDetails: function(item) {
                 this.selected = item;
-                this.load({ cfdi_id: item.id });
+                return this.load({ cfdi_id: item.id });
             },
             convertPurchase: function(item) {
-                if (!confirm('Convertir este CFDI a orden y factura de compra?')) return;
                 this.error = '';
                 this.message = '';
-                fetch('<?php echo Uri::create('admin/cfdi/convert_purchase'); ?>', window.coreAppFetchOptions({ cfdi_id: item.id }))
+                this.selected = item;
+                this.load({ cfdi_id: item.id }).then(() => {
+                    this.convertForm = {
+                        item: item,
+                        mappings: this.selectedContext.details
+                            .filter(line => line.line_type === 'concept')
+                            .map(line => this.buildMappingRow(line)),
+                        saving: false
+                    };
+                    $('#cfdi-convert-modal').modal('show');
+                });
+            },
+            buildMappingRow: function(line) {
+                var match = this.findProductBySku(line.identification_number || '');
+                return {
+                    cfdi_detail_id: line.id,
+                    line_class: match ? 'inventory_product' : 'internal_purchase',
+                    product_id: match ? match.id : '',
+                    warehouse_id: this.defaultWarehouseId(),
+                    create_product: false,
+                    new_sku: line.identification_number || '',
+                    new_name: line.description || '',
+                    supplier_sku: line.identification_number || '',
+                    supplier_description: line.description || 'Concepto CFDI',
+                    quantity: line.quantity || 0,
+                    unit_code: line.unit_code || 'H87',
+                    unit_cost: line.unit_value || 0
+                };
+            },
+            submitConvertPurchase: function() {
+                this.error = '';
+                this.message = '';
+                this.convertForm.saving = true;
+                fetch('<?php echo Uri::create('admin/cfdi/convert_purchase'); ?>', window.coreAppFetchOptions({
+                    cfdi_id: this.convertForm.item ? this.convertForm.item.id : 0,
+                    mappings: this.convertForm.mappings.map(row => ({
+                        cfdi_detail_id: row.cfdi_detail_id,
+                        line_class: row.line_class,
+                        product_id: row.product_id || 0,
+                        warehouse_id: row.warehouse_id || 0,
+                        create_product: row.create_product ? 1 : 0,
+                        new_sku: row.new_sku || '',
+                        new_name: row.new_name || ''
+                    }))
+                }))
                     .then(function(res) { return res.json(); })
                     .then(data => {
+                        this.convertForm.saving = false;
                         if (data.error) { this.error = data.error; return; }
                         this.message = data.message || 'Compra creada.';
-                        this.openDetails(item);
+                        $('#cfdi-convert-modal').modal('hide');
+                        this.openDetails(this.convertForm.item);
                     })
-                    .catch(() => { this.error = 'No se pudo convertir el CFDI.'; });
+                    .catch(() => {
+                        this.convertForm.saving = false;
+                        this.error = 'No se pudo convertir el CFDI.';
+                    });
+            },
+            findProductBySku: function(sku) {
+                sku = (sku || '').toString().trim().toLowerCase();
+                if (!sku) return null;
+                return this.options.products.find(product => (product.sku || '').toString().trim().toLowerCase() === sku) || null;
+            },
+            defaultWarehouseId: function() {
+                var found = this.options.warehouses.find(warehouse => parseInt(warehouse.is_default || 0) === 1);
+                if (!found && this.options.warehouses.length > 0) found = this.options.warehouses[0];
+                return found ? found.id : '';
             },
             importXml: function(event) {
                 var file = event.target.files[0];

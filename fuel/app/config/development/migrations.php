@@ -43,6 +43,7 @@ return array (
         37 => '038_enhance_billing_pac_cfdi',
         38 => '039_create_sales_delivery_inventory_flow',
         39 => '040_create_inventory_stock_balances',
+        40 => '041_create_purchase_cfdi_line_mappings',
       ),
     ),
     'module' => array(    

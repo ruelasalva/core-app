@@ -2308,6 +2308,18 @@ class Configsetup
             'updated_at' => time(),
         ]);
 
+        $this->upsert_seed('core_knowledge_articles', 'code', 'compras_xml_sat_inventario', [
+            'code' => 'compras_xml_sat_inventario',
+            'title' => 'Compras desde XML SAT e inventario',
+            'category' => 'Compras',
+            'summary' => 'Como convertir un CFDI recibido en compra, mapear partidas del proveedor contra SKU internos y recibir inventario cuando corresponde.',
+            'content' => '<h3>Objetivo</h3><p>Permitir que una factura XML de proveedor alimente Compras sin contaminar el catalogo interno. El proveedor puede facturar una descripcion distinta a la que Core-App vende; por eso cada concepto se revisa antes de crear la compra y mover inventario.</p><h4>Flujo desde Auditoria SAT</h4><ol><li>Entra a <strong>Admin &gt; Auditoria SAT</strong>.</li><li>Importa el XML o selecciona un CFDI recibido ya cargado.</li><li>Abre el detalle y presiona <strong>Convertir a compra</strong>.</li><li>Por cada partida elige <strong>Compra interna</strong>, <strong>Servicio</strong> o <strong>Producto para venta</strong>.</li><li>Si es producto para venta, selecciona el SKU interno y almacen. Si no existe, marca <strong>Crear pendiente</strong> y captura SKU/nombre interno.</li><li>Guarda. El sistema crea orden de compra, factura de proveedor, mapeo XML-SKU y entrada de inventario solo para las partidas de venta.</li></ol><h4>Reglas operativas</h4><ul><li>Servicios y compras internas no afectan inventario.</li><li>Los productos creados desde XML quedan no publicados y sin precio de venta para que Comercial los revise antes de mostrarlos en frontend.</li><li>La relacion entre concepto fiscal y SKU interno vive en <code>core_purchase_cfdi_line_mappings</code>.</li><li>La entrada de almacen se registra en <code>core_inventory_movements</code> con tipo <code>purchase_in</code> y actualiza <code>core_inventory_stock_balances</code>.</li><li>Compras no debe guardar XML/PDF como campos sueltos; los archivos siguen perteneciendo a SAT o Documentos.</li></ul><h4>Validacion</h4><ol><li>Despues de convertir, revisa <strong>Admin &gt; Compras</strong> para ver la orden y factura.</li><li>Revisa <strong>Admin &gt; Inventario</strong> para confirmar las entradas de almacen.</li><li>Revisa <strong>Admin &gt; Comercial</strong> si se crearon productos pendientes desde XML.</li></ol>',
+            'sort_order' => 56,
+            'active' => 1,
+            'created_at' => time(),
+            'updated_at' => time(),
+        ]);
+
         $this->upsert_seed('core_knowledge_articles', 'code', 'alta_proveedores_portal', [
             'code' => 'alta_proveedores_portal',
             'title' => 'Alta y validacion de proveedores',
