@@ -82,7 +82,7 @@ class Controller_Admin_Sales extends Controller_Adminbase
                 'deliveries' => $this->deliveries(),
             ]);
         } catch (\Exception $e) {
-            \Log::error('Error cargando ventas: '.$e->getMessage());
+            \Log::error('Error cargando ventas: '.$e->getMessage().' | trace='.$e->getTraceAsString());
             return $this->json_response(['error' => 'No se pudo cargar ventas.'], 500);
         }
     }
@@ -293,6 +293,7 @@ class Controller_Admin_Sales extends Controller_Adminbase
             $quote->save();
 
             if ($status === 'approved') {
+                \Log::info('Ventas: aprobando cotizacion '.$quote->folio.' id='.(int) $quote->id.' desde update_status.');
                 $this->create_order_for_quote($quote);
             }
 
@@ -313,8 +314,8 @@ class Controller_Admin_Sales extends Controller_Adminbase
 
             return $this->json_response(['status' => 'ok', 'quotes' => $this->quotes(), 'orders' => $this->orders(), 'deliveries' => $this->deliveries(), 'stats' => $this->stats()]);
         } catch (\Exception $e) {
-            \Log::error('Error actualizando cotizacion: '.$e->getMessage());
-            return $this->json_response(['error' => 'No se pudo actualizar la cotizacion.'], 400);
+            \Log::error('Error actualizando cotizacion: '.$e->getMessage().' | payload='.json_encode((array) \Input::json()));
+            return $this->json_response(['error' => 'No se pudo actualizar la cotizacion: '.$e->getMessage()], 400);
         }
     }
 
@@ -512,6 +513,7 @@ class Controller_Admin_Sales extends Controller_Adminbase
             if (!$order) {
                 return $this->json_response(['error' => 'Pedido no encontrado.'], 404);
             }
+            \Log::info('Ventas: inicio de surtido pedido '.$order->folio.' id='.(int) $order->id.' payload='.json_encode($payload));
             if (in_array($order->status, ['closed', 'delivered', 'billed'], true)) {
                 return $this->json_response(['error' => 'El pedido ya no tiene pendientes por surtir.'], 422);
             }
@@ -536,8 +538,10 @@ class Controller_Admin_Sales extends Controller_Adminbase
                 'delivery_date' => date('Y-m-d'),
                 'currency_code' => (string) $order->currency_code,
                 'total' => 0,
+                'billing_invoice_id' => 0,
                 'notes' => 'Entrega creada desde pedido '.$order->folio,
                 'created_by' => $this->current_user_id(),
+                'active' => 1,
             ]);
             $delivery->save();
 
@@ -580,12 +584,13 @@ class Controller_Admin_Sales extends Controller_Adminbase
             $order->status = $remaining > 0 ? 'partial' : 'delivered';
             $order->delivered_total = round($this->order_delivered_total((int) $order->id), 2);
             $order->save();
+            \Log::info('Ventas: entrega '.$delivery->folio.' creada desde pedido '.$order->folio.' total='.$delivery->total.' restante='.$remaining);
             $this->audit_flow('create_delivery_from_order', 'Entrega '.$delivery->folio.' creada desde pedido '.$order->folio, 'sales_delivery', (int) $delivery->id, $delivery->to_array());
 
             return $this->json_response(['status' => 'ok', 'folio' => $delivery->folio, 'quotes' => $this->quotes(), 'orders' => $this->orders(), 'deliveries' => $this->deliveries(), 'stats' => $this->stats()]);
         } catch (\Exception $e) {
-            \Log::error('Error creando entrega desde pedido: '.$e->getMessage());
-            return $this->json_response(['error' => 'No se pudo crear la entrega.'], 400);
+            \Log::error('Error creando entrega desde pedido: '.$e->getMessage().' | payload='.json_encode((array) \Input::json()));
+            return $this->json_response(['error' => 'No se pudo crear la entrega: '.$e->getMessage()], 400);
         }
     }
 
@@ -1059,12 +1064,14 @@ class Controller_Admin_Sales extends Controller_Adminbase
     {
         $existing = \DB::select('id')->from('core_sales_orders')->where('source_quote_id', '=', (int) $quote->id)->where('active', '=', 1)->execute()->current();
         if ($existing) {
+            \Log::info('Ventas: cotizacion '.$quote->folio.' ya tenia pedido id='.(int) $existing['id']);
             return Model_Core_Sales_Order::find((int) $existing['id']);
         }
 
         if ((int) $quote->party_id < 1 || (float) $quote->total <= 0) {
             throw new \RuntimeException('La cotizacion debe tener cliente y total para pasar a pedido.');
         }
+        \Log::info('Ventas: creando pedido desde cotizacion '.$quote->folio.' id='.(int) $quote->id.' total='.(float) $quote->total);
 
         $order = Model_Core_Sales_Order::forge([
             'folio' => $this->next_flow_folio('PED', 'core_sales_orders'),
@@ -1077,11 +1084,15 @@ class Controller_Admin_Sales extends Controller_Adminbase
             'discount_total' => (float) $quote->discount_total,
             'tax_total' => (float) $quote->tax_total,
             'total' => (float) $quote->total,
+            'delivered_total' => 0,
+            'billed_total' => 0,
             'notes' => 'Pedido creado desde cotizacion '.$quote->folio,
             'created_by' => $this->current_user_id(),
+            'active' => 1,
         ]);
         $order->save();
 
+        $item_count = 0;
         foreach (\DB::select()->from('core_sales_quote_items')->where('quote_id', '=', (int) $quote->id)->order_by('sort_order', 'asc')->execute() as $row) {
             Model_Core_Sales_Order_Item::forge([
                 'order_id' => (int) $order->id,
@@ -1092,13 +1103,22 @@ class Controller_Admin_Sales extends Controller_Adminbase
                 'currency_code' => (string) $row['currency_code'],
                 'unit_price' => (float) $row['unit_price'],
                 'quantity' => (float) $row['quantity'],
+                'delivered_quantity' => 0,
+                'billed_quantity' => 0,
                 'line_total' => (float) $row['line_total'],
                 'sort_order' => (int) $row['sort_order'],
             ])->save();
+            $item_count++;
+        }
+
+        if ($item_count < 1) {
+            $order->delete();
+            throw new \RuntimeException('La cotizacion no tiene partidas para crear pedido.');
         }
 
         $quote->status = 'approved';
         $quote->save();
+        \Log::info('Ventas: pedido '.$order->folio.' creado desde cotizacion '.$quote->folio.' partidas='.$item_count);
         $this->audit_flow('create_order_from_quote', 'Pedido '.$order->folio.' creado desde cotizacion '.$quote->folio, 'sales_order', (int) $order->id, $order->to_array());
 
         return $order;
@@ -1127,7 +1147,12 @@ class Controller_Admin_Sales extends Controller_Adminbase
             }
             $quote = Model_Core_Sales_Quote::find((int) $row['id']);
             if ($quote) {
-                $this->create_order_for_quote($quote);
+                try {
+                    \Log::info('Ventas: sincronizando cotizacion aprobada sin pedido id='.(int) $quote->id.' folio='.$quote->folio);
+                    $this->create_order_for_quote($quote);
+                } catch (\Exception $e) {
+                    \Log::error('Ventas: no se pudo sincronizar cotizacion aprobada id='.(int) $quote->id.' folio='.$quote->folio.' error='.$e->getMessage());
+                }
             }
         }
     }
@@ -1295,8 +1320,10 @@ class Controller_Admin_Sales extends Controller_Adminbase
         }
 
         foreach ($needed_by_product as $product_id => $quantity) {
-            if ($this->warehouse_available_quantity($warehouse_id, $product_id) < $quantity) {
-                throw new \RuntimeException('No hay existencia suficiente en el almacen seleccionado para '.$labels[$product_id].'.');
+            $available = $this->warehouse_available_quantity($warehouse_id, $product_id);
+            if ($available < $quantity) {
+                \Log::warning('Ventas: stock insuficiente almacen='.(int) $warehouse_id.' producto='.$product_id.' requerido='.$quantity.' disponible='.$available);
+                throw new \RuntimeException('No hay existencia suficiente en el almacen seleccionado para '.$labels[$product_id].'. Disponible: '.$available.', requerido: '.$quantity.'.');
             }
         }
     }

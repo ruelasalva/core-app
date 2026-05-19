@@ -104,7 +104,7 @@
                     <i class="bi bi-arrow-repeat"></i> Sincronizar {{ offline.drafts.length || '' }}
                 </button>
                 <button class="btn btn-outline-secondary btn-sm mr-1" @click="newPrequote">
-                    <i class="bi bi-bag-plus"></i> Precotizacion
+                    <i class="bi bi-bag-plus"></i> Vista cliente / catalogo
                 </button>
                 <a class="btn btn-primary btn-sm" href="<?php echo Uri::create('admin/sales/create'); ?>">
                     <i class="bi bi-plus-lg"></i> Nueva cotizacion
@@ -130,6 +130,9 @@
                     <a href="#" @click.prevent="recoverDraft(draft)">abrir</a>
                     <a href="#" class="text-danger" @click.prevent="discardDraft(draft)">quitar</a>
                 </span>
+            </div>
+            <div v-if="error" class="alert alert-danger">
+                {{ error }}
             </div>
             <div v-if="loading" class="text-center p-5">
                 <div class="spinner-border text-primary" role="status"></div>
@@ -651,6 +654,7 @@ window.onload = function() {
         el: '#app-sales',
         data: {
             loading: true,
+            error: '',
             quotes: [],
             orders: [],
             deliveries: [],
@@ -716,12 +720,13 @@ window.onload = function() {
         methods: {
             loadData() {
                 this.loading = true;
+                this.error = '';
                 fetch('<?php echo Uri::create('admin/sales/data'); ?>')
                     .then(res => res.json())
                     .then(data => {
                         this.loading = false;
                         if (data.error) {
-                            alert(data.error);
+                            this.error = data.error;
                             return;
                         }
                         this.quotes = data.quotes || [];
@@ -734,6 +739,7 @@ window.onload = function() {
                     .catch(() => {
                         this.loading = false;
                         this.offline.online = false;
+                        this.error = 'No se pudo cargar ventas. Si estas sin conexion se intentara usar catalogos locales.';
                         this.hydrateOptionsFromCache();
                     });
             },
@@ -798,6 +804,7 @@ window.onload = function() {
                 this.setStatus(this.selected, this.selected.status, this.selected.internal_notes, true);
             },
             setStatus(quote, status) {
+                this.error = '';
                 fetch('<?php echo Uri::create('admin/sales/update_status'); ?>', window.coreAppFetchOptions({
                     id: quote.id,
                     status: status,
@@ -806,7 +813,7 @@ window.onload = function() {
                     .then(res => res.json())
                     .then(data => {
                         if (data.error) {
-                            alert(data.error);
+                            this.error = data.error;
                             return;
                         }
                         this.quotes = data.quotes || [];
@@ -842,11 +849,12 @@ window.onload = function() {
             },
             createOrderFromQuote() {
                 if (!this.selected) return;
+                this.error = '';
                 fetch('<?php echo Uri::create('admin/sales/create_order_from_quote'); ?>', window.coreAppFetchOptions({ id: this.selected.id }))
                     .then(res => res.json())
                     .then(data => {
                         if (data.error) {
-                            alert(data.error);
+                            this.error = data.error;
                             return;
                         }
                         this.quotes = data.quotes || [];
@@ -879,6 +887,7 @@ window.onload = function() {
                 this.showModal('modal-fulfillment');
             },
             createDeliveryFromOrder() {
+                this.error = '';
                 fetch('<?php echo Uri::create('admin/sales/create_delivery_from_order'); ?>', window.coreAppFetchOptions({
                     id: this.deliveryForm.order_id,
                     warehouse_id: this.deliveryForm.warehouse_id,
@@ -887,7 +896,7 @@ window.onload = function() {
                     .then(res => res.json())
                     .then(data => {
                         if (data.error) {
-                            alert(data.error);
+                            this.error = data.error;
                             return;
                         }
                         this.quotes = data.quotes || [];
