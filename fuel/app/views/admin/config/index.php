@@ -62,6 +62,11 @@
                     </a>
                 </li>
                 <li class="nav-item">
+                    <a class="nav-link" data-toggle="tab" data-bs-toggle="tab" href="#tab-operations" role="tab">
+                        <i class="bi bi-sliders mr-1"></i> Operacion
+                    </a>
+                </li>
+                <li class="nav-item">
                     <a class="nav-link" data-toggle="tab" data-bs-toggle="tab" href="#tab-model" role="tab">
                         <i class="bi bi-layers mr-1"></i> Modelo
                     </a>
@@ -296,6 +301,31 @@
                     </table>
                 </div>
 
+                <div class="tab-pane fade" id="tab-operations" role="tabpanel">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <div>
+                            <h5 class="mb-0">Reglas operativas</h5>
+                            <p class="text-muted mb-0">Controles transversales para ventas, entregas, inventario y facturacion.</p>
+                        </div>
+                        <button class="btn btn-primary btn-sm" @click="saveOperations">
+                            <i class="bi bi-save"></i> Guardar
+                        </button>
+                    </div>
+
+                    <div class="card card-outline card-warning">
+                        <div class="card-body">
+                            <div class="custom-control custom-switch">
+                                <input type="checkbox" class="custom-control-input" id="allow-negative-sales" v-model="operations.allow_negative_inventory_sales">
+                                <label class="custom-control-label" for="allow-negative-sales">Permitir entregas con inventario negativo</label>
+                            </div>
+                            <p class="text-muted small mt-2 mb-0">
+                                Si esta apagado, Ventas no podra surtir cantidades mayores a la existencia disponible del almacen seleccionado.
+                                Si esta encendido, la entrega se registra y el saldo del almacen puede quedar negativo para resolver despues con entradas o ajustes.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="tab-pane fade" id="tab-model" role="tabpanel">
                     <h5>Jerarquia base</h5>
                     <ol class="mb-0">
@@ -415,6 +445,7 @@ window.onload = function() {
             departments: [],
             backends: [],
             groups: [],
+            operations: { allow_negative_inventory_sales: false },
             departmentForm: { id: null, name: '', description: '', active: true },
             backendForm: { id: null, code: '', name: '', base_route: '', description: '', active: true }
         },
@@ -437,6 +468,8 @@ window.onload = function() {
                         this.departments = data.departments || [];
                         this.backends = data.backends || [];
                         this.groups = data.groups || [];
+                        this.operations = data.operations || this.operations;
+                        this.operations.allow_negative_inventory_sales = this.operations.allow_negative_inventory_sales == 1;
                     });
             },
             groupPurpose(id) {
@@ -466,6 +499,20 @@ window.onload = function() {
                     }
                     this.company = data.company || this.company;
                     this.company.blocked_reception = this.company.blocked_reception == 1;
+                });
+            },
+            saveOperations() {
+                fetch('<?php echo Uri::create('admin/config/save_operations'); ?>', {
+                    ...window.coreAppFetchOptions(this.operations)
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.error) {
+                        alert(data.error);
+                        return;
+                    }
+                    this.operations = data.operations || this.operations;
+                    this.operations.allow_negative_inventory_sales = this.operations.allow_negative_inventory_sales == 1;
                 });
             },
             newDepartment() {

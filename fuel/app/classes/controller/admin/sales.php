@@ -522,6 +522,10 @@ class Controller_Admin_Sales extends Controller_Adminbase
             foreach ((array) \Arr::get($payload, 'items', []) as $item) {
                 $requested_items[(int) \Arr::get((array) $item, 'order_item_id', 0)] = max(0, (float) \Arr::get((array) $item, 'quantity', 0));
             }
+            $allow_negative = $this->allow_negative_inventory_sales();
+            if (!$allow_negative) {
+                $this->validate_delivery_stock($order, $warehouse_id, $requested_items);
+            }
             $delivery = Model_Core_Sales_Delivery::forge([
                 'folio' => $this->next_flow_folio('ENT', 'core_sales_deliveries'),
                 'order_id' => (int) $order->id,
@@ -1158,8 +1162,11 @@ class Controller_Admin_Sales extends Controller_Adminbase
             $this->adjust_inventory_balance((int) $warehouse_id, (int) $product_id, -abs((float) $quantity));
             $this->refresh_product_stock_from_balances((int) $product_id);
         } else {
+            $stock_expr = $this->allow_negative_inventory_sales()
+                ? \DB::expr('stock_quantity - '.(float) abs($quantity))
+                : \DB::expr('GREATEST(0, stock_quantity - '.(float) abs($quantity).')');
             \DB::update('core_commerce_products')
-                ->value('stock_quantity', \DB::expr('GREATEST(0, stock_quantity - '.(float) abs($quantity).')'))
+                ->value('stock_quantity', $stock_expr)
                 ->value('stock_updated_at', time())
                 ->where('id', '=', (int) $product_id)
                 ->execute();
@@ -1169,6 +1176,7 @@ class Controller_Admin_Sales extends Controller_Adminbase
     protected function adjust_inventory_balance($warehouse_id, $product_id, $quantity)
     {
         $now = time();
+        $allow_negative = $this->allow_negative_inventory_sales();
         $row = \DB::select('id')
             ->from('core_inventory_stock_balances')
             ->where('warehouse_id', '=', (int) $warehouse_id)
@@ -1177,9 +1185,12 @@ class Controller_Admin_Sales extends Controller_Adminbase
             ->current();
 
         if ($row) {
+            $expression = $allow_negative
+                ? \DB::expr('quantity_on_hand + '.(float) $quantity)
+                : \DB::expr('GREATEST(0, quantity_on_hand + '.(float) $quantity.')');
             \DB::update('core_inventory_stock_balances')
                 ->set([
-                    'quantity_on_hand' => \DB::expr('GREATEST(0, quantity_on_hand + '.(float) $quantity.')'),
+                    'quantity_on_hand' => $expression,
                     'last_movement_at' => $now,
                     'updated_at' => $now,
                 ])
@@ -1191,7 +1202,7 @@ class Controller_Admin_Sales extends Controller_Adminbase
         \DB::insert('core_inventory_stock_balances')->set([
             'warehouse_id' => (int) $warehouse_id,
             'product_id' => (int) $product_id,
-            'quantity_on_hand' => max(0, (float) $quantity),
+            'quantity_on_hand' => $allow_negative ? (float) $quantity : max(0, (float) $quantity),
             'quantity_reserved' => 0,
             'last_movement_at' => $now,
             'created_at' => $now,
@@ -1216,6 +1227,63 @@ class Controller_Admin_Sales extends Controller_Adminbase
             ])
             ->where('id', '=', (int) $product_id)
             ->execute();
+    }
+
+    protected function warehouse_available_quantity($warehouse_id, $product_id)
+    {
+        if (!\DBUtil::table_exists('core_inventory_stock_balances')) {
+            $row = \DB::select('stock_quantity', 'stock_reserved')->from('core_commerce_products')->where('id', '=', (int) $product_id)->execute()->current();
+            return $row ? max(0, (float) $row['stock_quantity'] - (float) $row['stock_reserved']) : 0;
+        }
+
+        $row = \DB::select('quantity_on_hand', 'quantity_reserved')
+            ->from('core_inventory_stock_balances')
+            ->where('warehouse_id', '=', (int) $warehouse_id)
+            ->where('product_id', '=', (int) $product_id)
+            ->execute()
+            ->current();
+
+        return $row ? ((float) $row['quantity_on_hand'] - (float) $row['quantity_reserved']) : 0;
+    }
+
+    protected function validate_delivery_stock(Model_Core_Sales_Order $order, $warehouse_id, array $requested_items)
+    {
+        $needed_by_product = [];
+        $labels = [];
+        foreach (\DB::select()->from('core_sales_order_items')->where('order_id', '=', (int) $order->id)->order_by('sort_order', 'asc')->execute() as $row) {
+            $pending = max(0, (float) $row['quantity'] - (float) $row['delivered_quantity']);
+            $requested = array_key_exists((int) $row['id'], $requested_items) ? $requested_items[(int) $row['id']] : $pending;
+            $quantity = min($pending, $requested);
+            if ($quantity <= 0) {
+                continue;
+            }
+            $product_id = (int) $row['product_id'];
+            if (!isset($needed_by_product[$product_id])) {
+                $needed_by_product[$product_id] = 0;
+                $labels[$product_id] = trim((string) $row['sku'].' - '.$row['name'], ' -');
+            }
+            $needed_by_product[$product_id] += $quantity;
+        }
+
+        foreach ($needed_by_product as $product_id => $quantity) {
+            if ($this->warehouse_available_quantity($warehouse_id, $product_id) < $quantity) {
+                throw new \RuntimeException('No hay existencia suficiente en el almacen seleccionado para '.$labels[$product_id].'.');
+            }
+        }
+    }
+
+    protected function allow_negative_inventory_sales()
+    {
+        if (!\DBUtil::table_exists('core_settings')) {
+            return false;
+        }
+        $row = \DB::select('value')
+            ->from('core_settings')
+            ->where('setting_group', '=', 'operations')
+            ->where('setting_key', '=', 'allow_negative_inventory_sales')
+            ->execute()
+            ->current();
+        return $row && (int) $row['value'] === 1;
     }
 
     protected function audit_flow($action, $summary, $entity_type, $entity_id, array $values)

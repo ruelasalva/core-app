@@ -61,6 +61,7 @@ class Controller_Admin_Config extends Controller_Adminbase
                 'departments' => $this->get_departments(),
                 'backends'    => $this->get_backends(),
                 'groups'      => $this->get_groups(),
+                'operations'   => $this->get_operations_settings(),
             ]);
         } catch (\Exception $e) {
             \Log::error('Error cargando configuracion: '.$e->getMessage());
@@ -134,6 +135,28 @@ class Controller_Admin_Config extends Controller_Adminbase
         } catch (\Exception $e) {
             \Log::error('Error guardando empresa: '.$e->getMessage());
             return $this->json_response(['error' => 'No se pudo guardar la empresa.'], 400);
+        }
+    }
+
+    public function action_save_operations()
+    {
+        $this->require_access('config.access[edit]');
+        $val = (array) \Input::json();
+
+        try {
+            $this->assert_schema_ready();
+            $settings = [
+                'allow_negative_inventory_sales' => (int) (bool) \Arr::get($val, 'allow_negative_inventory_sales', false),
+            ];
+
+            foreach ($settings as $key => $value) {
+                $this->set_setting('operations', $key, (string) $value, 'bool');
+            }
+
+            return $this->json_response(['status' => 'ok', 'operations' => $this->get_operations_settings()]);
+        } catch (\Exception $e) {
+            \Log::error('Error guardando configuracion operativa: '.$e->getMessage());
+            return $this->json_response(['error' => 'No se pudo guardar la configuracion operativa.'], 400);
         }
     }
 
@@ -366,6 +389,54 @@ class Controller_Admin_Config extends Controller_Adminbase
             ->as_array();
     }
 
+    protected function get_operations_settings()
+    {
+        return [
+            'allow_negative_inventory_sales' => (int) $this->get_setting('operations', 'allow_negative_inventory_sales', '0'),
+        ];
+    }
+
+    protected function get_setting($group, $key, $default = '')
+    {
+        if (!\DBUtil::table_exists('core_settings')) {
+            return $default;
+        }
+        $row = \DB::select('value')
+            ->from('core_settings')
+            ->where('setting_group', '=', (string) $group)
+            ->where('setting_key', '=', (string) $key)
+            ->execute()
+            ->current();
+        return $row ? (string) $row['value'] : $default;
+    }
+
+    protected function set_setting($group, $key, $value, $type = 'string')
+    {
+        $now = time();
+        $row = \DB::select('id')
+            ->from('core_settings')
+            ->where('setting_group', '=', (string) $group)
+            ->where('setting_key', '=', (string) $key)
+            ->execute()
+            ->current();
+
+        if ($row) {
+            \DB::update('core_settings')
+                ->set(['value' => (string) $value, 'value_type' => (string) $type, 'updated_at' => $now])
+                ->where('id', '=', (int) $row['id'])
+                ->execute();
+            return;
+        }
+
+        \DB::insert('core_settings')->set([
+            'setting_group' => (string) $group,
+            'setting_key' => (string) $key,
+            'value' => (string) $value,
+            'value_type' => (string) $type,
+            'updated_at' => $now,
+        ])->execute();
+    }
+
     /**
      * ASSERT SCHEMA READY
      *
@@ -377,7 +448,7 @@ class Controller_Admin_Config extends Controller_Adminbase
     protected function assert_schema_ready()
     {
         # SE VERIFICAN LAS TABLAS REQUERIDAS
-        foreach (['core_companies', 'core_departments', 'core_backends'] as $table) {
+        foreach (['core_companies', 'core_departments', 'core_backends', 'core_settings'] as $table) {
             if (!\DBUtil::table_exists($table)) {
                 throw new \RuntimeException('Falta ejecutar migraciones de configuracion.');
             }

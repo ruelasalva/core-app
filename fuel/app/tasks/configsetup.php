@@ -16,6 +16,7 @@ class Configsetup
             $this->seed_integrations();
             $this->seed_payments();
             $this->seed_billing();
+            $this->seed_operations();
             $this->seed_sat();
             $this->seed_sat_catalogs();
             $this->seed_catalogs();
@@ -44,6 +45,7 @@ class Configsetup
             echo " - Integraciones y auditoria base\n";
             echo " - Pagos y bancos base\n";
             echo " - Facturacion base\n";
+            echo " - Reglas operativas base\n";
             echo " - SAT base\n";
             echo " - Catalogos SAT base\n";
             echo " - Catalogos base del ERP\n";
@@ -69,7 +71,7 @@ class Configsetup
 
     protected function assert_schema_ready()
     {
-        foreach (['core_companies', 'core_departments', 'core_backends'] as $table) {
+        foreach (['core_companies', 'core_departments', 'core_backends', 'core_settings'] as $table) {
             if (!\DBUtil::table_exists($table)) {
                 throw new \Exception('Primero ejecuta: php oil refine migrate');
             }
@@ -1447,6 +1449,27 @@ class Configsetup
         $this->seed_default_integration_connection('factura_com', 'factura_com_pac', 'Factura.com PAC', 'sandbox', '{"module":"billing","use":"pac","docs":"https://factura.com/apidocs/","host":"https://sandbox.factura.com/api","plugin":"9d4095c8f7ed5785cb14c0e3b033eeb8252416ed","requires":"F-Api-Key,F-Secret-Key,Serie UID,Receptor UID"}');
     }
 
+    protected function seed_operations()
+    {
+        $exists = \DB::select('id')
+            ->from('core_settings')
+            ->where('setting_group', '=', 'operations')
+            ->where('setting_key', '=', 'allow_negative_inventory_sales')
+            ->execute()
+            ->current();
+        if ($exists) {
+            return;
+        }
+
+        \DB::insert('core_settings')->set([
+            'setting_group' => 'operations',
+            'setting_key' => 'allow_negative_inventory_sales',
+            'value' => '0',
+            'value_type' => 'bool',
+            'updated_at' => time(),
+        ])->execute();
+    }
+
     protected function seed_default_integration_connection($provider_code, $code, $name, $environment, $config_json)
     {
         $provider = \DB::select('id')->from('core_integration_providers')->where('code', '=', $provider_code)->execute()->current();
@@ -2244,7 +2267,7 @@ class Configsetup
             'title' => 'Ventas: pedido, entrega e inventario',
             'category' => 'Ventas',
             'summary' => 'Flujo comercial recomendado: cotizacion, pedido, entrega, salida de inventario y factura.',
-            'content' => '<h3>Objetivo</h3><p>Separar documentos para que cada modulo haga una sola cosa: la cotizacion negocia, el pedido confirma, la entrega mueve inventario y la factura timbra fiscalmente.</p><h4>Flujo base</h4><ol><li>Crear cotizacion en <strong>Ventas &gt; Cotizaciones</strong>.</li><li>Cuando el cliente autoriza, presionar <strong>Aprobar</strong>. La cotizacion queda aprobada y se crea el pedido operativo.</li><li>Revisar pedidos en <strong>Ventas &gt; Pedidos</strong>.</li><li>Usar <strong>Surtir</strong>, seleccionar almacen y capturar cantidades por partida.</li><li>Si se surte menos del pedido, el pedido queda <code>partial</code> y el pendiente queda como backorder.</li><li>Cada surtido genera una <strong>Entrega</strong>, descuenta inventario y aparece en <strong>Ventas &gt; Entregas</strong>.</li><li>Desde la entrega usar <strong>Facturar</strong>. Facturacion copia solo las partidas entregadas y prepara el CFDI.</li><li>La factura de venta con saldo queda visible en <strong>Pagos y Bancos &gt; Cuentas por cobrar</strong>.</li></ol><h4>Inventario</h4><ul><li>La salida de almacen se registra con <code>core_inventory_movements</code> y actualiza saldos en <code>core_inventory_stock_balances</code>.</li><li>El almacen inicial es <strong>GENERAL</strong>; los saldos se muestran por producto y almacen.</li><li>Admin &gt; Inventario concentra existencias, entregas, movimientos y auditoria de stock.</li><li>Los movimientos manuales funcionan como documentos con multiples partidas para entradas, salidas, mermas y traspasos por lote.</li><li>La auditoria compara existencia por almacen contra suma de movimientos para detectar diferencias por carga inicial o ajustes pendientes.</li><li>La factura directa no descuenta inventario; debe existir entrega relacionada para controlar salida fisica.</li></ul><h4>Pagos y CFDI</h4><ul><li>Las facturas <strong>PPD</strong> se cobran desde Pagos y Bancos y despues requeriran complemento de pago.</li><li>Las facturas <strong>PUE</strong> pueden cerrarse como pagadas cuando se registra el cobro completo.</li><li>El complemento de pago debe emitirse desde Facturacion/SAT cuando el flujo PAC quede cerrado.</li></ul><h4>Siguiente crecimiento</h4><ul><li>Reservar inventario desde pedido y liberar reserva si se cancela.</li><li>Recibir inventario desde compras autorizadas.</li><li>Relacionar entregas con paqueterias, documentos y evidencias.</li><li>Agregar documentos completos de inventario con folio propio y autorizaciones por monto/departamento.</li></ul>',
+            'content' => '<h3>Objetivo</h3><p>Separar documentos para que cada modulo haga una sola cosa: la cotizacion negocia, el pedido confirma, la entrega mueve inventario y la factura timbra fiscalmente.</p><h4>Flujo base</h4><ol><li>Crear cotizacion en <strong>Ventas &gt; Cotizaciones</strong>.</li><li>Cuando el cliente autoriza, presionar <strong>Aprobar</strong>. La cotizacion queda aprobada y se crea el pedido operativo.</li><li>Revisar pedidos en <strong>Ventas &gt; Pedidos</strong>.</li><li>Usar <strong>Surtir</strong>, seleccionar almacen y capturar cantidades por partida.</li><li>Si se surte menos del pedido, el pedido queda <code>partial</code> y el pendiente queda como backorder.</li><li>Cada surtido genera una <strong>Entrega</strong>, descuenta inventario y aparece en <strong>Ventas &gt; Entregas</strong>.</li><li>Desde la entrega usar <strong>Facturar</strong>, o entrar a <strong>Facturacion</strong> y facturar desde <strong>Entregas pendientes de facturar</strong>.</li><li>Facturacion copia solo las partidas entregadas y prepara el CFDI.</li><li>La factura de venta con saldo queda visible en <strong>Pagos y Bancos &gt; Cuentas por cobrar</strong>.</li></ol><h4>Inventario</h4><ul><li>La salida de almacen se registra con <code>core_inventory_movements</code> y actualiza saldos en <code>core_inventory_stock_balances</code>.</li><li>El almacen inicial es <strong>GENERAL</strong>; los saldos se muestran por producto y almacen.</li><li>Admin &gt; Inventario concentra existencias, entregas, movimientos y auditoria de stock.</li><li>En <strong>Configuracion &gt; Operacion</strong> se puede bloquear o permitir entregas con inventario negativo.</li><li>Si la regla esta bloqueada, no se permite surtir mas de la existencia disponible del almacen. Si esta permitida, el saldo puede quedar negativo para corregirse con entrada o ajuste posterior.</li><li>Los movimientos manuales funcionan como documentos con multiples partidas para entradas, salidas, mermas y traspasos por lote.</li><li>La auditoria compara existencia por almacen contra suma de movimientos para detectar diferencias por carga inicial o ajustes pendientes.</li><li>La factura directa no descuenta inventario; debe existir entrega relacionada para controlar salida fisica.</li></ul><h4>Pagos y CFDI</h4><ul><li>Las facturas <strong>PPD</strong> se cobran desde Pagos y Bancos y despues requeriran complemento de pago.</li><li>Las facturas <strong>PUE</strong> pueden cerrarse como pagadas cuando se registra el cobro completo.</li><li>El complemento de pago debe emitirse desde Facturacion/SAT cuando el flujo PAC quede cerrado.</li></ul><h4>Siguiente crecimiento</h4><ul><li>Reservar inventario desde pedido y liberar reserva si se cancela.</li><li>Recibir inventario desde compras autorizadas.</li><li>Relacionar entregas con paqueterias, documentos y evidencias.</li><li>Agregar documentos completos de inventario con folio propio y autorizaciones por monto/departamento.</li></ul>',
             'sort_order' => 61,
             'active' => 1,
             'created_at' => time(),

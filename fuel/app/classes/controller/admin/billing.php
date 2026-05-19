@@ -58,6 +58,7 @@ class Controller_Admin_Billing extends Controller_Adminbase
             # SE REGRESA INFORMACION PARA VUE
             return $this->json_response([
                 'invoices' => $this->get_invoices(),
+                'pending_deliveries' => $this->get_pending_deliveries(),
                 'items' => $this->get_items((int) \Input::get('invoice_id', 0)),
                 'options' => $this->get_options(),
                 'stats' => $this->get_stats(),
@@ -442,11 +443,11 @@ class Controller_Admin_Billing extends Controller_Adminbase
             }
 
             $this->recalculate_invoice((int) $invoice->id);
-            \DB::update('core_sales_deliveries')->set(['billing_invoice_id' => (int) $invoice->id, 'updated_at' => time()])->where('id', '=', $delivery_id)->execute();
-            \DB::update('core_sales_orders')->set(['status' => 'billed', 'billed_total' => (float) $delivery['total'], 'updated_at' => time()])->where('id', '=', (int) $delivery['order_id'])->execute();
+            \DB::update('core_sales_deliveries')->set(['billing_invoice_id' => (int) $invoice->id, 'status' => 'billed', 'updated_at' => time()])->where('id', '=', $delivery_id)->execute();
+            $this->refresh_sales_order_billing((int) $delivery['order_id']);
 
             $this->log_invoice_event((int) $invoice->id, 'create_from_delivery', 'Factura creada desde entrega '.$delivery['folio'], $delivery);
-            return $this->json_response(['status' => 'ok', 'folio' => $invoice->folio, 'invoice_id' => (int) $invoice->id]);
+            return $this->json_response(['status' => 'ok', 'folio' => $invoice->folio, 'invoice_id' => (int) $invoice->id, 'invoices' => $this->get_invoices(), 'pending_deliveries' => $this->get_pending_deliveries(), 'stats' => $this->get_stats()]);
         } catch (\Exception $e) {
             \Log::error('Error creando factura desde entrega: '.$e->getMessage());
             return $this->json_response(['error' => 'No se pudo crear la factura desde entrega.'], 400);
@@ -506,6 +507,38 @@ class Controller_Admin_Billing extends Controller_Adminbase
         }
 
         return $items;
+    }
+
+    protected function get_pending_deliveries()
+    {
+        if (!\DBUtil::table_exists('core_sales_deliveries')) {
+            return [];
+        }
+
+        $query = \DB::select(
+                ['d.id', 'id'],
+                ['d.folio', 'folio'],
+                ['d.order_id', 'order_id'],
+                ['d.delivery_date', 'delivery_date'],
+                ['d.currency_code', 'currency_code'],
+                ['d.total', 'total'],
+                ['d.status', 'status'],
+                ['o.folio', 'order_folio'],
+                ['p.name', 'party_name'],
+                ['w.name', 'warehouse_name']
+            )
+            ->from(['core_sales_deliveries', 'd'])
+            ->join(['core_sales_orders', 'o'], 'left')->on('d.order_id', '=', 'o.id')
+            ->join(['core_parties', 'p'], 'left')->on('d.party_id', '=', 'p.id')
+            ->join(['core_inventory_warehouses', 'w'], 'left')->on('d.warehouse_id', '=', 'w.id')
+            ->where('d.active', '=', 1)
+            ->where('d.billing_invoice_id', '=', 0)
+            ->order_by('d.delivery_date', 'asc')
+            ->order_by('d.id', 'asc')
+            ->limit(200);
+        $this->apply_party_scope($query, 'p', 'sales');
+
+        return $query->execute()->as_array();
     }
 
     /**
@@ -619,7 +652,44 @@ class Controller_Admin_Billing extends Controller_Adminbase
             'ready' => (int) \DB::select()->from('core_billing_invoices')->where('status', '=', 'ready')->execute()->count(),
             'stamped' => (int) \DB::select()->from('core_billing_invoices')->where('status', '=', 'stamped')->execute()->count(),
             'cancelled' => (int) \DB::select()->from('core_billing_invoices')->where('status', '=', 'cancelled')->execute()->count(),
+            'pending_deliveries' => \DBUtil::table_exists('core_sales_deliveries') ? (int) \DB::select()->from('core_sales_deliveries')->where('active', '=', 1)->where('billing_invoice_id', '=', 0)->execute()->count() : 0,
         ];
+    }
+
+    protected function refresh_sales_order_billing($order_id)
+    {
+        if ($order_id < 1 || !\DBUtil::table_exists('core_sales_deliveries')) {
+            return;
+        }
+
+        $row = \DB::select([\DB::expr('COALESCE(SUM(total), 0)'), 'billed_total'])
+            ->from('core_sales_deliveries')
+            ->where('order_id', '=', (int) $order_id)
+            ->where('billing_invoice_id', '>', 0)
+            ->where('active', '=', 1)
+            ->execute()
+            ->current();
+        $pending_delivery = \DB::select('id')
+            ->from('core_sales_deliveries')
+            ->where('order_id', '=', (int) $order_id)
+            ->where('billing_invoice_id', '=', 0)
+            ->where('active', '=', 1)
+            ->execute()
+            ->current();
+        $order = Model_Core_Sales_Order::find((int) $order_id);
+        if (!$order) {
+            return;
+        }
+        $billed_total = $row ? (float) $row['billed_total'] : 0;
+        $pending_quantity = 0;
+        foreach (\DB::select('quantity', 'delivered_quantity')->from('core_sales_order_items')->where('order_id', '=', (int) $order_id)->execute() as $item) {
+            $pending_quantity += max(0, (float) $item['quantity'] - (float) $item['delivered_quantity']);
+        }
+        $status = $pending_quantity <= 0 && !$pending_delivery ? 'billed' : (string) $order->status;
+        \DB::update('core_sales_orders')
+            ->set(['status' => $status, 'billed_total' => round($billed_total, 2), 'updated_at' => time()])
+            ->where('id', '=', (int) $order_id)
+            ->execute();
     }
 
     protected function invoice_from_request(array $val = null)

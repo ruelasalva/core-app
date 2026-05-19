@@ -26,6 +26,47 @@
         <div v-if="loading" class="text-muted">Cargando facturacion...</div>
 
         <div class="row" v-if="!loading">
+            <div class="col-12">
+                <div class="card card-outline card-warning">
+                    <div class="card-header py-2">
+                        <h3 class="card-title mb-0">Entregas pendientes de facturar</h3>
+                    </div>
+                    <div class="card-body table-responsive p-0">
+                        <table class="table table-sm table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Entrega</th>
+                                    <th>Pedido</th>
+                                    <th>Cliente</th>
+                                    <th>Almacen</th>
+                                    <th>Fecha</th>
+                                    <th class="text-right">Total</th>
+                                    <th class="text-center">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="delivery in pendingDeliveries" :key="delivery.id">
+                                    <td><strong>{{ delivery.folio }}</strong></td>
+                                    <td>{{ delivery.order_folio || '-' }}</td>
+                                    <td>{{ delivery.party_name || '-' }}</td>
+                                    <td>{{ delivery.warehouse_name || '-' }}</td>
+                                    <td>{{ delivery.delivery_date || '-' }}</td>
+                                    <td class="text-right">{{ money(delivery.total, delivery.currency_code) }}</td>
+                                    <td class="text-center">
+                                        <button class="btn btn-xs btn-outline-primary" @click="createInvoiceFromDelivery(delivery)">
+                                            Facturar
+                                        </button>
+                                    </td>
+                                </tr>
+                                <tr v-if="pendingDeliveries.length === 0">
+                                    <td colspan="7" class="text-center text-muted">No hay entregas pendientes de factura.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
             <div class="col-lg-7">
                 <div class="table-responsive">
                     <table class="table table-sm table-hover">
@@ -454,6 +495,7 @@ new Vue({
         loading: true,
         error: '',
         invoices: [],
+        pendingDeliveries: [],
         items: [],
         selectedInvoice: null,
         stats: {},
@@ -470,7 +512,8 @@ new Vue({
             { key: 'invoices', label: 'Facturas', icon: 'bi bi-receipt', className: 'bg-info' },
             { key: 'draft', label: 'Borradores', icon: 'bi bi-pencil-square', className: 'bg-secondary' },
             { key: 'ready', label: 'Listas', icon: 'bi bi-check2-circle', className: 'bg-warning' },
-            { key: 'stamped', label: 'Timbradas', icon: 'bi bi-patch-check', className: 'bg-success' }
+            { key: 'stamped', label: 'Timbradas', icon: 'bi bi-patch-check', className: 'bg-success' },
+            { key: 'pending_deliveries', label: 'Entregas por facturar', icon: 'bi bi-truck', className: 'bg-primary' }
         ]
     },
     computed: {
@@ -513,6 +556,7 @@ new Vue({
                 .then(data => {
                     if (data.error) this.error = data.error;
                     this.invoices = data.invoices || [];
+                    this.pendingDeliveries = data.pending_deliveries || [];
                     this.items = data.items || [];
                     this.options = data.options || this.options;
                     this.stats = data.stats || {};
@@ -732,6 +776,18 @@ new Vue({
                     this.stats = data.stats || {};
                     this.selectedInvoice = this.invoices.find(item => parseInt(item.id) === parseInt(this.cancelForm.id)) || this.selectedInvoice;
                     $('#cancel-modal').modal('hide');
+                });
+        },
+        createInvoiceFromDelivery: function(delivery) {
+            if (!confirm('Crear factura desde entrega ' + delivery.folio + '?')) return;
+            fetch('<?php echo Uri::create('admin/billing/create_from_delivery'); ?>', window.coreAppFetchOptions({ delivery_id: delivery.id }))
+                .then(res => res.json())
+                .then(data => {
+                    if (data.error) { this.error = data.error; return; }
+                    this.invoices = data.invoices || this.invoices;
+                    this.pendingDeliveries = data.pending_deliveries || [];
+                    this.stats = data.stats || this.stats;
+                    this.load(data.invoice_id || 0);
                 });
         },
         money: function(value, currency) {
