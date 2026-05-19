@@ -1,33 +1,19 @@
 <?php
 
 /**
- * CONTROLADOR REVENDEDORES
+ * CONTROLADOR SOCIOS_HELPDESK
  *
- * Entrada principal del portal de revendedores.
+ * Atencion y soporte dentro del portal de socios.
  *
  * @package  app
- * @extends  Controller_Revendedores_Clientes
+ * @extends  Controller_Socios_Base
  */
-class Controller_Revendedores extends Controller_Revendedores_Clientes
+class Controller_Socios_Helpdesk extends Controller_Socios_Base
 {
-    /**
-     * INDEX
-     *
-     * MUESTRA DASHBOARD DEL PORTAL DE REVENDEDORES
-     *
-     * @access  public
-     * @return  Void
-     */
-    public function action_index()
-    {
-        $this->template->title = 'Revendedores';
-        $this->template->content = View::forge('portal/dashboard', ['portal_label' => 'Revendedores']);
-    }
-
     /**
      * HELPDESK
      *
-     * DELEGA PANEL DE TICKETS AL CONTROLADOR BASE DE PORTALES
+     * DELEGA PANEL DE TICKETS AL CONTROLADOR BASE DE PORTALES.
      *
      * @access  public
      * @return  Void
@@ -40,7 +26,7 @@ class Controller_Revendedores extends Controller_Revendedores_Clientes
     /**
      * HELPDESK DATA
      *
-     * DELEGA LECTURA DE TICKETS AL CONTROLADOR BASE DE PORTALES
+     * DELEGA LECTURA DE TICKETS AL CONTROLADOR BASE DE PORTALES.
      *
      * @access  public
      * @return  Response
@@ -53,7 +39,7 @@ class Controller_Revendedores extends Controller_Revendedores_Clientes
     /**
      * HELPDESK CREATE
      *
-     * DELEGA CREACION DE TICKETS AL CONTROLADOR BASE DE PORTALES
+     * DELEGA CREACION DE TICKETS AL CONTROLADOR BASE DE PORTALES.
      *
      * @access  public
      * @return  Response
@@ -66,7 +52,7 @@ class Controller_Revendedores extends Controller_Revendedores_Clientes
     /**
      * HELPDESK REPLY
      *
-     * DELEGA RESPUESTAS DE TICKETS AL CONTROLADOR BASE DE PORTALES
+     * DELEGA RESPUESTAS DE TICKETS AL CONTROLADOR BASE DE PORTALES.
      *
      * @access  public
      * @return  Response
@@ -79,7 +65,7 @@ class Controller_Revendedores extends Controller_Revendedores_Clientes
     /**
      * HELPDESK UPLOAD
      *
-     * DELEGA CARGA DE ADJUNTOS AL CONTROLADOR BASE DE PORTALES
+     * DELEGA CARGA DE ADJUNTOS AL CONTROLADOR BASE DE PORTALES.
      *
      * @access  public
      * @return  Response
@@ -88,5 +74,4 @@ class Controller_Revendedores extends Controller_Revendedores_Clientes
     {
         return parent::post_helpdesk_upload();
     }
-
 }
