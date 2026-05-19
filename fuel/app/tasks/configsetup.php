@@ -2128,6 +2128,18 @@ class Configsetup
             'updated_at' => time(),
         ]);
 
+        $this->upsert_seed('core_knowledge_articles', 'code', 'portales_mi_cuenta_operativa', [
+            'code' => 'portales_mi_cuenta_operativa',
+            'title' => 'Portales: Mi cuenta operativa',
+            'category' => 'Portales',
+            'summary' => 'Uso de Mi cuenta en clientes, proveedores y revendedores para datos, direcciones, contactos, documentos y clientes propios.',
+            'content' => '<h3>Objetivo</h3><p>Todos los portales externos deben permitir al usuario mantener informacion operativa sin pedir cambios manuales al administrador para cada dato menor. La seccion <strong>Mi cuenta</strong> centraliza datos fiscales/comerciales, direcciones, contactos, documentos y reglas visibles.</p><h4>Proveedores</h4><ul><li>Actualizan datos comerciales y regimen fiscal.</li><li>Capturan bodegas, lugares de entrega, recoleccion o direccion fiscal.</li><li>Suben constancia fiscal, opinion de cumplimiento, contratos, identificaciones o evidencias.</li><li>Consultan dias y limite de credito autorizados por administracion.</li></ul><h4>Clientes</h4><ul><li>Revisan credito autorizado.</li><li>Capturan direcciones de entrega.</li><li>Capturan personas autorizadas para recibir mercancia o notificaciones.</li><li>Suben documentos relacionados con su cuenta.</li></ul><h4>Revendedores</h4><ul><li>Administran sus datos y documentos comerciales.</li><li>Capturan clientes propios desde el portal para cotizarlos.</li><li>Los clientes creados quedan marcados en notas con el identificador del revendedor para seguimiento administrativo.</li></ul><h4>Reglas de control</h4><ul><li>El RFC se muestra como referencia y no debe cambiarse libremente desde portal.</li><li>Los dias y limites de credito los define administracion.</li><li>Los documentos cargados quedan vinculados al tercero y auditados.</li><li>Cada portal solo ve la informacion de su tercero vinculado por <code>core_party_user_links</code>.</li></ul>',
+            'sort_order' => 31,
+            'active' => 1,
+            'created_at' => time(),
+            'updated_at' => time(),
+        ]);
+
         $this->upsert_seed('core_knowledge_articles', 'code', 'frontend_filtros_catalogo', [
             'code' => 'frontend_filtros_catalogo',
             'title' => 'Filtros del catalogo publico',

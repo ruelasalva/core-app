@@ -39,4 +39,24 @@
         </div>
     </div>
     <?php endif; ?>
+    <div class="col-md-4">
+        <div class="card card-info card-outline h-100">
+            <div class="card-body">
+                <div class="d-flex align-items-center mb-2">
+                    <i class="bi bi-person-lines-fill h4 mb-0 mr-2 text-info"></i>
+                    <h2 class="h6 mb-0">Mi cuenta</h2>
+                </div>
+                <?php if ($current_portal_code === 'proveedores'): ?>
+                <p class="text-muted small">Actualiza datos, bodegas de entrega, contactos y documentos como constancia u opinion de cumplimiento.</p>
+                <?php elseif ($current_portal_code === 'revendedores'): ?>
+                <p class="text-muted small">Administra datos comerciales y da de alta clientes propios para cotizarles.</p>
+                <?php else: ?>
+                <p class="text-muted small">Revisa credito, direcciones de entrega y contactos autorizados para recibir mercancia.</p>
+                <?php endif; ?>
+                <a href="<?php echo Uri::create($current_portal_code.'/perfil'); ?>" class="btn btn-info btn-sm">
+                    <i class="bi bi-arrow-right"></i> Entrar
+                </a>
+            </div>
+        </div>
+    </div>
 </div>

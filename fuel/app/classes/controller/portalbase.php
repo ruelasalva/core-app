@@ -107,6 +107,213 @@ class Controller_Portalbase extends Controller_Template
     }
 
     /**
+     * PERFIL
+     *
+     * MUESTRA DATOS OPERATIVOS DEL TERCERO EN EL PORTAL ACTUAL.
+     *
+     * @access  public
+     * @return  Void
+     */
+    public function action_perfil()
+    {
+        $this->template->title = 'Mi cuenta';
+        $this->template->content = View::forge('portal/profile', [
+            'portal_code' => $this->portal_code,
+            'party' => $this->party,
+        ]);
+    }
+
+    /**
+     * PERFIL DATA
+     *
+     * ENTREGA DATOS, DIRECCIONES, CONTACTOS Y DOCUMENTOS DEL TERCERO.
+     *
+     * @access  public
+     * @return  Response
+     */
+    public function action_perfil_data()
+    {
+        try {
+            return $this->json_response($this->portal_profile_payload());
+        } catch (\Exception $e) {
+            \Log::error('Error cargando perfil portal '.$this->portal_code.': '.$e->getMessage());
+            return $this->json_response(['error' => 'No se pudo cargar Mi cuenta.'], 500);
+        }
+    }
+
+    /**
+     * PERFIL SAVE
+     *
+     * ACTUALIZA DATOS BASICOS CONTROLADOS POR EL PORTAL.
+     *
+     * @access  public
+     * @return  Response
+     */
+    public function post_perfil_save()
+    {
+        $val = (array) \Input::json();
+
+        try {
+            if (!$this->party) {
+                return $this->json_response(['error' => 'Socio comercial no encontrado.'], 404);
+            }
+
+            $this->party->name = trim((string) \Arr::get($val, 'name', $this->party->name));
+            $this->party->legal_name = trim((string) \Arr::get($val, 'legal_name', $this->party->legal_name));
+            $this->party->email = trim((string) \Arr::get($val, 'email', $this->party->email));
+            $this->party->phone = trim((string) \Arr::get($val, 'phone', $this->party->phone));
+            $this->party->sat_tax_regime_code = trim((string) \Arr::get($val, 'sat_tax_regime_code', $this->party->sat_tax_regime_code));
+            $this->party->notes = trim((string) \Arr::get($val, 'notes', $this->party->notes));
+            $this->party->save();
+
+            Helper_Core_Audit::log([
+                'module' => 'portals',
+                'action' => 'portal_profile_save',
+                'business_event' => 'portals.profile_save',
+                'entity_type' => 'party',
+                'entity_id' => (int) $this->party->id,
+                'table_name' => 'core_parties',
+                'portal_code' => $this->portal_code,
+                'backend' => 'portal',
+                'summary' => 'Perfil actualizado desde portal '.$this->portal_code,
+                'new_values' => $this->party->to_array(),
+            ]);
+
+            return $this->json_response($this->portal_profile_payload(['status' => 'ok', 'message' => 'Datos guardados.']));
+        } catch (\Exception $e) {
+            \Log::error('Error guardando perfil portal '.$this->portal_code.': '.$e->getMessage());
+            return $this->json_response(['error' => 'No se pudo guardar el perfil.'], 400);
+        }
+    }
+
+    public function action_perfil_save()
+    {
+        return $this->post_perfil_save();
+    }
+
+    /**
+     * PERFIL ADDRESS
+     *
+     * CREA O ACTUALIZA DIRECCIONES DEL TERCERO.
+     *
+     * @access  public
+     * @return  Response
+     */
+    public function post_perfil_address()
+    {
+        $val = (array) \Input::json();
+
+        try {
+            $party_id = (int) $this->portal_link->party_id;
+            $id = (int) \Arr::get($val, 'id', 0);
+            $address = $id > 0 ? Model_Core_Party_Address::query()->where('id', $id)->where('party_id', $party_id)->get_one() : null;
+            if (!$address) {
+                $address = Model_Core_Party_Address::forge(['party_id' => $party_id, 'active' => 1]);
+            }
+
+            $address->address_type = $this->profile_address_type((string) \Arr::get($val, 'address_type', 'delivery'));
+            $address->name = trim((string) \Arr::get($val, 'name', ''));
+            $address->street = trim((string) \Arr::get($val, 'street', ''));
+            $address->exterior_number = trim((string) \Arr::get($val, 'exterior_number', ''));
+            $address->interior_number = trim((string) \Arr::get($val, 'interior_number', ''));
+            $address->neighborhood = trim((string) \Arr::get($val, 'neighborhood', ''));
+            $address->city = trim((string) \Arr::get($val, 'city', ''));
+            $address->state = trim((string) \Arr::get($val, 'state', ''));
+            $address->country_code = strtoupper(trim((string) \Arr::get($val, 'country_code', 'MX'))) ?: 'MX';
+            $address->postal_code = trim((string) \Arr::get($val, 'postal_code', ''));
+            $address->is_default = (int) \Arr::get($val, 'is_default', 0);
+            $address->active = 1;
+            $address->save();
+
+            return $this->json_response($this->portal_profile_payload(['status' => 'ok', 'message' => 'Direccion guardada.']));
+        } catch (\Exception $e) {
+            \Log::error('Error guardando direccion portal '.$this->portal_code.': '.$e->getMessage());
+            return $this->json_response(['error' => 'No se pudo guardar la direccion.'], 400);
+        }
+    }
+
+    public function action_perfil_address()
+    {
+        return $this->post_perfil_address();
+    }
+
+    /**
+     * PERFIL CONTACT
+     *
+     * CREA O ACTUALIZA CONTACTOS DEL TERCERO.
+     *
+     * @access  public
+     * @return  Response
+     */
+    public function post_perfil_contact()
+    {
+        $val = (array) \Input::json();
+
+        try {
+            $party_id = (int) $this->portal_link->party_id;
+            $id = (int) \Arr::get($val, 'id', 0);
+            $contact = $id > 0 ? Model_Core_Party_Contact::query()->where('id', $id)->where('party_id', $party_id)->get_one() : null;
+            if (!$contact) {
+                $contact = Model_Core_Party_Contact::forge(['party_id' => $party_id, 'active' => 1]);
+            }
+
+            $contact->name = trim((string) \Arr::get($val, 'name', ''));
+            $contact->position = trim((string) \Arr::get($val, 'position', ''));
+            $contact->email = trim((string) \Arr::get($val, 'email', ''));
+            $contact->phone = trim((string) \Arr::get($val, 'phone', ''));
+            $contact->receives_notifications = (int) \Arr::get($val, 'receives_notifications', 1);
+            $contact->active = 1;
+            $contact->save();
+
+            return $this->json_response($this->portal_profile_payload(['status' => 'ok', 'message' => 'Contacto guardado.']));
+        } catch (\Exception $e) {
+            \Log::error('Error guardando contacto portal '.$this->portal_code.': '.$e->getMessage());
+            return $this->json_response(['error' => 'No se pudo guardar el contacto.'], 400);
+        }
+    }
+
+    public function action_perfil_contact()
+    {
+        return $this->post_perfil_contact();
+    }
+
+    /**
+     * PERFIL UPLOAD
+     *
+     * CARGA DOCUMENTOS DEL TERCERO DESDE SU PORTAL.
+     *
+     * @access  public
+     * @return  Response
+     */
+    public function post_perfil_upload()
+    {
+        try {
+            $document = $this->store_portal_party_document();
+            Helper_Core_Audit::log([
+                'module' => 'portals',
+                'action' => 'portal_profile_upload',
+                'business_event' => 'portals.profile_upload',
+                'entity_type' => 'document',
+                'entity_id' => (int) $document->id,
+                'portal_code' => $this->portal_code,
+                'backend' => 'portal',
+                'summary' => 'Documento de perfil cargado desde portal '.$this->portal_code,
+                'new_values' => $document->to_array(),
+            ]);
+
+            return $this->json_response($this->portal_profile_payload(['status' => 'ok', 'message' => 'Documento cargado.']));
+        } catch (\Exception $e) {
+            \Log::error('Error cargando documento perfil portal '.$this->portal_code.': '.$e->getMessage());
+            return $this->json_response(['error' => $e->getMessage()], 400);
+        }
+    }
+
+    public function action_perfil_upload()
+    {
+        return $this->post_perfil_upload();
+    }
+
+    /**
      * HELPDESK DATA
      *
      * ENTREGA TICKETS Y OPCIONES DEL TERCERO LOGUEADO
@@ -734,6 +941,219 @@ class Controller_Portalbase extends Controller_Template
             'entity_type' => 'ticket',
             'entity_id' => (int) $ticket->id,
             'relation_type' => 'attachment',
+            'notes' => trim((string) \Input::post('notes', '')),
+            'created_by' => $this->user_id,
+            'active' => 1,
+        ])->save();
+
+        return $document;
+    }
+
+    /**
+     * PORTAL PROFILE PAYLOAD
+     *
+     * ARMA LA RESPUESTA OPERATIVA DEL PERFIL DEL PORTAL.
+     *
+     * @access  protected
+     * @return  Array
+     */
+    protected function portal_profile_payload(array $extra = [])
+    {
+        $party_id = (int) $this->portal_link->party_id;
+
+        return array_merge([
+            'party' => $this->party ? $this->party->to_array() : [],
+            'addresses' => $this->portal_party_addresses($party_id),
+            'contacts' => $this->portal_party_contacts($party_id),
+            'documents' => $this->portal_party_documents($party_id),
+            'reseller_customers' => $this->portal_code === 'revendedores' ? $this->reseller_customers($party_id) : [],
+            'features' => [
+                'supplier' => $this->portal_code === 'proveedores',
+                'customer' => $this->portal_code === 'clientes',
+                'reseller' => $this->portal_code === 'revendedores',
+            ],
+            'labels' => $this->portal_profile_labels(),
+        ], $extra);
+    }
+
+    protected function portal_profile_labels()
+    {
+        if ($this->portal_code === 'proveedores') {
+            return [
+                'profile' => 'Datos de proveedor',
+                'addresses' => 'Bodegas y lugares de entrega',
+                'contacts' => 'Contactos administrativos',
+                'documents' => 'Constancia, opinion de cumplimiento y evidencias',
+                'credit' => 'Dias de credito pactados',
+            ];
+        }
+
+        if ($this->portal_code === 'revendedores') {
+            return [
+                'profile' => 'Datos del revendedor',
+                'addresses' => 'Direcciones operativas',
+                'contacts' => 'Contactos del equipo',
+                'documents' => 'Documentos comerciales',
+                'credit' => 'Condiciones comerciales',
+            ];
+        }
+
+        return [
+            'profile' => 'Datos del cliente',
+            'addresses' => 'Direcciones de entrega',
+            'contacts' => 'Personas autorizadas para recibir',
+            'documents' => 'Documentos del cliente',
+            'credit' => 'Credito autorizado',
+        ];
+    }
+
+    protected function portal_party_addresses($party_id)
+    {
+        if (!\DBUtil::table_exists('core_party_addresses')) {
+            return [];
+        }
+
+        return \DB::select()
+            ->from('core_party_addresses')
+            ->where('party_id', '=', (int) $party_id)
+            ->where('active', '=', 1)
+            ->order_by('is_default', 'desc')
+            ->order_by('id', 'desc')
+            ->execute()
+            ->as_array();
+    }
+
+    protected function portal_party_contacts($party_id)
+    {
+        if (!\DBUtil::table_exists('core_party_contacts')) {
+            return [];
+        }
+
+        return \DB::select()
+            ->from('core_party_contacts')
+            ->where('party_id', '=', (int) $party_id)
+            ->where('active', '=', 1)
+            ->order_by('id', 'desc')
+            ->execute()
+            ->as_array();
+    }
+
+    protected function portal_party_documents($party_id)
+    {
+        if (!\DBUtil::table_exists('core_documents') || !\DBUtil::table_exists('core_document_links')) {
+            return [];
+        }
+
+        return \DB::select(
+                ['d.id', 'id'], ['d.document_type', 'document_type'], ['d.title', 'title'],
+                ['d.original_name', 'original_name'], ['d.file_path', 'file_path'],
+                ['d.file_extension', 'file_extension'], ['d.file_size', 'file_size'],
+                ['d.created_at', 'created_at'], ['l.relation_type', 'relation_type'], ['l.notes', 'notes']
+            )
+            ->from(['core_document_links', 'l'])
+            ->join(['core_documents', 'd'], 'inner')->on('d.id', '=', 'l.document_id')
+            ->where('l.entity_type', '=', 'party')
+            ->where('l.entity_id', '=', (int) $party_id)
+            ->where('l.active', '=', 1)
+            ->where('d.active', '=', 1)
+            ->order_by('d.id', 'desc')
+            ->limit(100)
+            ->execute()
+            ->as_array();
+    }
+
+    protected function reseller_customers($party_id)
+    {
+        if ($this->portal_code !== 'revendedores' || !\DBUtil::table_exists('core_parties')) {
+            return [];
+        }
+
+        return \DB::select('id', 'code', 'name', 'legal_name', 'rfc', 'email', 'phone', 'credit_days', 'active', 'created_at')
+            ->from('core_parties')
+            ->where('party_type', '=', 'customer')
+            ->where('notes', 'like', '%Revendedor party_id='.$party_id.'%')
+            ->order_by('id', 'desc')
+            ->limit(100)
+            ->execute()
+            ->as_array();
+    }
+
+    protected function profile_address_type($value)
+    {
+        $value = $this->codeify($value);
+        $allowed = ['billing', 'delivery', 'warehouse', 'pickup'];
+        return in_array($value, $allowed, true) ? $value : 'delivery';
+    }
+
+    protected function profile_document_type($value)
+    {
+        $value = $this->codeify($value);
+        $allowed = ['constancia_fiscal', 'opinion_cumplimiento', 'contrato', 'identificacion', 'evidencia', 'otro'];
+        return in_array($value, $allowed, true) ? $value : 'otro';
+    }
+
+    /**
+     * STORE PORTAL PARTY DOCUMENT
+     *
+     * GUARDA DOCUMENTO GENERAL DE PERFIL DEL TERCERO.
+     *
+     * @access  protected
+     * @return  Model_Core_Document
+     */
+    protected function store_portal_party_document()
+    {
+        $file = \Input::file('file');
+        if (!$file || (int) \Arr::get($file, 'error', UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+            throw new \RuntimeException('Selecciona un archivo valido.');
+        }
+
+        $extension = strtolower(pathinfo((string) \Arr::get($file, 'name', ''), PATHINFO_EXTENSION));
+        $allowed = ['pdf', 'xml', 'jpg', 'jpeg', 'png', 'webp', 'doc', 'docx', 'xls', 'xlsx'];
+        if (!in_array($extension, $allowed, true)) {
+            throw new \RuntimeException('Tipo de archivo no permitido.');
+        }
+
+        if ((int) \Arr::get($file, 'size', 0) > 15728640) {
+            throw new \RuntimeException('El archivo no puede superar 15 MB.');
+        }
+
+        $relative_dir = 'assets/uploads/documents/portal/'.$this->portal_code.'/'.date('Y').'/'.date('m');
+        $absolute_dir = DOCROOT.$relative_dir;
+        if (!is_dir($absolute_dir)) {
+            mkdir($absolute_dir, 0755, true);
+        }
+
+        $base_name = pathinfo((string) \Arr::get($file, 'name', 'documento'), PATHINFO_FILENAME);
+        $filename = time().'_'.\Str::random('alnum', 12).'_'.$this->codeify($base_name).'.'.$extension;
+        $target = $absolute_dir.DS.$filename;
+        if (!@move_uploaded_file((string) \Arr::get($file, 'tmp_name', ''), $target)) {
+            throw new \RuntimeException('No se pudo guardar el archivo.');
+        }
+
+        $document_type = $this->profile_document_type((string) \Input::post('document_type', 'otro'));
+        $path = str_replace('\\', '/', $relative_dir.'/'.$filename);
+        $document = Model_Core_Document::forge([
+            'document_type' => $document_type,
+            'title' => trim((string) \Input::post('title', '')) ?: $base_name,
+            'description' => trim((string) \Input::post('description', '')),
+            'file_path' => $path,
+            'original_name' => (string) \Arr::get($file, 'name', ''),
+            'mime_type' => (string) \Arr::get($file, 'type', ''),
+            'file_extension' => $extension,
+            'file_size' => (int) \Arr::get($file, 'size', 0),
+            'checksum' => is_file($target) ? hash_file('sha256', $target) : '',
+            'visibility' => 'portal',
+            'is_evidence' => 1,
+            'uploaded_by' => $this->user_id,
+            'active' => 1,
+        ]);
+        $document->save();
+
+        Model_Core_Document_Link::forge([
+            'document_id' => (int) $document->id,
+            'entity_type' => 'party',
+            'entity_id' => (int) $this->portal_link->party_id,
+            'relation_type' => $document_type,
             'notes' => trim((string) \Input::post('notes', '')),
             'created_by' => $this->user_id,
             'active' => 1,

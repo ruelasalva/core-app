@@ -36,9 +36,17 @@
                 <li class="nav-item">
                     <a class="nav-link <?php echo Uri::segment(2) == 'cfdi' ? 'active' : ''; ?>" href="<?php echo Uri::create($portal_code.'/cfdi'); ?>">CFDI</a>
                 </li>
+                <li class="nav-item">
+                    <a class="nav-link <?php echo Uri::segment(2) == 'perfil' ? 'active' : ''; ?>" href="<?php echo Uri::create($portal_code.'/perfil'); ?>">Mi cuenta</a>
+                </li>
                 <?php if ($portal_code === 'clientes'): ?>
                 <li class="nav-item">
                     <a class="nav-link <?php echo Uri::segment(2) == 'quotes' ? 'active' : ''; ?>" href="<?php echo Uri::create($portal_code.'/quotes'); ?>">Cotizaciones</a>
+                </li>
+                <?php endif; ?>
+                <?php if ($portal_code === 'revendedores'): ?>
+                <li class="nav-item">
+                    <a class="nav-link <?php echo Uri::segment(2) == 'clientes' ? 'active' : ''; ?>" href="<?php echo Uri::create($portal_code.'/perfil#clientes'); ?>">Clientes</a>
                 </li>
                 <?php endif; ?>
                 <?php if ($portal_code === 'proveedores'): ?>
@@ -48,11 +56,19 @@
                 <?php endif; ?>
             </ul>
             <ul class="navbar-nav ml-auto">
-                <li class="nav-item">
-                    <span class="nav-link"><?php echo e($user_name); ?></span>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link text-danger" href="<?php echo Uri::create($portal_code.'/logout'); ?>">Salir</a>
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" data-toggle="dropdown" href="#" role="button">
+                        <i class="bi bi-person-circle"></i> <?php echo e($user_name); ?>
+                    </a>
+                    <div class="dropdown-menu dropdown-menu-right">
+                        <a class="dropdown-item" href="<?php echo Uri::create($portal_code.'/perfil'); ?>">
+                            <i class="bi bi-gear mr-1"></i> Configurar cuenta
+                        </a>
+                        <div class="dropdown-divider"></div>
+                        <a class="dropdown-item text-danger" href="<?php echo Uri::create($portal_code.'/logout'); ?>">
+                            <i class="bi bi-box-arrow-right mr-1"></i> Salir
+                        </a>
+                    </div>
                 </li>
             </ul>
         </div>
