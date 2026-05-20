@@ -20,6 +20,19 @@ class Controller_Proveedores_Compras extends Controller_Proveedores_Base
      */
     public function action_index()
     {
+        $this->render_compras();
+    }
+
+    /**
+     * RENDER COMPRAS
+     *
+     * CENTRALIZA LA VISTA DE COMPRAS PARA EVITAR RESOLUCION DINAMICA HACIA EL INDEX DEL CONTROLADOR HIJO.
+     *
+     * @access  protected
+     * @return  Void
+     */
+    protected function render_compras()
+    {
         $this->template->title = 'Compras';
         $this->template->content = View::forge('proveedores/compras/index', ['portal_code' => $this->portal_code]);
     }
@@ -34,7 +47,7 @@ class Controller_Proveedores_Compras extends Controller_Proveedores_Base
      */
     public function action_compras()
     {
-        return $this->action_index();
+        $this->render_compras();
     }
 
     /**
