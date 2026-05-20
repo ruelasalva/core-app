@@ -135,6 +135,14 @@
             </a>
         </li>
         <?php endif; ?>
+        <?php if ($menu['accounting']): ?>
+        <li class="nav-item">
+            <a href="<?php echo Uri::create('admin/accounting'); ?>" class="nav-link <?php echo (Uri::segment(2) == 'accounting') ? 'active' : ''; ?>">
+                <i class="nav-icon bi bi-journal-check"></i>
+                <p>Contabilidad</p>
+            </a>
+        </li>
+        <?php endif; ?>
 
         <li class="nav-header">RELACIONES</li>
         <?php if ($menu['parties']): ?>

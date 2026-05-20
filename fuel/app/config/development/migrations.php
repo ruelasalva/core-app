@@ -44,6 +44,7 @@ return array (
         38 => '039_create_sales_delivery_inventory_flow',
         39 => '040_create_inventory_stock_balances',
         40 => '041_create_purchase_cfdi_line_mappings',
+        41 => '042_create_core_accounting_tables',
       ),
     ),
     'module' => array(    
