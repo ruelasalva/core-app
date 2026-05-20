@@ -101,6 +101,9 @@ class Controller_Admin_Payments extends Controller_Adminbase
                 'party_id' => (int) \Arr::get($val, 'party_id', 0),
                 'bank_account_id' => (int) \Arr::get($val, 'bank_account_id', 0),
                 'integration_connection_id' => (int) \Arr::get($val, 'integration_connection_id', 0),
+                'fiscal_document_id' => (int) \Arr::get($val, 'fiscal_document_id', 0),
+                'fiscal_mode' => $this->fiscal_mode(\Arr::get($val, 'fiscal_mode', 'system_only')),
+                'rep_status' => $this->rep_status(\Arr::get($val, 'rep_status', 'not_required')),
                 'payment_date' => trim((string) \Arr::get($val, 'payment_date', date('Y-m-d'))),
                 'currency_code' => strtoupper(substr((string) \Arr::get($val, 'currency_code', 'MXN'), 0, 3)),
                 'exchange_rate' => (float) \Arr::get($val, 'exchange_rate', 1),
@@ -131,6 +134,10 @@ class Controller_Admin_Payments extends Controller_Adminbase
 
             if ($id === 0 && $allocation_entity_type === 'billing_invoice' && $allocation_entity_id > 0) {
                 $this->apply_payment_to_invoice($payment, $allocation_entity_id);
+                $invoice = Model_Core_Billing_Invoice::find($allocation_entity_id);
+                if ($invoice && (string) $invoice->sat_payment_method_code === 'PPD' && (string) $payment->fiscal_mode === 'fiscal_required') {
+                    $this->create_payment_complement_document($payment, $invoice);
+                }
             }
 
             # SE AUDITA CAMBIO
@@ -337,6 +344,7 @@ class Controller_Admin_Payments extends Controller_Adminbase
             'receivables' => $receivables,
             'receivable_total' => $receivable_total,
             'pending' => (int) \DB::select()->from('core_payments')->where('status', '=', 'pending')->execute()->count(),
+            'rep_pending' => \DBUtil::field_exists('core_payments', ['rep_status']) ? (int) \DB::select()->from('core_payments')->where('rep_status', '=', 'pending')->execute()->count() : 0,
             'movements' => (int) \DB::count_records('core_bank_movements'),
             'unreconciled' => (int) \DB::select()->from('core_bank_movements')->where('reconciled', '=', 0)->execute()->count(),
         ];
@@ -359,10 +367,13 @@ class Controller_Admin_Payments extends Controller_Adminbase
 
     protected function assert_schema_ready()
     {
-        foreach (['core_payments', 'core_payment_allocations', 'core_bank_movements', 'core_bank_reconciliations'] as $table) {
+        foreach (['core_payments', 'core_payment_allocations', 'core_bank_movements', 'core_bank_reconciliations', 'core_fiscal_documents'] as $table) {
             if (!\DBUtil::table_exists($table)) {
                 throw new \RuntimeException('Falta ejecutar migraciones de pagos.');
             }
+        }
+        if (!\DBUtil::field_exists('core_payments', ['fiscal_mode', 'rep_status', 'fiscal_document_id'])) {
+            throw new \RuntimeException('Falta ejecutar migracion fiscal de pagos.');
         }
     }
 
@@ -401,6 +412,83 @@ class Controller_Admin_Payments extends Controller_Adminbase
         $invoice->balance_due = round(max(0, $balance - $amount), 2);
         $invoice->status = $invoice->balance_due <= 0 ? 'paid' : 'partial';
         $invoice->save();
+    }
+
+    protected function create_payment_complement_document(Model_Core_Payment $payment, Model_Core_Billing_Invoice $invoice)
+    {
+        if (!\DBUtil::table_exists('core_fiscal_documents')) {
+            return;
+        }
+        if ((int) $payment->fiscal_document_id > 0) {
+            return;
+        }
+
+        $payload = [
+            'TipoDocumento' => 'complemento_pago',
+            'Pago' => [
+                'FechaPago' => (string) $payment->payment_date,
+                'FormaDePagoP' => (string) $payment->sat_payment_form_code,
+                'MonedaP' => (string) $payment->currency_code,
+                'Monto' => (float) $payment->amount,
+                'Referencia' => (string) $payment->reference,
+            ],
+            'DocumentosRelacionados' => [[
+                'IdDocumento' => (string) $invoice->uuid,
+                'Folio' => (string) $invoice->folio,
+                'MonedaDR' => (string) $invoice->currency_code,
+                'MetodoDePagoDR' => (string) $invoice->sat_payment_method_code,
+                'ImpPagado' => (float) $payment->amount,
+                'ImpSaldoInsoluto' => (float) $invoice->balance_due,
+            ]],
+        ];
+
+        list($id) = \DB::insert('core_fiscal_documents')->set([
+            'folio' => $this->next_fiscal_document_folio('REP'),
+            'document_type' => 'payment_complement',
+            'cfdi_version' => '4.0',
+            'voucher_type' => 'P',
+            'party_id' => (int) $payment->party_id,
+            'source_module' => 'payments',
+            'source_entity_type' => 'payment',
+            'source_entity_id' => (int) $payment->id,
+            'source_folio' => (string) $payment->folio,
+            'fiscal_mode' => (string) $payment->fiscal_mode,
+            'pac_provider_code' => 'factura_com',
+            'related_uuid' => (string) $invoice->uuid,
+            'sat_status' => 'draft',
+            'workflow_status' => 'draft',
+            'issue_date' => (string) $payment->payment_date,
+            'currency_code' => (string) $payment->currency_code,
+            'total' => (float) $payment->amount,
+            'payload_json' => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            'notes' => 'REP pendiente para pago '.$payment->folio.' aplicado a '.$invoice->folio,
+            'created_by' => (int) $this->user_id,
+            'active' => 1,
+            'created_at' => time(),
+            'updated_at' => time(),
+        ])->execute();
+
+        $payment->fiscal_document_id = (int) $id;
+        $payment->rep_status = 'pending';
+        $payment->save();
+    }
+
+    protected function next_fiscal_document_folio($prefix)
+    {
+        $count = \DBUtil::table_exists('core_fiscal_documents') ? (int) \DB::count_records('core_fiscal_documents') : 0;
+        return $prefix.'-'.date('Ymd').'-'.str_pad((string) ($count + 1), 5, '0', STR_PAD_LEFT);
+    }
+
+    protected function fiscal_mode($value)
+    {
+        $value = $this->codeify($value);
+        return in_array($value, ['system_only', 'fiscal_optional', 'fiscal_required'], true) ? $value : 'system_only';
+    }
+
+    protected function rep_status($value)
+    {
+        $value = $this->codeify($value);
+        return in_array($value, ['not_required', 'pending', 'prepared', 'stamped', 'cancelled'], true) ? $value : 'not_required';
     }
 
     protected function codeify($value)

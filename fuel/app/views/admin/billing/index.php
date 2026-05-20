@@ -234,6 +234,32 @@
                     Selecciona una factura para ver o capturar conceptos.
                 </div>
             </div>
+
+            <div class="col-12 mt-3">
+                <div class="card card-outline card-secondary">
+                    <div class="card-header py-2">
+                        <h3 class="card-title mb-0">Buzon fiscal interno</h3>
+                    </div>
+                    <div class="card-body table-responsive p-0">
+                        <table class="table table-sm table-hover mb-0">
+                            <thead><tr><th>Folio</th><th>Tipo</th><th>Origen</th><th>Tercero</th><th>Modo</th><th>Estado</th><th>UUID</th><th class="text-right">Total</th></tr></thead>
+                            <tbody>
+                                <tr v-for="doc in fiscalDocuments" :key="doc.id">
+                                    <td><strong>{{ doc.folio }}</strong></td>
+                                    <td>{{ fiscalDocumentLabel(doc.document_type) }}</td>
+                                    <td>{{ doc.source_folio || doc.source_entity_type }}</td>
+                                    <td>{{ doc.party_name || '-' }}</td>
+                                    <td><span class="badge" :class="doc.fiscal_mode === 'fiscal_required' ? 'badge-info' : 'badge-light'">{{ fiscalModeLabel(doc.fiscal_mode) }}</span></td>
+                                    <td><span class="badge badge-secondary">{{ doc.workflow_status }}</span></td>
+                                    <td>{{ doc.uuid || '-' }}</td>
+                                    <td class="text-right">{{ money(doc.total, doc.currency_code) }}</td>
+                                </tr>
+                                <tr v-if="fiscalDocuments.length === 0"><td colspan="8" class="text-center text-muted">Sin documentos fiscales preparados.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -289,6 +315,21 @@
                         <div class="form-group col-md-4">
                             <label>Tipo cambio</label>
                             <input v-model.number="invoiceForm.exchange_rate" type="number" step="0.000001" class="form-control">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label>Tratamiento fiscal</label>
+                            <select v-model="invoiceForm.fiscal_mode" class="form-control">
+                                <option value="system_only">Solo afectacion sistema</option>
+                                <option value="fiscal_optional">CFDI opcional</option>
+                                <option value="fiscal_required">CFDI requerido</option>
+                            </select>
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label>Carta porte</label>
+                            <select v-model="invoiceForm.requires_waybill" class="form-control">
+                                <option value="0">No aplica</option>
+                                <option value="1">Requiere carta porte</option>
+                            </select>
                         </div>
                         <div class="form-group col-md-4">
                             <label>Condicion pago</label>
@@ -640,6 +681,7 @@ new Vue({
         recurringProfiles: [],
         recurringItems: [],
         recurringRuns: [],
+        fiscalDocuments: [],
         selectedRecurringProfile: null,
         pendingDeliveries: [],
         items: [],
@@ -662,7 +704,8 @@ new Vue({
             { key: 'ready', label: 'Listas', icon: 'bi bi-check2-circle', className: 'bg-warning' },
             { key: 'stamped', label: 'Timbradas', icon: 'bi bi-patch-check', className: 'bg-success' },
             { key: 'pending_deliveries', label: 'Entregas por facturar', icon: 'bi bi-truck', className: 'bg-primary' },
-            { key: 'recurring_due', label: 'Recurrentes por generar', icon: 'bi bi-arrow-repeat', className: 'bg-warning' }
+            { key: 'recurring_due', label: 'Recurrentes por generar', icon: 'bi bi-arrow-repeat', className: 'bg-warning' },
+            { key: 'fiscal_drafts', label: 'CFDI por revisar', icon: 'bi bi-file-earmark-check', className: 'bg-secondary' }
         ]
     },
     computed: {
@@ -711,6 +754,7 @@ new Vue({
                     this.recurringProfiles = data.recurring_profiles || [];
                     this.recurringItems = data.recurring_items || [];
                     this.recurringRuns = data.recurring_runs || [];
+                    this.fiscalDocuments = data.fiscal_documents || [];
                     this.pendingDeliveries = data.pending_deliveries || [];
                     this.items = data.items || [];
                     this.options = data.options || this.options;
@@ -737,6 +781,8 @@ new Vue({
                 sat_cfdi_use_code: 'G03',
                 sat_payment_form_code: '99',
                 sat_payment_method_code: 'PPD',
+                fiscal_mode: 'fiscal_required',
+                requires_waybill: 0,
                 status: 'draft',
                 notes: '',
                 active: true
@@ -862,6 +908,7 @@ new Vue({
                     this.invoices = data.invoices || this.invoices;
                     this.recurringProfiles = data.recurring_profiles || this.recurringProfiles;
                     this.recurringRuns = data.recurring_runs || this.recurringRuns;
+                    this.fiscalDocuments = data.fiscal_documents || this.fiscalDocuments;
                     this.stats = data.stats || this.stats;
                     if (data.invoice_id) this.load(data.invoice_id, profile.id);
                 });
@@ -1069,6 +1116,12 @@ new Vue({
         },
         productTypeLabel: function(value) {
             return ({ product: 'Producto', service: 'Servicio', rental: 'Renta' })[value] || value;
+        },
+        fiscalModeLabel: function(value) {
+            return ({ system_only: 'Sistema', fiscal_optional: 'Opcional', fiscal_required: 'Fiscal' })[value] || value || 'Fiscal';
+        },
+        fiscalDocumentLabel: function(value) {
+            return ({ invoice: 'Factura', credit_note: 'Nota credito', payment_complement: 'REP', waybill: 'Carta porte', retention: 'Retencion' })[value] || value;
         }
     }
 });

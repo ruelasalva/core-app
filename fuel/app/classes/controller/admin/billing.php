@@ -61,6 +61,7 @@ class Controller_Admin_Billing extends Controller_Adminbase
                 'recurring_profiles' => $this->get_recurring_profiles(),
                 'recurring_items' => $this->get_recurring_items((int) \Input::get('recurring_profile_id', 0)),
                 'recurring_runs' => $this->get_recurring_runs(),
+                'fiscal_documents' => $this->get_fiscal_documents(),
                 'pending_deliveries' => $this->get_pending_deliveries(),
                 'items' => $this->get_items((int) \Input::get('invoice_id', 0)),
                 'options' => $this->get_options(),
@@ -99,6 +100,8 @@ class Controller_Admin_Billing extends Controller_Adminbase
                 'invoice_type' => $this->codeify(\Arr::get($val, 'invoice_type', 'sale')),
                 'party_id' => (int) \Arr::get($val, 'party_id', 0),
                 'cfdi_id' => (int) \Arr::get($val, 'cfdi_id', 0),
+                'fiscal_mode' => $this->fiscal_mode(\Arr::get($val, 'fiscal_mode', 'fiscal_required')),
+                'requires_waybill' => (int) (bool) \Arr::get($val, 'requires_waybill', false),
                 'pac_provider_code' => 'factura_com',
                 'pac_connection_id' => (int) \Arr::get($val, 'pac_connection_id', 0),
                 'pac_series_id' => trim((string) \Arr::get($val, 'pac_series_id', '')),
@@ -267,7 +270,9 @@ class Controller_Admin_Billing extends Controller_Adminbase
         try {
             $invoice = $this->invoice_from_request();
             $payload = $this->build_cfdi_payload($invoice);
+            $fiscal = $this->ensure_fiscal_document_from_invoice($invoice, $payload);
             $invoice->pac_request_json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
+            $invoice->fiscal_document_id = (int) $fiscal->id;
             $invoice->status = $invoice->status === 'draft' ? 'ready' : $invoice->status;
             $invoice->save();
             $this->log_invoice_event((int) $invoice->id, 'prepare_cfdi', 'Payload CFDI 4.0 preparado', $payload);
@@ -276,6 +281,7 @@ class Controller_Admin_Billing extends Controller_Adminbase
                 'status' => 'ok',
                 'payload' => $payload,
                 'invoices' => $this->get_invoices(),
+                'fiscal_documents' => $this->get_fiscal_documents(),
                 'items' => $this->get_items((int) $invoice->id),
                 'stats' => $this->get_stats(),
             ]);
@@ -319,6 +325,7 @@ class Controller_Admin_Billing extends Controller_Adminbase
             $invoice->stamped_at = time();
             $invoice->cfdi_id = $this->upsert_sat_cfdi($invoice);
             $invoice->save();
+            $this->sync_fiscal_document_from_invoice($invoice, $payload, $response);
 
             $this->log_invoice_event((int) $invoice->id, 'stamp', 'Factura timbrada con Factura.com', $response);
             Helper_Core_Audit::log([
@@ -330,7 +337,7 @@ class Controller_Admin_Billing extends Controller_Adminbase
                 'new_values' => $invoice->to_array(),
             ]);
 
-            return $this->json_response(['status' => 'ok', 'invoices' => $this->get_invoices(), 'items' => $this->get_items((int) $invoice->id), 'stats' => $this->get_stats()]);
+            return $this->json_response(['status' => 'ok', 'invoices' => $this->get_invoices(), 'fiscal_documents' => $this->get_fiscal_documents(), 'items' => $this->get_items((int) $invoice->id), 'stats' => $this->get_stats()]);
         } catch (\Exception $e) {
             \Log::error('Error timbrando factura: '.$e->getMessage());
             return $this->json_response(['error' => $e->getMessage()], 400);
@@ -369,9 +376,10 @@ class Controller_Admin_Billing extends Controller_Adminbase
             $invoice->pac_response_json = json_encode($response, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             $invoice->save();
             $this->mark_sat_cfdi_cancelled($invoice);
+            $this->sync_fiscal_document_from_invoice($invoice, [], $response);
             $this->log_invoice_event((int) $invoice->id, 'cancel', 'Factura cancelada con Factura.com', $response);
 
-            return $this->json_response(['status' => 'ok', 'invoices' => $this->get_invoices(), 'items' => $this->get_items((int) $invoice->id), 'stats' => $this->get_stats()]);
+            return $this->json_response(['status' => 'ok', 'invoices' => $this->get_invoices(), 'fiscal_documents' => $this->get_fiscal_documents(), 'items' => $this->get_items((int) $invoice->id), 'stats' => $this->get_stats()]);
         } catch (\Exception $e) {
             \Log::error('Error cancelando factura: '.$e->getMessage());
             return $this->json_response(['error' => $e->getMessage()], 400);
@@ -777,6 +785,22 @@ class Controller_Admin_Billing extends Controller_Adminbase
         return $items;
     }
 
+    protected function get_fiscal_documents()
+    {
+        if (!\DBUtil::table_exists('core_fiscal_documents')) {
+            return [];
+        }
+
+        return \DB::select(['f.id', 'id'], ['f.folio', 'folio'], ['f.document_type', 'document_type'], ['f.voucher_type', 'voucher_type'], ['f.party_id', 'party_id'], ['p.name', 'party_name'], ['f.source_module', 'source_module'], ['f.source_entity_type', 'source_entity_type'], ['f.source_entity_id', 'source_entity_id'], ['f.source_folio', 'source_folio'], ['f.fiscal_mode', 'fiscal_mode'], ['f.uuid', 'uuid'], ['f.sat_status', 'sat_status'], ['f.workflow_status', 'workflow_status'], ['f.issue_date', 'issue_date'], ['f.currency_code', 'currency_code'], ['f.total', 'total'], ['f.created_at', 'created_at'])
+            ->from(['core_fiscal_documents', 'f'])
+            ->join(['core_parties', 'p'], 'left')->on('f.party_id', '=', 'p.id')
+            ->where('f.active', '=', 1)
+            ->order_by('f.id', 'desc')
+            ->limit(200)
+            ->execute()
+            ->as_array();
+    }
+
     protected function get_recurring_profiles()
     {
         if (!\DBUtil::table_exists('core_billing_recurring_profiles')) {
@@ -975,6 +999,7 @@ class Controller_Admin_Billing extends Controller_Adminbase
             'pending_deliveries' => \DBUtil::table_exists('core_sales_deliveries') ? (int) \DB::select()->from('core_sales_deliveries')->where('active', '=', 1)->where('billing_invoice_id', '=', 0)->execute()->count() : 0,
             'recurring_profiles' => \DBUtil::table_exists('core_billing_recurring_profiles') ? (int) \DB::select()->from('core_billing_recurring_profiles')->where('active', '=', 1)->execute()->count() : 0,
             'recurring_due' => \DBUtil::table_exists('core_billing_recurring_profiles') ? (int) \DB::select()->from('core_billing_recurring_profiles')->where('active', '=', 1)->where('status', '=', 'active')->where('next_run_date', '<=', date('Y-m-d'))->execute()->count() : 0,
+            'fiscal_drafts' => \DBUtil::table_exists('core_fiscal_documents') ? (int) \DB::select()->from('core_fiscal_documents')->where('active', '=', 1)->where('workflow_status', '=', 'draft')->execute()->count() : 0,
         ];
     }
 
@@ -1354,6 +1379,9 @@ class Controller_Admin_Billing extends Controller_Adminbase
             'invoice_type' => 'sale',
             'party_id' => 0,
             'cfdi_id' => 0,
+            'fiscal_document_id' => 0,
+            'fiscal_mode' => 'fiscal_required',
+            'requires_waybill' => 0,
             'pac_provider_code' => 'factura_com',
             'pac_connection_id' => 0,
             'pac_series_id' => '',
@@ -1414,6 +1442,98 @@ class Controller_Admin_Billing extends Controller_Adminbase
     protected function next_invoice_folio()
     {
         return 'FAC-'.date('Ymd').'-'.str_pad((string) ((int) \DB::count_records('core_billing_invoices') + 1), 5, '0', STR_PAD_LEFT);
+    }
+
+    protected function next_fiscal_document_folio($prefix = 'CFDI')
+    {
+        $count = \DBUtil::table_exists('core_fiscal_documents') ? (int) \DB::count_records('core_fiscal_documents') : 0;
+        return $prefix.'-'.date('Ymd').'-'.str_pad((string) ($count + 1), 5, '0', STR_PAD_LEFT);
+    }
+
+    protected function fiscal_mode($value)
+    {
+        $value = $this->codeify($value);
+        return in_array($value, ['system_only', 'fiscal_optional', 'fiscal_required'], true) ? $value : 'fiscal_required';
+    }
+
+    protected function fiscal_document_type_for_invoice(Model_Core_Billing_Invoice $invoice)
+    {
+        $type = (string) $invoice->invoice_type;
+        if ($type === 'credit_note') {
+            return ['credit_note', 'E'];
+        }
+        if ($type === 'payment_complement') {
+            return ['payment_complement', 'P'];
+        }
+        if ($type === 'retention') {
+            return ['retention', 'R'];
+        }
+        return ['invoice', 'I'];
+    }
+
+    protected function ensure_fiscal_document_from_invoice(Model_Core_Billing_Invoice $invoice, array $payload = [])
+    {
+        if (!\DBUtil::table_exists('core_fiscal_documents')) {
+            return null;
+        }
+
+        $document = (int) $invoice->fiscal_document_id > 0 ? Model_Core_Fiscal_Document::find((int) $invoice->fiscal_document_id) : null;
+        list($document_type, $voucher_type) = $this->fiscal_document_type_for_invoice($invoice);
+        $data = [
+            'document_type' => $document_type,
+            'cfdi_version' => '4.0',
+            'voucher_type' => $voucher_type,
+            'party_id' => (int) $invoice->party_id,
+            'source_module' => (string) ($invoice->source_module ?: 'billing'),
+            'source_entity_type' => 'billing_invoice',
+            'source_entity_id' => (int) $invoice->id,
+            'source_folio' => (string) $invoice->folio,
+            'fiscal_mode' => (string) ($invoice->fiscal_mode ?: 'fiscal_required'),
+            'pac_provider_code' => (string) ($invoice->pac_provider_code ?: 'factura_com'),
+            'pac_connection_id' => (int) $invoice->pac_connection_id,
+            'pac_series_id' => (string) $invoice->pac_series_id,
+            'sat_status' => (string) ($invoice->sat_status ?: 'draft'),
+            'workflow_status' => $invoice->status === 'stamped' ? 'stamped' : ($invoice->status === 'cancelled' ? 'cancelled' : 'ready'),
+            'issue_date' => (string) $invoice->issue_date,
+            'currency_code' => (string) $invoice->currency_code,
+            'total' => (float) $invoice->total,
+            'payload_json' => !empty($payload) ? json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : (string) $invoice->pac_request_json,
+            'notes' => (string) $invoice->notes,
+            'active' => 1,
+        ];
+        if ($document) {
+            $document->set($data);
+        } else {
+            $data['folio'] = $this->next_fiscal_document_folio($voucher_type === 'P' ? 'REP' : ($voucher_type === 'E' ? 'NCR' : 'CFDI'));
+            $data['created_by'] = (int) $this->user_id;
+            $document = Model_Core_Fiscal_Document::forge($data);
+        }
+        $document->save();
+
+        if ((int) $invoice->fiscal_document_id !== (int) $document->id) {
+            $invoice->fiscal_document_id = (int) $document->id;
+            $invoice->save();
+        }
+
+        return $document;
+    }
+
+    protected function sync_fiscal_document_from_invoice(Model_Core_Billing_Invoice $invoice, array $payload = [], array $response = [])
+    {
+        $document = $this->ensure_fiscal_document_from_invoice($invoice, $payload);
+        if (!$document) {
+            return;
+        }
+        $document->set([
+            'pac_uid' => (string) $invoice->pac_uid,
+            'uuid' => (string) $invoice->uuid,
+            'sat_status' => (string) ($invoice->sat_status ?: $document->sat_status),
+            'workflow_status' => (string) ($invoice->status ?: $document->workflow_status),
+            'response_json' => !empty($response) ? json_encode($response, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : (string) $document->response_json,
+            'xml_path' => (string) $invoice->xml_path,
+            'pdf_path' => (string) $invoice->pdf_path,
+        ]);
+        $document->save();
     }
 
     protected function next_recurring_folio()
@@ -1507,8 +1627,11 @@ class Controller_Admin_Billing extends Controller_Adminbase
                 throw new \RuntimeException('Falta ejecutar migraciones de facturacion recurrente.');
             }
         }
-        if (!\DBUtil::field_exists('core_billing_invoices', ['pac_provider_code', 'pac_uid', 'uuid'])) {
+        if (!\DBUtil::field_exists('core_billing_invoices', ['pac_provider_code', 'pac_uid', 'uuid', 'fiscal_document_id', 'fiscal_mode'])) {
             throw new \RuntimeException('Falta ejecutar migraciones PAC de facturacion.');
+        }
+        if (!\DBUtil::table_exists('core_fiscal_documents')) {
+            throw new \RuntimeException('Falta ejecutar migracion de documentos fiscales transversales.');
         }
         if (!\DBUtil::field_exists('core_commerce_products', ['product_type', 'is_internal_service'])) {
             throw new \RuntimeException('Falta ejecutar migracion de productos tipo servicio.');

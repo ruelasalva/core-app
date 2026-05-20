@@ -2392,6 +2392,18 @@ class Configsetup
             'updated_at' => time(),
         ]);
 
+        $this->upsert_seed('core_knowledge_articles', 'code', 'cfdi_documentos_fiscales_transversales', [
+            'code' => 'cfdi_documentos_fiscales_transversales',
+            'title' => 'CFDI transversal: ventas, pagos e inventario',
+            'category' => 'SAT',
+            'summary' => 'Base para separar operacion ERP de documentos fiscales timbrables o solo internos.',
+            'content' => '<h3>Objetivo</h3><p>Core-App separa el documento operativo del documento fiscal. Una venta, pago, nota, traslado o devolucion puede afectar el ERP sin timbrarse, o puede preparar un CFDI para timbrado con PAC.</p><h4>Documentos contemplados</h4><ul><li><strong>Factura</strong>: nace normalmente desde entrega o facturacion directa.</li><li><strong>Complemento de pago REP</strong>: nace desde Pagos y Bancos cuando se cobra una factura PPD.</li><li><strong>Nota de credito/devolucion</strong>: puede timbrarse como egreso o quedar como ajuste interno.</li><li><strong>Carta porte / traslado</strong>: nace desde inventario/logistica cuando el movimiento requiere CFDI de traslado.</li><li><strong>Retencion</strong>: queda preparada para pagos o servicios donde aplique constancia fiscal.</li></ul><h4>Regla clave</h4><p>El campo <code>fiscal_mode</code> decide si el movimiento es <strong>solo sistema</strong>, <strong>fiscal requerido</strong> o <strong>fiscal opcional</strong>. El timbrado real siempre debe pasar por Integraciones/PAC y conservar payload, respuesta, UUID y estado SAT.</p><h4>Pagos PPD</h4><p>Cuando una factura PPD se cobra en Pagos y Bancos, el usuario puede elegir si el cobro solo afecta saldos internos o si genera un REP fiscal pendiente. Esto evita timbrar movimientos que no deban timbrarse y mantiene visible lo que si requiere complemento.</p>',
+            'sort_order' => 56,
+            'active' => 1,
+            'created_at' => time(),
+            'updated_at' => time(),
+        ]);
+
         $this->upsert_seed('core_knowledge_articles', 'code', 'ventas_pedido_entrega_inventario', [
             'code' => 'ventas_pedido_entrega_inventario',
             'title' => 'Ventas: pedido, entrega e inventario',

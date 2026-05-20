@@ -3,7 +3,7 @@
         <div class="col-lg-3 col-6"><div class="small-box bg-info"><div class="inner"><h3>{{ stats.receivables || 0 }}</h3><p>Cuentas por cobrar</p></div><div class="icon"><i class="bi bi-file-earmark-text"></i></div></div></div>
         <div class="col-lg-3 col-6"><div class="small-box bg-warning"><div class="inner"><h3>{{ stats.pending || 0 }}</h3><p>Pendientes</p></div><div class="icon"><i class="bi bi-hourglass-split"></i></div></div></div>
         <div class="col-lg-3 col-6"><div class="small-box bg-success"><div class="inner"><h3>{{ stats.movements || 0 }}</h3><p>Movimientos</p></div><div class="icon"><i class="bi bi-bank"></i></div></div></div>
-        <div class="col-lg-3 col-6"><div class="small-box bg-secondary"><div class="inner"><h3>{{ stats.unreconciled || 0 }}</h3><p>Sin conciliar</p></div><div class="icon"><i class="bi bi-check2-square"></i></div></div></div>
+        <div class="col-lg-3 col-6"><div class="small-box bg-secondary"><div class="inner"><h3>{{ stats.rep_pending || 0 }}</h3><p>REP pendientes</p></div><div class="icon"><i class="bi bi-receipt"></i></div></div></div>
     </div>
 
     <div v-if="error" class="alert alert-danger">{{ error }}</div>
@@ -40,7 +40,7 @@
         </div>
         <div class="card-body table-responsive">
             <table class="table table-bordered table-hover">
-                <thead><tr><th>Folio</th><th>Tipo</th><th>Tercero</th><th>Fecha</th><th>Importe</th><th>Forma SAT</th><th>Estado</th><th class="text-center">Acciones</th></tr></thead>
+                <thead><tr><th>Folio</th><th>Tipo</th><th>Tercero</th><th>Fecha</th><th>Importe</th><th>Forma SAT</th><th>Fiscal</th><th>Estado</th><th class="text-center">Acciones</th></tr></thead>
                 <tbody>
                     <tr v-for="payment in payments" :key="payment.id">
                         <td><strong>{{ payment.folio }}</strong><div class="text-muted small">{{ payment.reference }}</div></td>
@@ -49,10 +49,11 @@
                         <td>{{ payment.payment_date }}</td>
                         <td>{{ payment.amount }} {{ payment.currency_code }}</td>
                         <td>{{ payment.sat_payment_form_code }}</td>
+                        <td><span class="badge" :class="payment.fiscal_mode === 'fiscal_required' ? 'badge-info' : 'badge-light'">{{ fiscalModeLabel(payment.fiscal_mode) }}</span><div class="small text-muted" v-if="payment.rep_status && payment.rep_status !== 'not_required'">REP {{ repStatusLabel(payment.rep_status) }}</div></td>
                         <td><span class="badge badge-light">{{ payment.status }}</span></td>
                         <td class="text-center"><button class="btn btn-xs btn-outline-primary" @click="openPayment(payment)"><i class="bi bi-pencil"></i></button></td>
                     </tr>
-                    <tr v-if="payments.length === 0"><td colspan="8" class="text-center text-muted">Sin pagos</td></tr>
+                    <tr v-if="payments.length === 0"><td colspan="9" class="text-center text-muted">Sin pagos</td></tr>
                 </tbody>
             </table>
         </div>
@@ -94,9 +95,11 @@
                 <div class="col-md-3"><div class="form-group"><label>Importe</label><input type="number" step="0.01" class="form-control" v-model="paymentForm.amount"></div></div>
                 <div class="col-md-3"><div class="form-group"><label>Estado</label><select class="form-control" v-model="paymentForm.status"><option value="pending">Pendiente</option><option value="confirmed">Confirmado</option><option value="cancelled">Cancelado</option></select></div></div>
                 <div class="col-md-4"><div class="form-group"><label>Forma pago SAT</label><select class="form-control" v-model="paymentForm.sat_payment_form_code"><option v-for="option in options.sat_payment_forms" :value="option.value">{{ option.label }}</option></select></div></div>
+                <div class="col-md-4"><div class="form-group"><label>Tratamiento fiscal</label><select class="form-control" v-model="paymentForm.fiscal_mode"><option value="system_only">Solo afectacion sistema</option><option value="fiscal_optional">REP opcional</option><option value="fiscal_required">Generar REP fiscal</option></select></div></div>
+                <div class="col-md-4"><div class="form-group"><label>Estado REP</label><select class="form-control" v-model="paymentForm.rep_status"><option value="not_required">No requerido</option><option value="pending">Pendiente</option><option value="prepared">Preparado</option><option value="stamped">Timbrado</option><option value="cancelled">Cancelado</option></select></div></div>
                 <div class="col-md-4"><div class="form-group"><label>Referencia</label><input class="form-control" v-model="paymentForm.reference"></div></div>
                 <div class="col-md-4"><div class="form-group"><label>ID externo</label><input class="form-control" v-model="paymentForm.external_id"></div></div>
-                <div class="col-md-12" v-if="paymentForm.allocation_entity_id"><div class="alert alert-info py-2 mb-2">Este cobro se aplicara a la factura {{ paymentForm.reference }}. Si la factura es PPD, quedara pendiente emitir complemento de pago cuando se cierre el flujo fiscal.</div></div>
+                <div class="col-md-12" v-if="paymentForm.allocation_entity_id"><div class="alert alert-info py-2 mb-2">Este cobro se aplicara a la factura {{ paymentForm.reference }}. Si la factura es PPD puedes elegir si solo afecta el sistema o si crea REP fiscal pendiente.</div></div>
                 <div class="col-md-12"><div class="form-group"><label>Notas</label><textarea class="form-control" rows="2" v-model="paymentForm.notes"></textarea></div></div>
             </div></div>
             <div class="modal-footer"><button class="btn btn-secondary" @click="hideModal('modal-payment')">Cerrar</button><button class="btn btn-primary" @click="savePayment">Guardar</button></div>
@@ -139,7 +142,7 @@ window.onload = function() {
                 });
             },
             openPayment(payment) {
-                this.paymentForm = Object.assign({ id: 0, payment_type: 'received', party_id: 0, bank_account_id: 0, integration_connection_id: 0, payment_date: new Date().toISOString().slice(0, 10), currency_code: 'MXN', exchange_rate: 1, amount: 0, sat_payment_form_code: '99', reference: '', external_id: '', status: 'pending', notes: '', allocation_entity_type: '', allocation_entity_id: 0, active: true }, payment);
+                this.paymentForm = Object.assign({ id: 0, payment_type: 'received', party_id: 0, bank_account_id: 0, integration_connection_id: 0, fiscal_document_id: 0, fiscal_mode: 'system_only', rep_status: 'not_required', payment_date: new Date().toISOString().slice(0, 10), currency_code: 'MXN', exchange_rate: 1, amount: 0, sat_payment_form_code: '99', reference: '', external_id: '', status: 'pending', notes: '', allocation_entity_type: '', allocation_entity_id: 0, active: true }, payment);
                 this.showModal('modal-payment');
             },
             openReceivablePayment(invoice) {
@@ -154,6 +157,9 @@ window.onload = function() {
                     exchange_rate: 1,
                     amount: invoice.balance_due || invoice.total || 0,
                     sat_payment_form_code: invoice.sat_payment_form_code || '03',
+                    fiscal_document_id: 0,
+                    fiscal_mode: invoice.sat_payment_method_code === 'PPD' ? 'fiscal_required' : 'system_only',
+                    rep_status: invoice.sat_payment_method_code === 'PPD' ? 'pending' : 'not_required',
                     reference: invoice.folio || '',
                     external_id: invoice.uuid || '',
                     status: 'confirmed',
@@ -191,6 +197,12 @@ window.onload = function() {
             },
             money(value) {
                 return Number(value || 0).toFixed(2);
+            },
+            fiscalModeLabel(value) {
+                return ({ system_only: 'Sistema', fiscal_optional: 'Opcional', fiscal_required: 'Fiscal' })[value] || value || 'Sistema';
+            },
+            repStatusLabel(value) {
+                return ({ not_required: 'no requerido', pending: 'pendiente', prepared: 'preparado', stamped: 'timbrado', cancelled: 'cancelado' })[value] || value;
             },
             showModal(id) {
                 const element = document.getElementById(id);

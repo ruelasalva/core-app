@@ -47,6 +47,7 @@ return array (
         41 => '042_create_core_accounting_tables',
         42 => '043_create_core_crm_tables',
         43 => '044_create_billing_recurring_and_service_products',
+        44 => '045_create_core_fiscal_documents',
       ),
     ),
     'module' => array(    

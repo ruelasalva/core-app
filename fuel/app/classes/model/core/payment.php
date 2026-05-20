@@ -6,6 +6,7 @@ class Model_Core_Payment extends \Orm\Model
     protected static $_primary_key = ['id'];
     protected static $_properties = [
         'id', 'folio', 'payment_type', 'party_id', 'bank_account_id', 'integration_connection_id',
+        'fiscal_document_id', 'fiscal_mode', 'rep_status',
         'payment_date', 'currency_code', 'exchange_rate', 'amount', 'sat_payment_form_code',
         'reference', 'external_id', 'status', 'notes', 'created_by', 'active', 'created_at', 'updated_at',
     ];

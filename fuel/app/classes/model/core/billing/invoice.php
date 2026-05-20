@@ -6,7 +6,7 @@ class Model_Core_Billing_Invoice extends \Orm\Model
     protected static $_primary_key = ['id'];
 
     protected static $_properties = [
-        'id', 'folio', 'invoice_type', 'party_id', 'cfdi_id', 'pac_provider_code', 'pac_connection_id',
+        'id', 'folio', 'invoice_type', 'party_id', 'cfdi_id', 'fiscal_document_id', 'fiscal_mode', 'requires_waybill', 'pac_provider_code', 'pac_connection_id',
         'pac_series_id', 'pac_receptor_uid', 'pac_uid', 'uuid', 'sat_status', 'stamped_at', 'cancelled_at',
         'cancel_motive', 'cancel_substitute_uuid', 'pac_request_json', 'pac_response_json', 'xml_path',
         'pdf_path', 'source_module', 'source_entity_type', 'source_entity_id', 'issue_date', 'due_date',
