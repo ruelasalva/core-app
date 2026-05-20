@@ -45,6 +45,7 @@ return array (
         39 => '040_create_inventory_stock_balances',
         40 => '041_create_purchase_cfdi_line_mappings',
         41 => '042_create_core_accounting_tables',
+        42 => '043_create_core_crm_tables',
       ),
     ),
     'module' => array(    

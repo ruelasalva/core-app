@@ -154,6 +154,15 @@
         </li>
         <?php endif; ?>
 
+        <?php if ($menu['crm']): ?>
+        <li class="nav-item">
+            <a href="<?php echo Uri::create('admin/crm'); ?>" class="nav-link <?php echo (Uri::segment(2) == 'crm') ? 'active' : ''; ?>">
+                <i class="nav-icon bi bi-people"></i>
+                <p>CRM comercial</p>
+            </a>
+        </li>
+        <?php endif; ?>
+
         <?php if ($menu['portals']): ?>
         <?php $portal_section = Input::get('section', 'user_links'); ?>
         <?php $portal_open = (Uri::segment(2) == 'portals'); ?>
