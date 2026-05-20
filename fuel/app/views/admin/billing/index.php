@@ -7,6 +7,9 @@
         <button class="btn btn-primary btn-sm ml-auto" @click="newInvoice">
             <i class="bi bi-plus-circle"></i> Nueva factura
         </button>
+        <button class="btn btn-outline-primary btn-sm ml-2" @click="newRecurringProfile">
+            <i class="bi bi-arrow-repeat"></i> Recurrente
+        </button>
     </div>
 
     <div class="card-body">
@@ -63,6 +66,77 @@
                                 </tr>
                             </tbody>
                         </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12">
+                <div class="card card-outline card-info">
+                    <div class="card-header py-2 d-flex align-items-center">
+                        <h3 class="card-title mb-0">Facturas recurrentes</h3>
+                        <button class="btn btn-info btn-sm ml-auto" @click="newRecurringProfile">
+                            <i class="bi bi-plus-lg"></i> Programar
+                        </button>
+                    </div>
+                    <div class="card-body table-responsive p-0">
+                        <table class="table table-sm table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Perfil</th>
+                                    <th>Cliente</th>
+                                    <th>Frecuencia</th>
+                                    <th>Siguiente</th>
+                                    <th>Estado</th>
+                                    <th>Conceptos</th>
+                                    <th class="text-center">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="profile in recurringProfiles" :key="profile.id" :class="{ 'table-info': selectedRecurringProfile && selectedRecurringProfile.id == profile.id }">
+                                    <td><strong>{{ profile.folio }}</strong><div class="text-muted small">{{ profile.name }}</div></td>
+                                    <td>{{ profile.party_name || '-' }}</td>
+                                    <td>{{ recurringFrequencyLabel(profile.frequency) }}</td>
+                                    <td>{{ profile.next_run_date || '-' }}</td>
+                                    <td><span class="badge" :class="profile.status === 'active' ? 'badge-success' : 'badge-secondary'">{{ recurringStatusLabel(profile.status) }}</span></td>
+                                    <td>
+                                        <button class="btn btn-xs btn-outline-info" @click="selectRecurringProfile(profile)">
+                                            Ver conceptos
+                                        </button>
+                                    </td>
+                                    <td class="text-center">
+                                        <button class="btn btn-xs btn-outline-primary" @click="editRecurringProfile(profile)" title="Editar">
+                                            <i class="bi bi-pencil"></i>
+                                        </button>
+                                        <button class="btn btn-xs btn-outline-secondary" @click="newRecurringItem(profile)" title="Concepto">
+                                            <i class="bi bi-plus"></i>
+                                        </button>
+                                        <button class="btn btn-xs btn-success" @click="generateRecurringInvoice(profile)" title="Generar factura">
+                                            Generar
+                                        </button>
+                                    </td>
+                                </tr>
+                                <tr v-if="recurringProfiles.length === 0">
+                                    <td colspan="7" class="text-center text-muted">Sin perfiles recurrentes.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="card-footer p-0" v-if="selectedRecurringProfile">
+                        <div class="table-responsive">
+                            <table class="table table-sm mb-0">
+                                <thead><tr><th>Concepto</th><th>Cantidad</th><th>Precio</th><th>Impuesto</th><th></th></tr></thead>
+                                <tbody>
+                                    <tr v-for="item in recurringItems" :key="item.id">
+                                        <td>{{ item.description }}</td>
+                                        <td>{{ item.quantity }}</td>
+                                        <td>{{ money(item.unit_price, selectedRecurringProfile.currency_code) }}</td>
+                                        <td>{{ item.tax_code }}</td>
+                                        <td class="text-right"><button class="btn btn-xs btn-outline-primary" @click="editRecurringItem(item)"><i class="bi bi-pencil"></i></button></td>
+                                    </tr>
+                                    <tr v-if="recurringItems.length === 0"><td colspan="5" class="text-center text-muted">Agrega conceptos recurrentes al perfil.</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -457,6 +531,74 @@
         </div>
     </div>
 
+    <div class="modal fade" id="recurring-modal" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">{{ recurringForm.id ? 'Editar recurrente' : 'Nueva factura recurrente' }}</h5>
+                    <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="form-group col-md-6"><label>Nombre</label><input v-model="recurringForm.name" class="form-control" placeholder="Renta mensual equipo..."></div>
+                        <div class="form-group col-md-6"><label>Cliente</label><select v-model="recurringForm.party_id" class="form-control"><option value="0">Selecciona...</option><option v-for="option in options.parties" :value="option.value">{{ option.label }}</option></select></div>
+                        <div class="form-group col-md-3"><label>Frecuencia</label><select v-model="recurringForm.frequency" class="form-control"><option value="weekly">Semanal</option><option value="biweekly">Quincenal</option><option value="monthly">Mensual</option><option value="quarterly">Trimestral</option><option value="yearly">Anual</option></select></div>
+                        <div class="form-group col-md-3"><label>Inicio</label><input v-model="recurringForm.start_date" type="date" class="form-control"></div>
+                        <div class="form-group col-md-3"><label>Siguiente ejecucion</label><input v-model="recurringForm.next_run_date" type="date" class="form-control"></div>
+                        <div class="form-group col-md-3"><label>Fin contrato</label><input v-model="recurringForm.end_date" type="date" class="form-control"></div>
+                        <div class="form-group col-md-3"><label>Estado</label><select v-model="recurringForm.status" class="form-control"><option value="active">Activo</option><option value="paused">Pausado</option><option value="finished">Terminado</option></select></div>
+                        <div class="form-group col-md-3"><label>Moneda</label><select v-model="recurringForm.currency_code" class="form-control"><option v-for="option in options.currencies" :value="option.value">{{ option.value }}</option></select></div>
+                        <div class="form-group col-md-3"><label>Forma pago</label><select v-model="recurringForm.sat_payment_form_code" class="form-control"><option v-for="option in options.sat_payment_forms" :value="option.value">{{ option.value }} - {{ option.label }}</option></select></div>
+                        <div class="form-group col-md-3"><label>Metodo pago</label><select v-model="recurringForm.sat_payment_method_code" class="form-control"><option v-for="option in options.sat_payment_methods" :value="option.value">{{ option.value }} - {{ option.label }}</option></select></div>
+                        <div class="form-group col-md-4"><label>Uso CFDI</label><select v-model="recurringForm.sat_cfdi_use_code" class="form-control"><option v-for="option in options.sat_cfdi_uses" :value="option.value">{{ option.value }} - {{ option.label }}</option></select></div>
+                        <div class="form-group col-md-4"><label>Serie Factura.com</label><input v-model="recurringForm.pac_series_id" class="form-control"></div>
+                        <div class="form-group col-md-4"><label>UID receptor Factura.com</label><input v-model="recurringForm.pac_receptor_uid" class="form-control"></div>
+                        <div class="form-group col-12"><label>Notas</label><textarea v-model="recurringForm.notes" class="form-control" rows="2"></textarea></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+                    <button class="btn btn-primary" @click="saveRecurringProfile">Guardar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="recurring-item-modal" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Concepto recurrente</h5>
+                    <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="form-group col-md-8">
+                            <label>Servicio / producto</label>
+                            <input v-model="productSearch" class="form-control" placeholder="Busca servicio interno o producto">
+                            <div class="list-group mt-1" style="max-height: 220px; overflow-y: auto;" v-if="productSearch">
+                                <button type="button" class="list-group-item list-group-item-action" v-for="option in filteredProducts" :key="option.value" @click="chooseRecurringProduct(option)">
+                                    <strong>{{ option.name }}</strong>
+                                    <span class="d-block small text-muted">{{ option.sku || 'Sin SKU' }} - {{ productTypeLabel(option.product_type) }} <span v-if="option.is_internal_service == 1">/ interno</span></span>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="form-group col-md-4"><label>Cantidad</label><input v-model.number="recurringItemForm.quantity" type="number" step="0.0001" class="form-control"></div>
+                        <div class="form-group col-md-12"><label>Descripcion</label><input v-model="recurringItemForm.description" class="form-control"></div>
+                        <div class="form-group col-md-3"><label>Unidad</label><input v-model="recurringItemForm.unit_code" class="form-control"></div>
+                        <div class="form-group col-md-3"><label>Precio</label><input v-model.number="recurringItemForm.unit_price" type="number" step="0.01" class="form-control"></div>
+                        <div class="form-group col-md-3"><label>IVA</label><input v-model.number="recurringItemForm.tax_rate" type="number" step="0.000001" class="form-control"></div>
+                        <div class="form-group col-md-3"><label>Clave SAT</label><input v-model="recurringItemForm.sat_product_service_code" class="form-control"></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+                    <button class="btn btn-primary" @click="saveRecurringItem">Guardar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="modal fade" id="cancel-modal" tabindex="-1" role="dialog">
         <div class="modal-dialog" role="document">
             <div class="modal-content">
@@ -495,6 +637,10 @@ new Vue({
         loading: true,
         error: '',
         invoices: [],
+        recurringProfiles: [],
+        recurringItems: [],
+        recurringRuns: [],
+        selectedRecurringProfile: null,
         pendingDeliveries: [],
         items: [],
         selectedInvoice: null,
@@ -506,6 +652,8 @@ new Vue({
         invoiceDraftConcept: {},
         invoiceDraftItems: [],
         invoiceForm: {},
+        recurringForm: {},
+        recurringItemForm: {},
         itemForm: {},
         cancelForm: {},
         statBoxes: [
@@ -513,7 +661,8 @@ new Vue({
             { key: 'draft', label: 'Borradores', icon: 'bi bi-pencil-square', className: 'bg-secondary' },
             { key: 'ready', label: 'Listas', icon: 'bi bi-check2-circle', className: 'bg-warning' },
             { key: 'stamped', label: 'Timbradas', icon: 'bi bi-patch-check', className: 'bg-success' },
-            { key: 'pending_deliveries', label: 'Entregas por facturar', icon: 'bi bi-truck', className: 'bg-primary' }
+            { key: 'pending_deliveries', label: 'Entregas por facturar', icon: 'bi bi-truck', className: 'bg-primary' },
+            { key: 'recurring_due', label: 'Recurrentes por generar', icon: 'bi bi-arrow-repeat', className: 'bg-warning' }
         ]
     },
     computed: {
@@ -547,15 +696,21 @@ new Vue({
         this.load();
     },
     methods: {
-        load: function(invoiceId) {
+        load: function(invoiceId, recurringProfileId) {
             this.loading = true;
             let url = '<?php echo Uri::create('admin/billing/data'); ?>';
-            if (invoiceId) url += '?invoice_id=' + invoiceId;
+            const params = [];
+            if (invoiceId) params.push('invoice_id=' + invoiceId);
+            if (recurringProfileId) params.push('recurring_profile_id=' + recurringProfileId);
+            if (params.length) url += '?' + params.join('&');
             fetch(url)
                 .then(res => res.json())
                 .then(data => {
                     if (data.error) this.error = data.error;
                     this.invoices = data.invoices || [];
+                    this.recurringProfiles = data.recurring_profiles || [];
+                    this.recurringItems = data.recurring_items || [];
+                    this.recurringRuns = data.recurring_runs || [];
                     this.pendingDeliveries = data.pending_deliveries || [];
                     this.items = data.items || [];
                     this.options = data.options || this.options;
@@ -597,6 +752,119 @@ new Vue({
             this.invoiceDraftConcept = this.emptyInvoiceDraftConcept();
             this.invoiceDraftItems = [];
             $('#invoice-modal').modal('show');
+        },
+        newRecurringProfile: function() {
+            const today = new Date().toISOString().slice(0, 10);
+            this.recurringForm = {
+                invoice_type: 'sale',
+                name: '',
+                party_id: 0,
+                frequency: 'monthly',
+                start_date: today,
+                end_date: '',
+                next_run_date: today,
+                auto_stamp: false,
+                pac_connection_id: 0,
+                pac_series_id: '',
+                pac_receptor_uid: '',
+                currency_code: 'MXN',
+                exchange_rate: 1,
+                payment_term_id: 0,
+                sat_cfdi_use_code: 'G03',
+                sat_payment_form_code: '99',
+                sat_payment_method_code: 'PPD',
+                status: 'active',
+                notes: '',
+                active: true
+            };
+            $('#recurring-modal').modal('show');
+        },
+        editRecurringProfile: function(profile) {
+            this.recurringForm = Object.assign({}, profile);
+            $('#recurring-modal').modal('show');
+        },
+        saveRecurringProfile: function() {
+            fetch('<?php echo Uri::create('admin/billing/save_recurring_profile'); ?>', window.coreAppFetchOptions(this.recurringForm))
+                .then(res => res.json())
+                .then(data => {
+                    if (data.error) { this.error = data.error; return; }
+                    this.recurringProfiles = data.recurring_profiles || [];
+                    this.recurringItems = data.recurring_items || [];
+                    this.recurringRuns = data.recurring_runs || [];
+                    this.stats = data.stats || this.stats;
+                    $('#recurring-modal').modal('hide');
+                });
+        },
+        selectRecurringProfile: function(profile) {
+            this.selectedRecurringProfile = profile;
+            this.load(this.selectedInvoice ? this.selectedInvoice.id : 0, profile.id);
+        },
+        emptyRecurringItem: function(profile) {
+            return {
+                profile_id: profile ? profile.id : 0,
+                product_id: 0,
+                sat_product_service_code: '01010101',
+                description: '',
+                quantity: 1,
+                unit_code: 'E48',
+                sat_object_tax_code: '02',
+                unit_price: 0,
+                discount_amount: 0,
+                tax_code: 'iva_16',
+                tax_factor_type: 'Tasa',
+                tax_rate: 0.16,
+                retention_tax_code: '',
+                retention_rate: 0,
+                retention_amount: 0,
+                active: true
+            };
+        },
+        newRecurringItem: function(profile) {
+            this.selectedRecurringProfile = profile;
+            this.recurringItemForm = this.emptyRecurringItem(profile);
+            this.productSearch = '';
+            $('#recurring-item-modal').modal('show');
+        },
+        editRecurringItem: function(item) {
+            this.recurringItemForm = Object.assign({}, item);
+            const product = (this.options.products || []).find(option => parseInt(option.value) === parseInt(item.product_id || 0));
+            this.productSearch = product ? product.label : '';
+            $('#recurring-item-modal').modal('show');
+        },
+        chooseRecurringProduct: function(product) {
+            this.recurringItemForm.product_id = product.value;
+            this.recurringItemForm.description = product.name || product.label || '';
+            this.recurringItemForm.unit_code = product.unit_code || (product.product_type === 'product' ? 'H87' : 'E48');
+            this.recurringItemForm.unit_price = parseFloat(product.price || 0);
+            this.recurringItemForm.tax_code = product.tax_code || 'iva_16';
+            this.recurringItemForm.tax_rate = parseFloat(product.tax_rate || 0);
+            this.recurringItemForm.sat_object_tax_code = this.recurringItemForm.tax_rate > 0 ? '02' : '01';
+            this.productSearch = product.label || product.name || '';
+        },
+        saveRecurringItem: function() {
+            fetch('<?php echo Uri::create('admin/billing/save_recurring_item'); ?>', window.coreAppFetchOptions(this.recurringItemForm))
+                .then(res => res.json())
+                .then(data => {
+                    if (data.error) { this.error = data.error; return; }
+                    this.recurringProfiles = data.recurring_profiles || this.recurringProfiles;
+                    this.recurringItems = data.recurring_items || [];
+                    this.recurringRuns = data.recurring_runs || this.recurringRuns;
+                    this.stats = data.stats || this.stats;
+                    $('#recurring-item-modal').modal('hide');
+                });
+        },
+        generateRecurringInvoice: function(profile) {
+            if (!confirm('Generar factura recurrente para ' + profile.folio + '?')) return;
+            fetch('<?php echo Uri::create('admin/billing/generate_recurring_invoice'); ?>', window.coreAppFetchOptions({ id: profile.id }))
+                .then(res => res.json())
+                .then(data => {
+                    if (data.error) { this.error = data.error; return; }
+                    this.invoices = data.invoices || this.invoices;
+                    this.recurringProfiles = data.recurring_profiles || this.recurringProfiles;
+                    this.recurringRuns = data.recurring_runs || this.recurringRuns;
+                    this.stats = data.stats || this.stats;
+                    if (data.invoice_id) this.load(data.invoice_id, profile.id);
+                });
         },
         saveInvoice: function() {
             fetch('<?php echo Uri::create('admin/billing/save_invoice'); ?>', window.coreAppFetchOptions(this.invoiceForm))
@@ -792,6 +1060,15 @@ new Vue({
         },
         money: function(value, currency) {
             return new Intl.NumberFormat('es-MX', { style: 'currency', currency: currency || 'MXN' }).format(parseFloat(value || 0));
+        },
+        recurringFrequencyLabel: function(value) {
+            return ({ weekly: 'Semanal', biweekly: 'Quincenal', monthly: 'Mensual', quarterly: 'Trimestral', yearly: 'Anual' })[value] || value;
+        },
+        recurringStatusLabel: function(value) {
+            return ({ active: 'Activo', paused: 'Pausado', finished: 'Terminado' })[value] || value;
+        },
+        productTypeLabel: function(value) {
+            return ({ product: 'Producto', service: 'Servicio', rental: 'Renta' })[value] || value;
         }
     }
 });

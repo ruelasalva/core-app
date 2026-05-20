@@ -46,6 +46,7 @@ return array (
         40 => '041_create_purchase_cfdi_line_mappings',
         41 => '042_create_core_accounting_tables',
         42 => '043_create_core_crm_tables',
+        43 => '044_create_billing_recurring_and_service_products',
       ),
     ),
     'module' => array(    

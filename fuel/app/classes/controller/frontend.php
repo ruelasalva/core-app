@@ -544,6 +544,8 @@ class Controller_Frontend extends Controller_Template
             ->from('core_commerce_products')
             ->where('active', 1)
             ->where('published', 1)
+            ->where('product_type', 'product')
+            ->where('is_internal_service', 0)
             ->where_open()
                 ->where('featured', 1)
                 ->or_where('show_in_home', 1)
@@ -639,7 +641,9 @@ class Controller_Frontend extends Controller_Template
             ->join(array('core_commerce_subcategories', 's'), 'left')
                 ->on('p.subcategory_id', '=', 's.id')
             ->where('p.active', 1)
-            ->where('p.published', 1);
+            ->where('p.published', 1)
+            ->where('p.product_type', 'product')
+            ->where('p.is_internal_service', 0);
 
         # FILTRO POR BUSQUEDA
         if (!empty($filters['q'])) {
@@ -871,6 +875,8 @@ class Controller_Frontend extends Controller_Template
             ->where('p.slug', $slug)
             ->where('p.active', 1)
             ->where('p.published', 1)
+            ->where('p.product_type', 'product')
+            ->where('p.is_internal_service', 0)
             ->execute()
             ->as_array();
 
@@ -963,6 +969,8 @@ class Controller_Frontend extends Controller_Template
                 ->where('r.active', '=', 1)
                 ->where('p.active', '=', 1)
                 ->where('p.published', '=', 1)
+                ->where('p.product_type', '=', 'product')
+                ->where('p.is_internal_service', '=', 0)
                 ->order_by('r.sort_order', 'asc')
                 ->order_by('r.id', 'asc')
                 ->limit(8)
@@ -996,6 +1004,8 @@ class Controller_Frontend extends Controller_Template
                     ->on('p.category_id', '=', 'c.id')
                 ->where('p.active', '=', 1)
                 ->where('p.published', '=', 1)
+                ->where('p.product_type', '=', 'product')
+                ->where('p.is_internal_service', '=', 0)
                 ->where('p.id', 'not in', array_keys($seen))
                 ->where_open();
 

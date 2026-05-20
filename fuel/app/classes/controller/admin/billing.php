@@ -58,6 +58,9 @@ class Controller_Admin_Billing extends Controller_Adminbase
             # SE REGRESA INFORMACION PARA VUE
             return $this->json_response([
                 'invoices' => $this->get_invoices(),
+                'recurring_profiles' => $this->get_recurring_profiles(),
+                'recurring_items' => $this->get_recurring_items((int) \Input::get('recurring_profile_id', 0)),
+                'recurring_runs' => $this->get_recurring_runs(),
                 'pending_deliveries' => $this->get_pending_deliveries(),
                 'items' => $this->get_items((int) \Input::get('invoice_id', 0)),
                 'options' => $this->get_options(),
@@ -375,6 +378,223 @@ class Controller_Admin_Billing extends Controller_Adminbase
         }
     }
 
+    public function action_save_recurring_profile()
+    {
+        $this->require_access('billing.access[edit]');
+        $val = (array) \Input::json();
+
+        try {
+            $name = trim((string) \Arr::get($val, 'name', ''));
+            $party_id = (int) \Arr::get($val, 'party_id', 0);
+            if ($name === '' || $party_id < 1) {
+                return $this->json_response(['error' => 'Nombre y cliente son obligatorios.'], 422);
+            }
+
+            $start_date = trim((string) \Arr::get($val, 'start_date', date('Y-m-d')));
+            $next_run_date = trim((string) \Arr::get($val, 'next_run_date', $start_date));
+            $data = [
+                'name' => $name,
+                'party_id' => $party_id,
+                'invoice_type' => $this->codeify(\Arr::get($val, 'invoice_type', 'sale')),
+                'frequency' => $this->recurring_frequency(\Arr::get($val, 'frequency', 'monthly')),
+                'start_date' => $start_date,
+                'end_date' => trim((string) \Arr::get($val, 'end_date', '')),
+                'next_run_date' => $next_run_date ?: $start_date,
+                'auto_stamp' => (int) (bool) \Arr::get($val, 'auto_stamp', false),
+                'pac_connection_id' => (int) \Arr::get($val, 'pac_connection_id', 0),
+                'pac_series_id' => trim((string) \Arr::get($val, 'pac_series_id', '')),
+                'pac_receptor_uid' => trim((string) \Arr::get($val, 'pac_receptor_uid', '')),
+                'currency_code' => strtoupper(substr((string) \Arr::get($val, 'currency_code', 'MXN'), 0, 3)),
+                'exchange_rate' => (float) \Arr::get($val, 'exchange_rate', 1),
+                'payment_term_id' => (int) \Arr::get($val, 'payment_term_id', 0),
+                'sat_cfdi_use_code' => trim((string) \Arr::get($val, 'sat_cfdi_use_code', 'G03')),
+                'sat_payment_form_code' => trim((string) \Arr::get($val, 'sat_payment_form_code', '99')),
+                'sat_payment_method_code' => trim((string) \Arr::get($val, 'sat_payment_method_code', 'PPD')),
+                'notes' => trim((string) \Arr::get($val, 'notes', '')),
+                'status' => $this->recurring_status(\Arr::get($val, 'status', 'active')),
+                'active' => (int) (bool) \Arr::get($val, 'active', true),
+            ];
+
+            $id = (int) \Arr::get($val, 'id', 0);
+            if ($id > 0) {
+                $profile = Model_Core_Billing_Recurring_Profile::find($id);
+                if (!$profile) {
+                    return $this->json_response(['error' => 'Perfil recurrente no encontrado.'], 404);
+                }
+                $old = $profile->to_array();
+                $profile->set($data);
+            } else {
+                $old = [];
+                $data['folio'] = $this->next_recurring_folio();
+                $data['created_by'] = $this->user_id;
+                $profile = Model_Core_Billing_Recurring_Profile::forge($data);
+            }
+            $profile->save();
+
+            Helper_Core_Audit::log([
+                'module' => 'billing',
+                'action' => $id > 0 ? 'update_recurring_profile' : 'create_recurring_profile',
+                'business_event' => 'billing.recurring_profile_saved',
+                'entity_type' => 'billing_recurring_profile',
+                'entity_id' => (int) $profile->id,
+                'table_name' => 'core_billing_recurring_profiles',
+                'summary' => 'Perfil recurrente '.$profile->folio.' '.$profile->name,
+                'old_values' => $old,
+                'new_values' => $profile->to_array(),
+            ]);
+
+            return $this->recurring_response((int) $profile->id);
+        } catch (\Exception $e) {
+            \Log::error('Error guardando perfil recurrente: '.$e->getMessage());
+            return $this->json_response(['error' => 'No se pudo guardar el perfil recurrente.'], 400);
+        }
+    }
+
+    public function action_save_recurring_item()
+    {
+        $this->require_access('billing.access[edit]');
+        $val = (array) \Input::json();
+
+        try {
+            $profile_id = (int) \Arr::get($val, 'profile_id', 0);
+            if ($profile_id < 1 || !Model_Core_Billing_Recurring_Profile::find($profile_id)) {
+                return $this->json_response(['error' => 'Perfil recurrente invalido.'], 422);
+            }
+            if (trim((string) \Arr::get($val, 'description', '')) === '') {
+                return $this->json_response(['error' => 'La descripcion del concepto es obligatoria.'], 422);
+            }
+
+            $data = [
+                'profile_id' => $profile_id,
+                'product_id' => (int) \Arr::get($val, 'product_id', 0),
+                'sat_product_service_code' => trim((string) \Arr::get($val, 'sat_product_service_code', '01010101')),
+                'description' => trim((string) \Arr::get($val, 'description', '')),
+                'quantity' => max(0, (float) \Arr::get($val, 'quantity', 1)),
+                'unit_code' => trim((string) \Arr::get($val, 'unit_code', 'E48')),
+                'sat_object_tax_code' => trim((string) \Arr::get($val, 'sat_object_tax_code', '02')),
+                'unit_price' => max(0, (float) \Arr::get($val, 'unit_price', 0)),
+                'discount_amount' => max(0, (float) \Arr::get($val, 'discount_amount', 0)),
+                'tax_code' => trim((string) \Arr::get($val, 'tax_code', 'iva_16')),
+                'tax_factor_type' => trim((string) \Arr::get($val, 'tax_factor_type', 'Tasa')),
+                'tax_rate' => max(0, (float) \Arr::get($val, 'tax_rate', 0)),
+                'retention_tax_code' => trim((string) \Arr::get($val, 'retention_tax_code', '')),
+                'retention_rate' => max(0, (float) \Arr::get($val, 'retention_rate', 0)),
+                'retention_amount' => max(0, (float) \Arr::get($val, 'retention_amount', 0)),
+                'sort_order' => (int) \Arr::get($val, 'sort_order', 0),
+                'active' => (int) (bool) \Arr::get($val, 'active', true),
+            ];
+
+            $id = (int) \Arr::get($val, 'id', 0);
+            if ($id > 0) {
+                $item = Model_Core_Billing_Recurring_Item::find($id);
+                if (!$item) {
+                    return $this->json_response(['error' => 'Concepto recurrente no encontrado.'], 404);
+                }
+                $item->set($data);
+            } else {
+                $item = Model_Core_Billing_Recurring_Item::forge($data);
+            }
+            $item->save();
+
+            return $this->recurring_response($profile_id);
+        } catch (\Exception $e) {
+            \Log::error('Error guardando concepto recurrente: '.$e->getMessage());
+            return $this->json_response(['error' => 'No se pudo guardar el concepto recurrente.'], 400);
+        }
+    }
+
+    public function action_generate_recurring_invoice()
+    {
+        $this->require_access('billing.access[edit]');
+        $val = (array) \Input::json();
+        $transaction_started = false;
+
+        try {
+            $profile = Model_Core_Billing_Recurring_Profile::find((int) \Arr::get($val, 'id', 0));
+            if (!$profile || (int) $profile->active !== 1) {
+                return $this->json_response(['error' => 'Perfil recurrente no encontrado o inactivo.'], 404);
+            }
+            if ($profile->status !== 'active') {
+                return $this->json_response(['error' => 'El perfil recurrente no esta activo.'], 422);
+            }
+
+            $run_date = trim((string) \Arr::get($val, 'run_date', $profile->next_run_date ?: date('Y-m-d')));
+            if ($profile->end_date && $run_date > $profile->end_date) {
+                return $this->json_response(['error' => 'La fecha de ejecucion rebasa el fin del contrato.'], 422);
+            }
+
+            $items = $this->get_recurring_items((int) $profile->id);
+            if (empty($items)) {
+                return $this->json_response(['error' => 'Agrega al menos un concepto al perfil recurrente.'], 422);
+            }
+
+            \DB::start_transaction();
+            $transaction_started = true;
+            $invoice = Model_Core_Billing_Invoice::forge($this->invoice_defaults([
+                'folio' => $this->next_invoice_folio(),
+                'invoice_type' => (string) $profile->invoice_type,
+                'party_id' => (int) $profile->party_id,
+                'cfdi_id' => 0,
+                'pac_provider_code' => 'factura_com',
+                'pac_connection_id' => (int) $profile->pac_connection_id,
+                'pac_series_id' => (string) $profile->pac_series_id,
+                'pac_receptor_uid' => (string) $profile->pac_receptor_uid,
+                'source_module' => 'billing_recurring',
+                'source_entity_type' => 'billing_recurring_profile',
+                'source_entity_id' => (int) $profile->id,
+                'issue_date' => $run_date,
+                'due_date' => '',
+                'currency_code' => (string) $profile->currency_code,
+                'exchange_rate' => (float) $profile->exchange_rate,
+                'payment_term_id' => (int) $profile->payment_term_id,
+                'sat_cfdi_use_code' => (string) $profile->sat_cfdi_use_code,
+                'sat_payment_form_code' => (string) $profile->sat_payment_form_code,
+                'sat_payment_method_code' => (string) $profile->sat_payment_method_code,
+                'status' => 'draft',
+                'notes' => 'Factura recurrente '.$profile->folio.' - '.$profile->name,
+                'created_by' => $this->user_id,
+                'active' => 1,
+            ]));
+            $invoice->save();
+
+            foreach ($items as $row) {
+                $this->create_invoice_item_from_recurring((int) $invoice->id, $row);
+            }
+            $this->recalculate_invoice((int) $invoice->id);
+
+            Model_Core_Billing_Recurring_Run::forge([
+                'profile_id' => (int) $profile->id,
+                'invoice_id' => (int) $invoice->id,
+                'run_date' => $run_date,
+                'status' => 'created',
+                'message' => 'Factura '.$invoice->folio.' creada como borrador.',
+            ])->save();
+
+            $profile->last_run_at = time();
+            $profile->next_run_date = $this->next_recurring_date($run_date, (string) $profile->frequency);
+            $profile->save();
+            \DB::commit_transaction();
+
+            $this->log_invoice_event((int) $invoice->id, 'recurring_create', 'Factura creada desde perfil recurrente '.$profile->folio, ['profile_id' => (int) $profile->id, 'run_date' => $run_date]);
+
+            return $this->json_response([
+                'status' => 'ok',
+                'invoice_id' => (int) $invoice->id,
+                'folio' => (string) $invoice->folio,
+                'invoices' => $this->get_invoices(),
+                'recurring_profiles' => $this->get_recurring_profiles(),
+                'recurring_runs' => $this->get_recurring_runs(),
+                'stats' => $this->get_stats(),
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error generando factura recurrente: '.$e->getMessage());
+            if ($transaction_started) {
+                \DB::rollback_transaction();
+            }
+            return $this->json_response(['error' => 'No se pudo generar factura recurrente: '.$e->getMessage()], 400);
+        }
+    }
+
     public function action_create_from_delivery()
     {
         $this->require_access('billing.access[edit]');
@@ -557,6 +777,54 @@ class Controller_Admin_Billing extends Controller_Adminbase
         return $items;
     }
 
+    protected function get_recurring_profiles()
+    {
+        if (!\DBUtil::table_exists('core_billing_recurring_profiles')) {
+            return [];
+        }
+
+        return \DB::select(['r.id', 'id'], ['r.folio', 'folio'], ['r.name', 'name'], ['r.party_id', 'party_id'], ['p.name', 'party_name'], ['r.invoice_type', 'invoice_type'], ['r.frequency', 'frequency'], ['r.start_date', 'start_date'], ['r.end_date', 'end_date'], ['r.next_run_date', 'next_run_date'], ['r.last_run_at', 'last_run_at'], ['r.auto_stamp', 'auto_stamp'], ['r.pac_connection_id', 'pac_connection_id'], ['r.pac_series_id', 'pac_series_id'], ['r.pac_receptor_uid', 'pac_receptor_uid'], ['r.currency_code', 'currency_code'], ['r.exchange_rate', 'exchange_rate'], ['r.payment_term_id', 'payment_term_id'], ['r.sat_cfdi_use_code', 'sat_cfdi_use_code'], ['r.sat_payment_form_code', 'sat_payment_form_code'], ['r.sat_payment_method_code', 'sat_payment_method_code'], ['r.notes', 'notes'], ['r.status', 'status'], ['r.active', 'active'])
+            ->from(['core_billing_recurring_profiles', 'r'])
+            ->join(['core_parties', 'p'], 'left')->on('r.party_id', '=', 'p.id')
+            ->where('r.active', '=', 1)
+            ->order_by('r.next_run_date', 'asc')
+            ->order_by('r.id', 'desc')
+            ->limit(200)
+            ->execute()
+            ->as_array();
+    }
+
+    protected function get_recurring_items($profile_id)
+    {
+        if ($profile_id < 1 || !\DBUtil::table_exists('core_billing_recurring_items')) {
+            return [];
+        }
+
+        return \DB::select()->from('core_billing_recurring_items')
+            ->where('profile_id', '=', (int) $profile_id)
+            ->where('active', '=', 1)
+            ->order_by('sort_order', 'asc')
+            ->order_by('id', 'asc')
+            ->execute()
+            ->as_array();
+    }
+
+    protected function get_recurring_runs()
+    {
+        if (!\DBUtil::table_exists('core_billing_recurring_runs')) {
+            return [];
+        }
+
+        return \DB::select(['rr.id', 'id'], ['rr.profile_id', 'profile_id'], ['rp.folio', 'profile_folio'], ['rp.name', 'profile_name'], ['rr.invoice_id', 'invoice_id'], ['i.folio', 'invoice_folio'], ['rr.run_date', 'run_date'], ['rr.status', 'status'], ['rr.message', 'message'], ['rr.created_at', 'created_at'])
+            ->from(['core_billing_recurring_runs', 'rr'])
+            ->join(['core_billing_recurring_profiles', 'rp'], 'left')->on('rr.profile_id', '=', 'rp.id')
+            ->join(['core_billing_invoices', 'i'], 'left')->on('rr.invoice_id', '=', 'i.id')
+            ->order_by('rr.id', 'desc')
+            ->limit(100)
+            ->execute()
+            ->as_array();
+    }
+
     protected function get_pending_deliveries()
     {
         if (!\DBUtil::table_exists('core_sales_deliveries')) {
@@ -638,6 +906,8 @@ class Controller_Admin_Billing extends Controller_Adminbase
                 'currency_code',
                 'price',
                 'tax_code',
+                'product_type',
+                'is_internal_service',
                 'stock_quantity',
                 'stock_reserved',
                 'main_image_path'
@@ -660,6 +930,8 @@ class Controller_Admin_Billing extends Controller_Adminbase
                 'currency_code' => (string) $row['currency_code'],
                 'price' => (float) $row['price'],
                 'tax_code' => (string) $row['tax_code'],
+                'product_type' => (string) $row['product_type'],
+                'is_internal_service' => (int) $row['is_internal_service'],
                 'tax_rate' => $this->tax_rate((string) $row['tax_code']),
                 'stock_quantity' => $stock,
                 'stock_reserved' => $reserved,
@@ -701,6 +973,8 @@ class Controller_Admin_Billing extends Controller_Adminbase
             'stamped' => (int) \DB::select()->from('core_billing_invoices')->where('status', '=', 'stamped')->execute()->count(),
             'cancelled' => (int) \DB::select()->from('core_billing_invoices')->where('status', '=', 'cancelled')->execute()->count(),
             'pending_deliveries' => \DBUtil::table_exists('core_sales_deliveries') ? (int) \DB::select()->from('core_sales_deliveries')->where('active', '=', 1)->where('billing_invoice_id', '=', 0)->execute()->count() : 0,
+            'recurring_profiles' => \DBUtil::table_exists('core_billing_recurring_profiles') ? (int) \DB::select()->from('core_billing_recurring_profiles')->where('active', '=', 1)->execute()->count() : 0,
+            'recurring_due' => \DBUtil::table_exists('core_billing_recurring_profiles') ? (int) \DB::select()->from('core_billing_recurring_profiles')->where('active', '=', 1)->where('status', '=', 'active')->where('next_run_date', '<=', date('Y-m-d'))->execute()->count() : 0,
         ];
     }
 
@@ -1142,6 +1416,85 @@ class Controller_Admin_Billing extends Controller_Adminbase
         return 'FAC-'.date('Ymd').'-'.str_pad((string) ((int) \DB::count_records('core_billing_invoices') + 1), 5, '0', STR_PAD_LEFT);
     }
 
+    protected function next_recurring_folio()
+    {
+        return 'REC-'.date('Ymd').'-'.str_pad((string) ((int) \DB::count_records('core_billing_recurring_profiles') + 1), 5, '0', STR_PAD_LEFT);
+    }
+
+    protected function recurring_response($profile_id)
+    {
+        return $this->json_response([
+            'status' => 'ok',
+            'recurring_profiles' => $this->get_recurring_profiles(),
+            'recurring_items' => $this->get_recurring_items($profile_id),
+            'recurring_runs' => $this->get_recurring_runs(),
+            'stats' => $this->get_stats(),
+        ]);
+    }
+
+    protected function create_invoice_item_from_recurring($invoice_id, array $row)
+    {
+        $quantity = max(0, (float) $row['quantity']);
+        $unit_price = max(0, (float) $row['unit_price']);
+        $discount = max(0, (float) $row['discount_amount']);
+        $tax_rate = max(0, (float) $row['tax_rate']);
+        $base = max(0, ($quantity * $unit_price) - $discount);
+        $tax_amount = round($base * $tax_rate, 2);
+        $retention = max(0, (float) $row['retention_amount']);
+
+        Model_Core_Billing_Invoice_Item::forge([
+            'invoice_id' => (int) $invoice_id,
+            'product_id' => (int) $row['product_id'],
+            'sat_product_service_code' => (string) $row['sat_product_service_code'],
+            'description' => (string) $row['description'],
+            'quantity' => $quantity,
+            'unit_code' => (string) $row['unit_code'],
+            'sat_object_tax_code' => (string) $row['sat_object_tax_code'],
+            'unit_price' => $unit_price,
+            'discount_amount' => $discount,
+            'tax_code' => (string) $row['tax_code'],
+            'tax_factor_type' => (string) $row['tax_factor_type'],
+            'tax_rate' => $tax_rate,
+            'tax_amount' => $tax_amount,
+            'retention_amount' => $retention,
+            'retention_tax_code' => (string) $row['retention_tax_code'],
+            'retention_rate' => (float) $row['retention_rate'],
+            'line_total' => round($base + $tax_amount - $retention, 2),
+            'sort_order' => (int) $row['sort_order'],
+            'active' => 1,
+        ])->save();
+    }
+
+    protected function next_recurring_date($date, $frequency)
+    {
+        $base = strtotime($date) ?: time();
+        switch ($this->recurring_frequency($frequency)) {
+            case 'weekly':
+                return date('Y-m-d', strtotime('+1 week', $base));
+            case 'biweekly':
+                return date('Y-m-d', strtotime('+2 weeks', $base));
+            case 'quarterly':
+                return date('Y-m-d', strtotime('+3 months', $base));
+            case 'yearly':
+                return date('Y-m-d', strtotime('+1 year', $base));
+            case 'monthly':
+            default:
+                return date('Y-m-d', strtotime('+1 month', $base));
+        }
+    }
+
+    protected function recurring_frequency($value)
+    {
+        $value = $this->codeify($value);
+        return in_array($value, ['weekly', 'biweekly', 'monthly', 'quarterly', 'yearly'], true) ? $value : 'monthly';
+    }
+
+    protected function recurring_status($value)
+    {
+        $value = $this->codeify($value);
+        return in_array($value, ['active', 'paused', 'finished'], true) ? $value : 'active';
+    }
+
     protected function assert_schema_ready()
     {
         foreach (['core_billing_invoices', 'core_billing_invoice_items', 'core_billing_invoice_events'] as $table) {
@@ -1149,8 +1502,16 @@ class Controller_Admin_Billing extends Controller_Adminbase
                 throw new \RuntimeException('Falta ejecutar migraciones de facturacion.');
             }
         }
+        foreach (['core_billing_recurring_profiles', 'core_billing_recurring_items', 'core_billing_recurring_runs'] as $table) {
+            if (!\DBUtil::table_exists($table)) {
+                throw new \RuntimeException('Falta ejecutar migraciones de facturacion recurrente.');
+            }
+        }
         if (!\DBUtil::field_exists('core_billing_invoices', ['pac_provider_code', 'pac_uid', 'uuid'])) {
             throw new \RuntimeException('Falta ejecutar migraciones PAC de facturacion.');
+        }
+        if (!\DBUtil::field_exists('core_commerce_products', ['product_type', 'is_internal_service'])) {
+            throw new \RuntimeException('Falta ejecutar migracion de productos tipo servicio.');
         }
     }
 

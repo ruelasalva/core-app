@@ -330,6 +330,8 @@ class Controller_Admin_Commerce extends Controller_Adminbase
                     ['name' => 'brand_id', 'label' => 'Marca', 'type' => 'select', 'options' => 'brands', 'default' => 0],
                     ['name' => 'category_id', 'label' => 'Categoria', 'type' => 'select', 'options' => 'categories', 'default' => 0],
                     ['name' => 'subcategory_id', 'label' => 'Subcategoria', 'type' => 'select', 'options' => 'subcategories', 'default' => 0],
+                    ['name' => 'product_type', 'label' => 'Tipo', 'type' => 'select', 'options' => 'product_types', 'default' => 'product'],
+                    ['name' => 'is_internal_service', 'label' => 'Servicio interno', 'type' => 'checkbox', 'default' => 0],
                     ['name' => 'unit_code', 'label' => 'Unidad', 'type' => 'select', 'options' => 'units', 'default' => 'pieza'],
                     ['name' => 'currency_code', 'label' => 'Moneda', 'type' => 'select', 'options' => 'currencies', 'default' => 'MXN'],
                     ['name' => 'price', 'label' => 'Precio', 'type' => 'number', 'default' => 0],
@@ -468,6 +470,11 @@ class Controller_Admin_Commerce extends Controller_Adminbase
                 ['value' => 'complement', 'label' => 'Complemento'],
                 ['value' => 'substitute', 'label' => 'Sustituto'],
                 ['value' => 'upsell', 'label' => 'Venta sugerida'],
+            ],
+            'product_types' => [
+                ['value' => 'product', 'label' => 'Producto fisico'],
+                ['value' => 'service', 'label' => 'Servicio'],
+                ['value' => 'rental', 'label' => 'Renta / arrendamiento'],
             ],
         ];
     }

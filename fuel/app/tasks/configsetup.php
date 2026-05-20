@@ -2380,6 +2380,18 @@ class Configsetup
             'updated_at' => time(),
         ]);
 
+        $this->upsert_seed('core_knowledge_articles', 'code', 'facturacion-recurrente', [
+            'code' => 'facturacion-recurrente',
+            'title' => 'Facturacion recurrente',
+            'category' => 'Finanzas',
+            'summary' => 'Programacion de facturas periodicas para rentas, servicios internos y contratos mensuales.',
+            'content' => '<h3>Objetivo</h3><p>Facturacion recurrente permite programar facturas periodicas para rentas de equipo, servicios mensuales y contratos. El sistema genera facturas borrador por fecha de ejecucion y conserva el historial de corridas.</p><h4>Flujo recomendado</h4><ol><li>Da de alta el servicio en <strong>Comercial &gt; Productos</strong> como tipo <strong>Servicio</strong> o <strong>Renta / arrendamiento</strong>.</li><li>Marca <strong>Servicio interno</strong> cuando no deba aparecer en el sitio publico.</li><li>Entra a <strong>Admin &gt; Facturacion</strong> y presiona <strong>Recurrente</strong>.</li><li>Captura cliente, frecuencia, fechas, uso CFDI, forma/metodo de pago y datos PAC Factura.com si aplican.</li><li>Agrega conceptos recurrentes con clave SAT, unidad, precio, IVA y retenciones.</li><li>Cuando llegue la fecha, usa <strong>Generar</strong> para crear la factura borrador del periodo; despues revisa y timbra con Factura.com.</li></ol><h4>Reglas importantes</h4><ul><li>La factura recurrente genera borrador, no descuenta inventario.</li><li>Para rentas o servicios no debe crearse entrega de almacen salvo que exista salida fisica.</li><li>Los servicios internos no aparecen en frontend aunque esten publicados por error.</li><li>El timbrado real sigue pasando por Integraciones/PAC y por las validaciones fiscales de Facturacion.</li></ul>',
+            'sort_order' => 54,
+            'active' => 1,
+            'created_at' => time(),
+            'updated_at' => time(),
+        ]);
+
         $this->upsert_seed('core_knowledge_articles', 'code', 'ventas_pedido_entrega_inventario', [
             'code' => 'ventas_pedido_entrega_inventario',
             'title' => 'Ventas: pedido, entrega e inventario',
