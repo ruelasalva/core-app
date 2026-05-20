@@ -3,7 +3,7 @@
   "short_name": "Core-App",
   "description": "ERP Core-App con soporte base para trabajo sin conexion.",
   "start_url": "./admin",
-  "scope": "./",
+  "scope": "./admin/",
   "display": "standalone",
   "background_color": "#f4f6f9",
   "theme_color": "#0d6efd",

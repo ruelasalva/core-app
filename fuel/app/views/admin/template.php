@@ -458,7 +458,7 @@ window.coreAppJson = function(response) {
 
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', function() {
-        navigator.serviceWorker.register('<?php echo Uri::base(false); ?>sw.js').catch(function() {});
+        navigator.serviceWorker.register('<?php echo Uri::base(false); ?>sw.js', { scope: '<?php echo Uri::base(false); ?>admin/' }).catch(function() {});
     });
 }
 

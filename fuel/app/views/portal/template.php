@@ -114,6 +114,16 @@ window.coreAppJson = function(response) {
         return json;
     });
 };
+
+if ('serviceWorker' in navigator && navigator.serviceWorker.getRegistrations) {
+    navigator.serviceWorker.getRegistrations().then(function(registrations) {
+        registrations.forEach(function(registration) {
+            if (registration.scope.indexOf('/admin/') === -1) {
+                registration.unregister();
+            }
+        });
+    }).catch(function() {});
+}
 </script>
 </body>
 </html>

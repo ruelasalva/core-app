@@ -1,4 +1,4 @@
-const CORE_APP_CACHE = 'core-app-shell-v1';
+const CORE_APP_CACHE = 'core-app-shell-v2';
 const CORE_APP_ASSETS = [
   './assets/css/adminlte.min.css',
   './assets/css/all.min.css',
@@ -30,16 +30,27 @@ self.addEventListener('fetch', event => {
   const request = event.request;
   if (request.method !== 'GET') return;
 
+  const url = new URL(request.url);
+  const scopePath = new URL(self.registration.scope).pathname.replace(/\/+$/, '/');
+  const relativePath = url.pathname.indexOf(scopePath) === 0 ? url.pathname.slice(scopePath.length) : url.pathname.replace(/^\/+/, '');
+  const scopeIsAdmin = scopePath.indexOf('/admin/') >= 0;
+  const isAdminRequest = scopeIsAdmin || relativePath === 'admin' || relativePath.indexOf('admin/') === 0;
+  const isCachedAsset = relativePath.indexOf('assets/') === 0 || relativePath === 'favicon.ico';
+
+  if (!isAdminRequest && !isCachedAsset) {
+    return;
+  }
+
   event.respondWith(
     fetch(request).then(response => {
       const copy = response.clone();
-      if (response.ok && request.url.indexOf('/admin/') >= 0) {
+      if (response.ok && isAdminRequest) {
         caches.open(CORE_APP_CACHE).then(cache => cache.put(request, copy)).catch(() => null);
       }
       return response;
     }).catch(() => caches.match(request).then(cached => {
       if (cached) return cached;
-      if (request.mode === 'navigate') {
+      if (request.mode === 'navigate' && isAdminRequest) {
         return new Response('<!doctype html><meta charset="utf-8"><title>Core-App offline</title><body style="font-family:sans-serif;padding:2rem"><h1>Sin conexion</h1><p>Abre una pantalla visitada previamente o vuelve a intentar cuando regrese internet.</p></body>', { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
       }
       return new Response('', { status: 503, statusText: 'Offline' });
