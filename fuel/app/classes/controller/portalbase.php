@@ -100,7 +100,7 @@ class Controller_Portalbase extends Controller_Template
     {
         # SE CARGA LA VISTA COMUN DE HELPDESK PARA PORTALES
         $this->template->title = 'Helpdesk';
-        $this->template->content = View::forge('portal/helpdesk', [
+        $this->template->content = View::forge($this->portal_code.'/helpdesk/index', [
             'portal_code' => $this->portal_code,
             'party' => $this->party,
         ]);
@@ -117,7 +117,7 @@ class Controller_Portalbase extends Controller_Template
     public function action_perfil()
     {
         $this->template->title = 'Mi cuenta';
-        $this->template->content = View::forge('portal/profile', [
+        $this->template->content = View::forge($this->portal_code.'/perfil/index', [
             'portal_code' => $this->portal_code,
             'party' => $this->party,
         ]);

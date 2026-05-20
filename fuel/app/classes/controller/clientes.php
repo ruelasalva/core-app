@@ -21,7 +21,7 @@ class Controller_Clientes extends Controller_Clientes_Cotizaciones
     public function action_index()
     {
         $this->template->title = 'Portal clientes';
-        $this->template->content = View::forge('portal/clientes', [
+        $this->template->content = View::forge('clientes/cotizaciones/index', [
             'party' => $this->party,
         ]);
     }
@@ -47,7 +47,7 @@ class Controller_Clientes extends Controller_Clientes_Cotizaciones
     public function action_cfdi()
     {
         $this->template->title = 'CFDI emitidos';
-        $this->template->content = View::forge('portal/cfdi', [
+        $this->template->content = View::forge('clientes/cfdi/index', [
             'portal_code' => $this->portal_code,
             'portal_direction' => 'customer',
             'portal_title' => 'CFDI de cliente',

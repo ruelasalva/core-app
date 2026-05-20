@@ -21,7 +21,7 @@ class Controller_Socios extends Controller_Socios_Helpdesk
     public function action_index()
     {
         $this->template->title = 'Socios';
-        $this->template->content = View::forge('portal/dashboard', ['portal_label' => 'Socios']);
+        $this->template->content = View::forge('socios/dashboard/index', ['portal_label' => 'Socios']);
     }
 
 }

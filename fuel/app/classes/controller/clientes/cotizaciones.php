@@ -26,7 +26,7 @@ class Controller_Clientes_Cotizaciones extends Controller_Clientes_Base
     public function action_quotes()
     {
         $this->template->title = 'Cotizaciones';
-        $this->template->content = View::forge('portal/clientes', [
+        $this->template->content = View::forge('clientes/cotizaciones/index', [
             'party' => $this->party,
             'initial_tab' => 'quotes',
         ]);
