@@ -141,13 +141,13 @@ class Controller_Proveedores extends Controller_Proveedores_Compras
     public function action_index()
     {
         $this->template->title = 'Proveedores';
-        $this->template->content = View::forge('proveedores/dashboard/index', ['portal_label' => 'Proveedores']);
+        $this->template->content = $this->portal_view('dashboard', 'portales/dashboard/index', ['portal_label' => 'Proveedores']);
     }
 
     public function action_cfdi()
     {
         $this->template->title = 'CFDI recibidos';
-        $this->template->content = View::forge('proveedores/cfdi/index', [
+        $this->template->content = $this->portal_view('cfdi', 'portales/cfdi/index', [
             'portal_code' => $this->portal_code,
             'portal_direction' => 'supplier',
             'portal_title' => 'CFDI de proveedor',

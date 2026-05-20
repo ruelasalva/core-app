@@ -47,7 +47,7 @@ class Controller_Clientes extends Controller_Clientes_Cotizaciones
     public function action_cfdi()
     {
         $this->template->title = 'CFDI emitidos';
-        $this->template->content = View::forge('clientes/cfdi/index', [
+        $this->template->content = $this->portal_view('cfdi', 'portales/cfdi/index', [
             'portal_code' => $this->portal_code,
             'portal_direction' => 'customer',
             'portal_title' => 'CFDI de cliente',

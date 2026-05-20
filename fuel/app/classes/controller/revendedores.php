@@ -21,7 +21,7 @@ class Controller_Revendedores extends Controller_Revendedores_Clientes
     public function action_index()
     {
         $this->template->title = 'Revendedores';
-        $this->template->content = View::forge('revendedores/dashboard/index', ['portal_label' => 'Revendedores']);
+        $this->template->content = $this->portal_view('dashboard', 'portales/dashboard/index', ['portal_label' => 'Revendedores']);
     }
 
     /**

@@ -89,6 +89,23 @@ class Controller_Portalbase extends Controller_Template
     }
 
     /**
+     * PORTAL VIEW
+     *
+     * RESUELVE PRIMERO LA VISTA MVC DEL PORTAL Y USA UNA VISTA COMUN COMO RESPALDO.
+     *
+     * @access  protected
+     * @return  View
+     */
+    protected function portal_view($section, $fallback, array $data = [])
+    {
+        $candidate = $this->portal_code.'/'.$section.'/index';
+        $candidate_path = APPPATH.'views'.DS.str_replace('/', DS, $candidate).'.php';
+        $view = is_file($candidate_path) ? $candidate : $fallback;
+
+        return View::forge($view, $data);
+    }
+
+    /**
      * HELPDESK
      *
      * MUESTRA LOS TICKETS DEL TERCERO EN EL PORTAL ACTUAL
@@ -100,7 +117,7 @@ class Controller_Portalbase extends Controller_Template
     {
         # SE CARGA LA VISTA COMUN DE HELPDESK PARA PORTALES
         $this->template->title = 'Helpdesk';
-        $this->template->content = View::forge($this->portal_code.'/helpdesk/index', [
+        $this->template->content = $this->portal_view('helpdesk', 'portales/helpdesk/index', [
             'portal_code' => $this->portal_code,
             'party' => $this->party,
         ]);
@@ -117,7 +134,7 @@ class Controller_Portalbase extends Controller_Template
     public function action_perfil()
     {
         $this->template->title = 'Mi cuenta';
-        $this->template->content = View::forge($this->portal_code.'/perfil/index', [
+        $this->template->content = $this->portal_view('perfil', 'portales/perfil/index', [
             'portal_code' => $this->portal_code,
             'party' => $this->party,
         ]);
