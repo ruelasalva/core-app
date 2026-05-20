@@ -21,7 +21,7 @@ class Controller_Proveedores_Compras extends Controller_Proveedores_Base
     public function action_index()
     {
         $this->template->title = 'Compras';
-        $this->template->content = View::forge('portal/purchases', ['portal_code' => $this->portal_code]);
+        $this->template->content = View::forge('proveedores/compras/index', ['portal_code' => $this->portal_code]);
     }
 
     /**
