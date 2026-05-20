@@ -27,6 +27,7 @@ class Configsetup
             $this->seed_helpdesk();
             $this->seed_purchases();
             $this->seed_calendar();
+            $this->seed_dashboards();
             $this->seed_frontend();
             $this->seed_knowledge();
             $this->sync_groups();
@@ -58,6 +59,7 @@ class Configsetup
             echo " - Helpdesk base\n";
             echo " - Compras y portal proveedores base\n";
             echo " - Calendario y sala de juntas base\n";
+            echo " - Dashboards base\n";
             echo " - Frontend administrable base\n";
             echo " - Ayuda y conocimiento base\n";
             echo " - Grupos de acceso recomendados\n";
@@ -1589,6 +1591,31 @@ class Configsetup
         ]);
     }
 
+    protected function seed_dashboards()
+    {
+        if (!\DBUtil::table_exists('core_dashboards')) {
+            return;
+        }
+
+        $dashboards = [
+            ['generic', 'Dashboard generico', 'Panel base sin informacion sensible.', 'generic'],
+            ['executive_commercial', 'Dashboard ejecutivo comercial', 'Ventas, inventario, cobranza, credito y tendencias.', 'executive_commercial'],
+        ];
+
+        foreach ($dashboards as $dashboard) {
+            $this->upsert_seed('core_dashboards', 'code', $dashboard[0], [
+                'code' => $dashboard[0],
+                'name' => $dashboard[1],
+                'description' => $dashboard[2],
+                'dashboard_type' => $dashboard[3],
+                'config_json' => null,
+                'active' => 1,
+                'created_at' => time(),
+                'updated_at' => time(),
+            ]);
+        }
+    }
+
     protected function seed_frontend()
     {
         $this->insert_if_missing('core_frontend_themes', 'code', 'core_default', [
@@ -2399,6 +2426,18 @@ class Configsetup
             'summary' => 'Base para separar operacion ERP de documentos fiscales timbrables o solo internos.',
             'content' => '<h3>Objetivo</h3><p>Core-App separa el documento operativo del documento fiscal. Una venta, pago, nota, traslado o devolucion puede afectar el ERP sin timbrarse, o puede preparar un CFDI para timbrado con PAC.</p><h4>Documentos contemplados</h4><ul><li><strong>Factura</strong>: nace normalmente desde entrega o facturacion directa.</li><li><strong>Complemento de pago REP</strong>: nace desde Pagos y Bancos cuando se cobra una factura PPD.</li><li><strong>Nota de credito/devolucion</strong>: puede timbrarse como egreso o quedar como ajuste interno.</li><li><strong>Carta porte / traslado</strong>: nace desde inventario/logistica cuando el movimiento requiere CFDI de traslado.</li><li><strong>Retencion</strong>: queda preparada para pagos o servicios donde aplique constancia fiscal.</li></ul><h4>Regla clave</h4><p>El campo <code>fiscal_mode</code> decide si el movimiento es <strong>solo sistema</strong>, <strong>fiscal requerido</strong> o <strong>fiscal opcional</strong>. El timbrado real siempre debe pasar por Integraciones/PAC y conservar payload, respuesta, UUID y estado SAT.</p><h4>Pagos PPD</h4><p>Cuando una factura PPD se cobra en Pagos y Bancos, el usuario puede elegir si el cobro solo afecta saldos internos o si genera un REP fiscal pendiente. Esto evita timbrar movimientos que no deban timbrarse y mantiene visible lo que si requiere complemento.</p>',
             'sort_order' => 56,
+            'active' => 1,
+            'created_at' => time(),
+            'updated_at' => time(),
+        ]);
+
+        $this->upsert_seed('core_knowledge_articles', 'code', 'dashboards_asignables', [
+            'code' => 'dashboards_asignables',
+            'title' => 'Dashboards asignables',
+            'category' => 'Administracion',
+            'summary' => 'Tableros genericos y ejecutivos asignados por usuario.',
+            'content' => '<h3>Objetivo</h3><p>El sistema permite que cada usuario tenga dashboards segun su rol. El tablero generico no expone informacion sensible; el tablero ejecutivo concentra ventas, inventario, cobranza y tendencias.</p><h4>Asignacion</h4><ol><li>Entra a <strong>Admin &gt; Usuarios</strong>.</li><li>Abre <strong>Dashboards</strong> en el usuario.</li><li>Selecciona los tableros que puede ver y guarda.</li></ol><h4>Dashboard ejecutivo comercial</h4><ul><li>Ventas recientes por zona, producto y canal.</li><li>Inventario con alertas por bajo stock o existencia negativa.</li><li>Cobranza con saldos pendientes, vencidos y dias de credito.</li><li>Tendencias mensuales para apoyar decisiones.</li></ul>',
+            'sort_order' => 57,
             'active' => 1,
             'created_at' => time(),
             'updated_at' => time(),

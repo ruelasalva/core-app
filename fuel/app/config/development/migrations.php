@@ -48,6 +48,8 @@ return array (
         42 => '043_create_core_crm_tables',
         43 => '044_create_billing_recurring_and_service_products',
         44 => '045_create_core_fiscal_documents',
+        45 => '046_create_core_dashboard_assignments',
+        46 => '047_add_product_stock_min',
       ),
     ),
     'module' => array(    

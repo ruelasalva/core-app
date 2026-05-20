@@ -42,6 +42,9 @@
                                 <button class="btn btn-xs btn-info" @click="openSpecialPermissions(user)" title="Permisos Especiales">
                                     <i class="fas fa-key"></i>
                                 </button>
+                                <button class="btn btn-xs btn-secondary" @click="openDashboards(user)" title="Dashboards">
+                                    <i class="fas fa-chart-line"></i>
+                                </button>
                             </td>
                         </tr>
                     </tbody>
@@ -136,6 +139,32 @@
             </div>
         </div>
     </div>
+
+    <div class="modal fade" id="modal-dashboards" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-secondary text-white">
+                    <h5 class="modal-title"><i class="fas fa-chart-line mr-2"></i> Dashboards: {{ selectedUser.username }}</h5>
+                    <button type="button" class="close" @click="closeDashboardModal"><span>&times;</span></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted">Asigna tableros segun el rol. Sin asignacion, el usuario vera solo el dashboard generico.</p>
+                    <div class="list-group">
+                        <label class="list-group-item" v-for="dashboard in dashboards" :key="dashboard.id">
+                            <input type="checkbox" class="mr-2" :value="dashboard.id" v-model="assignedDashboards">
+                            <strong>{{ dashboard.name }}</strong>
+                            <span class="badge badge-light ml-2">{{ dashboard.dashboard_type }}</span>
+                            <div class="text-muted small">{{ dashboard.description }}</div>
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @click="closeDashboardModal">Cerrar</button>
+                    <button type="button" class="btn btn-primary" @click="saveDashboards">Guardar dashboards</button>
+                </div>
+            </div>
+        </div>
+    </div>
 </div> 
 <script>
 window.onload = function() {
@@ -150,6 +179,8 @@ window.onload = function() {
             permissions: [],    
             selectedUser: {},   
             specialPerms: [],   
+            dashboards: [],
+            assignedDashboards: [],
             // Formulario único para Nuevo/Editar
             form: { 
                 id: null,
@@ -164,6 +195,7 @@ window.onload = function() {
             this.fetchUsers();
             this.fetchGroups();
             this.fetchCatalogPermissions();
+            this.fetchDashboards();
         },
         methods: {
             // --- GESTIÓN DE USUARIOS ---
@@ -186,6 +218,11 @@ window.onload = function() {
                 this.isEditing = false;
                 this.resetForm();
                 this.showModal('modal-user');
+            },
+            fetchDashboards() {
+                fetch('<?php echo Uri::create('admin/users/dashboards'); ?>')
+                    .then(res => res.json())
+                    .then(data => { this.dashboards = data.dashboards || []; });
             },
             editUser(user) {
                 this.isEditing = true;
@@ -269,6 +306,31 @@ window.onload = function() {
                         alert("Excepciones aplicadas correctamente.");
                     }
                 });
+            },
+            openDashboards(user) {
+                this.selectedUser = user;
+                this.assignedDashboards = [];
+                fetch('<?php echo Uri::create('admin/users/user_dashboards'); ?>/' + user.id)
+                    .then(res => res.json())
+                    .then(data => {
+                        this.assignedDashboards = data.assigned || [];
+                        this.showModal('modal-dashboards');
+                    });
+            },
+            saveDashboards() {
+                fetch('<?php echo Uri::create('admin/users/save_dashboards'); ?>', window.coreAppFetchOptions({
+                    user_id: this.selectedUser.id,
+                    dashboard_ids: this.assignedDashboards
+                }))
+                .then(res => res.json())
+                .then(data => {
+                    if (data.error) { alert('Error: ' + data.error); return; }
+                    this.closeDashboardModal();
+                    alert('Dashboards guardados correctamente.');
+                });
+            },
+            closeDashboardModal() {
+                this.hideModal('modal-dashboards');
             },
             closeSpecialModal() {
                 this.hideModal('modal-special-perms');

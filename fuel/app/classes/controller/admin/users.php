@@ -254,6 +254,79 @@ class Controller_Admin_Users extends Controller_Adminbase
         }
     }
 
+    public function action_dashboards()
+    {
+        $this->require_access('user.access[view]');
+
+        try {
+            return $this->json_response([
+                'dashboards' => $this->dashboard_options(),
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error cargando dashboards de usuario: '.$e->getMessage());
+            return $this->json_response(['error' => 'No se pudieron cargar dashboards.'], 500);
+        }
+    }
+
+    public function action_user_dashboards($id)
+    {
+        $this->require_access('user.access[view]');
+
+        try {
+            $assigned = [];
+            if (\DBUtil::table_exists('core_dashboard_user_assignments')) {
+                $rows = \DB::select('dashboard_id')
+                    ->from('core_dashboard_user_assignments')
+                    ->where('user_id', '=', (int) $id)
+                    ->where('active', '=', 1)
+                    ->execute();
+                foreach ($rows as $row) {
+                    $assigned[] = (int) $row['dashboard_id'];
+                }
+            }
+            return $this->json_response(['assigned' => $assigned]);
+        } catch (\Exception $e) {
+            \Log::error('Error cargando dashboards asignados: '.$e->getMessage());
+            return $this->json_response(['error' => 'No se pudieron cargar dashboards asignados.'], 500);
+        }
+    }
+
+    public function post_save_dashboards()
+    {
+        $this->require_access('user.access[edit]');
+        $val = (array) \Input::json();
+        $user_id = (int) \Arr::get($val, 'user_id', 0);
+        $dashboard_ids = array_map('intval', (array) \Arr::get($val, 'dashboard_ids', []));
+
+        if ($user_id < 1) {
+            return $this->json_response(['error' => 'Usuario invalido.'], 422);
+        }
+
+        try {
+            \DB::delete('core_dashboard_user_assignments')->where('user_id', '=', $user_id)->execute();
+            $now = time();
+            $first = true;
+            foreach (array_unique($dashboard_ids) as $dashboard_id) {
+                if ($dashboard_id < 1) {
+                    continue;
+                }
+                \DB::insert('core_dashboard_user_assignments')->set([
+                    'dashboard_id' => $dashboard_id,
+                    'user_id' => $user_id,
+                    'is_default' => $first ? 1 : 0,
+                    'active' => 1,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ])->execute();
+                $first = false;
+            }
+            return $this->json_response(['status' => 'ok']);
+        } catch (\Exception $e) {
+            \Log::error('Error guardando dashboards asignados: '.$e->getMessage());
+            return $this->json_response(['error' => 'No se pudieron guardar dashboards.'], 400);
+        }
+    }
+
     /**
      * VALIDATE USER PAYLOAD
      *
@@ -283,5 +356,18 @@ class Controller_Admin_Users extends Controller_Adminbase
         if ($require_password && (empty($val['password']) || strlen((string) $val['password']) < 10)) {
             throw new \InvalidArgumentException('La contrasena debe tener al menos 10 caracteres.');
         }
+    }
+
+    protected function dashboard_options()
+    {
+        if (!\DBUtil::table_exists('core_dashboards')) {
+            return [];
+        }
+        return \DB::select('id', 'code', 'name', 'description', 'dashboard_type')
+            ->from('core_dashboards')
+            ->where('active', '=', 1)
+            ->order_by('name', 'asc')
+            ->execute()
+            ->as_array();
     }
 }
