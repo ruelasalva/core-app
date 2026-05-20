@@ -31,6 +31,7 @@ class Controller_Portalbase extends Controller_Template
 
         # VALIDAR SESION
         if (!\Auth::check()) {
+            \Log::warning('PORTAL ACCESS: sesion no autenticada para portal '.$this->portal_code.' uri='.\Uri::string());
             \Response::redirect($this->portal_code.'/login');
         }
 
@@ -51,6 +52,7 @@ class Controller_Portalbase extends Controller_Template
             ->get_one();
 
         if (!$this->portal_link) {
+            \Log::warning('PORTAL ACCESS: usuario '.$this->user_id.' sin vinculo activo para portal '.$this->portal_code.' uri='.\Uri::string());
             \Response::redirect($this->portal_code.'/login');
         }
 
@@ -137,6 +139,40 @@ class Controller_Portalbase extends Controller_Template
         $this->template->content = $this->portal_view('perfil', 'portales/perfil/index', [
             'portal_code' => $this->portal_code,
             'party' => $this->party,
+        ]);
+    }
+
+    /**
+     * CFDI
+     *
+     * VISTA GENERICA DE CFDI PARA PORTALES SIN IMPLEMENTACION ESPECIFICA.
+     *
+     * @access  public
+     * @return  Void
+     */
+    public function action_cfdi()
+    {
+        $this->template->title = 'CFDI';
+        $this->template->content = $this->portal_view('cfdi', 'portales/cfdi/index', [
+            'portal_code' => $this->portal_code,
+            'portal_direction' => $this->portal_code,
+            'portal_title' => 'CFDI del portal',
+        ]);
+    }
+
+    /**
+     * CFDI DATA
+     *
+     * RESPUESTA SEGURA PARA PORTALES QUE TODAVIA NO TIENEN REGLA CFDI PROPIA.
+     *
+     * @access  public
+     * @return  Response
+     */
+    public function action_cfdi_data()
+    {
+        return $this->json_response([
+            'items' => [],
+            'message' => 'Este portal aun no tiene CFDI configurados.',
         ]);
     }
 

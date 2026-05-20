@@ -216,7 +216,7 @@
 </div>
 
 <script>
-window.onload = function() {
+document.addEventListener('DOMContentLoaded', function() {
     new Vue({
         el: '#portal-profile',
         data: {
@@ -254,10 +254,12 @@ window.onload = function() {
             },
             load: function() {
                 var self = this;
-                fetch('<?php echo Uri::base(false); ?>' + self.portal + '/perfil_data', { credentials: 'same-origin' })
-                    .then(function(response) { return response.json(); })
+                fetch('<?php echo Uri::base(false); ?>' + self.portal + '/perfil_data', { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+                    .then(function(response) {
+                        return response.json().then(function(json) { if (!response.ok) { throw json; } return json; });
+                    })
                     .then(function(json) { self.apply(json); })
-                    .catch(function() { self.error = 'No se pudo cargar la informacion.'; });
+                    .catch(function(err) { self.error = err && err.error ? err.error : 'No se pudo cargar la informacion. Revisa sesion, permisos o conexion.'; });
             },
             apply: function(json) {
                 this.party = json.party || {};
@@ -316,5 +318,5 @@ window.onload = function() {
             }
         }
     });
-};
+});
 </script>

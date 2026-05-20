@@ -141,7 +141,10 @@ class Controller_Proveedores extends Controller_Proveedores_Compras
     public function action_index()
     {
         $this->template->title = 'Proveedores';
-        $this->template->content = $this->portal_view('dashboard', 'portales/dashboard/index', ['portal_label' => 'Proveedores']);
+        $this->template->content = $this->portal_view('dashboard', 'portales/dashboard/index', [
+            'portal_code' => $this->portal_code,
+            'portal_label' => 'Proveedores',
+        ]);
     }
 
     public function action_cfdi()

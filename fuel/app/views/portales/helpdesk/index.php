@@ -189,8 +189,8 @@
     </div>
 </div>
 
-<?php echo Asset::js('vue.min.js'); ?>
 <script>
+document.addEventListener('DOMContentLoaded', function() {
 new Vue({
     el: '#app-portal-helpdesk',
     data: {
@@ -225,8 +225,8 @@ new Vue({
     methods: {
         loadData() {
             this.loading = true;
-            fetch('<?php echo Uri::create($portal_code.'/helpdesk_data'); ?>')
-                .then(res => res.json())
+            fetch('<?php echo Uri::create($portal_code.'/helpdesk_data'); ?>', { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+                .then(res => res.json().then(json => { if (!res.ok) { throw json; } return json; }))
                 .then(data => {
                     this.loading = false;
                     if (data.error) { this.error = data.error; return; }
@@ -236,9 +236,9 @@ new Vue({
                     this.options = data.options || this.options;
                     this.stats = data.stats || {};
                 })
-                .catch(() => {
+                .catch(err => {
                     this.loading = false;
-                    this.error = 'No se pudo cargar helpdesk.';
+                    this.error = err && err.error ? err.error : 'No se pudo cargar helpdesk. Revisa sesion, permisos o conexion.';
                 });
         },
         resetTicket() {
@@ -383,5 +383,6 @@ new Vue({
             document.querySelectorAll('.modal-backdrop').forEach(backdrop => backdrop.remove());
         }
     }
+});
 });
 </script>

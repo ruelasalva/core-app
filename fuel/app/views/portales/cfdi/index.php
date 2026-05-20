@@ -5,6 +5,7 @@
         </div>
         <div class="card-body">
             <div v-if="error" class="alert alert-danger">{{ error }}</div>
+            <div v-if="message" class="alert alert-info">{{ message }}</div>
             <div class="table-responsive">
                 <table class="table table-sm table-hover">
                     <thead>
@@ -47,23 +48,34 @@
 </div>
 
 <script>
-window.onload = function() {
+document.addEventListener('DOMContentLoaded', function() {
     new Vue({
         el: '#app-portal-cfdi',
-        data: { items: [], error: '' },
+        data: { items: [], error: '', message: '' },
         mounted: function() { this.load(); },
         methods: {
             load: function() {
-                fetch('<?php echo Uri::create($portal_code.'/cfdi_data'); ?>')
-                    .then(function(res) { return res.json(); })
+                var self = this;
+                fetch('<?php echo Uri::create($portal_code.'/cfdi_data'); ?>', { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+                    .then(function(res) {
+                        return res.json().then(function(json) {
+                            if (!res.ok) {
+                                throw json;
+                            }
+                            return json;
+                        });
+                    })
                     .then(data => {
                         if (data.error) {
                             this.error = data.error;
                             return;
                         }
+                        self.message = data.message || '';
                         this.items = data.items || [];
                     })
-                    .catch(() => { this.error = 'No se pudo cargar CFDI.'; });
+                    .catch(function(err) {
+                        self.error = err && err.error ? err.error : 'No se pudo cargar CFDI. Revisa sesion, permisos o conexion.';
+                    });
             },
             voucherLabel: function(type) {
                 var labels = { I: 'Ingreso', E: 'Egreso', T: 'Traslado', P: 'Pago', N: 'Nomina' };
@@ -75,5 +87,5 @@ window.onload = function() {
             }
         }
     });
-};
+});
 </script>

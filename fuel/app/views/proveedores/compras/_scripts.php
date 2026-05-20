@@ -23,8 +23,15 @@ window.addEventListener('load', function() {
             load: function() {
                 var self = this;
                 self.loading = true;
-                fetch('<?php echo Uri::create($portal_code.'/compras_data'); ?>')
-                    .then(function(r) { return r.json(); })
+                fetch('<?php echo Uri::create($portal_code.'/compras_data'); ?>', { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+                    .then(function(r) {
+                        return r.json().then(function(json) {
+                            if (!r.ok) {
+                                throw json;
+                            }
+                            return json;
+                        });
+                    })
                     .then(function(data) {
                         self.orders = data.orders || [];
                         self.invoices = data.invoices || [];
@@ -32,8 +39,8 @@ window.addEventListener('load', function() {
                         self.documents = data.documents || [];
                         self.loading = false;
                     })
-                    .catch(function() {
-                        self.error = 'No se pudo cargar compras.';
+                    .catch(function(err) {
+                        self.error = err && err.error ? err.error : 'No se pudo cargar compras. Revisa sesion, permisos o conexion.';
                         self.loading = false;
                     });
             },
