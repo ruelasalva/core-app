@@ -13,6 +13,7 @@
     <?php echo Asset::css('all.min.css'); // FontAwesome ?>
     <?php echo Asset::css('bootstrap-icons.css'); ?>
     <?php echo Asset::css('dataTables.bootstrap4.min.css'); ?>
+    <?php echo Asset::css('buttons.bootstrap4.min.css'); ?>
     <?php if (in_array(Uri::segment(2), ['frontend', 'help'])): ?>
     <link rel="stylesheet" href="<?php echo Uri::base(false); ?>assets/vendor/admin/codemirror/lib/codemirror.css">
     <link rel="stylesheet" href="<?php echo Uri::base(false); ?>assets/vendor/admin/grapesjs/css/grapes.min.css">
@@ -427,6 +428,13 @@
 <?php echo Asset::js('jquery.dataTables.min.js'); ?>
 
 <?php echo Asset::js('dataTables.bootstrap4.min.js'); ?>
+<?php echo Asset::js('jszip.min.js'); ?>
+<?php echo Asset::js('pdfmake.min.js'); ?>
+<?php echo Asset::js('vfs_fonts.js'); ?>
+<?php echo Asset::js('dataTables.buttons.min.js'); ?>
+<?php echo Asset::js('buttons.bootstrap4.min.js'); ?>
+<?php echo Asset::js('buttons.html5.min.js'); ?>
+<?php echo Asset::js('buttons.print.min.js'); ?>
 
 <?php echo Asset::js('adminlte.min.js'); ?>
 <?php echo Asset::js('chart.umd.js'); ?>
@@ -500,10 +508,21 @@ window.coreAppTableTools = (function() {
     function shouldEnhance(table) {
         if (!table || table.dataset.coreToolsReady === '1') return false;
         if (table.classList.contains('core-no-tools') || table.closest('.core-no-tools')) return false;
+        if (table.classList.contains('dataTable') || table.closest('.dataTables_wrapper')) return false;
         if (!table.querySelector('thead') || !table.querySelector('tbody')) return false;
         if (table.closest('.modal')) return false;
         if (table.querySelectorAll('tbody tr').length === 0) return false;
         return table.classList.contains('table-bordered') || table.classList.contains('table-hover') || table.id;
+    }
+
+    function hasOfficialButtons() {
+        return window.jQuery
+            && jQuery.fn
+            && jQuery.fn.DataTable
+            && jQuery.fn.dataTable
+            && jQuery.fn.dataTable.Buttons
+            && window.JSZip
+            && window.pdfMake;
     }
 
     function visibleRows(table) {
@@ -514,6 +533,12 @@ window.coreAppTableTools = (function() {
 
     function cleanText(cell) {
         return (cell ? cell.innerText : '').replace(/\s+/g, ' ').trim();
+    }
+
+    function exportableColumns(index, data, node) {
+        if (!node) return true;
+        var text = cleanText(node).toLowerCase();
+        return !node.classList.contains('core-no-export') && text !== '' && text !== 'acciones' && text !== 'accion';
     }
 
     function rowsData(table) {
@@ -584,6 +609,81 @@ window.coreAppTableTools = (function() {
 
         var title = tableTitle(table);
         var base = slug(title);
+        if (hasOfficialButtons()) {
+            try {
+                jQuery(table).DataTable({
+                    pageLength: 25,
+                    lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, 'Todos']],
+                    order: [],
+                    autoWidth: false,
+                    dom: "<'row mb-2'<'col-md-4'l><'col-md-8 text-md-right'Bf>>rt<'row mt-2'<'col-md-5'i><'col-md-7'p>>",
+                    buttons: [
+                        {
+                            extend: 'csvHtml5',
+                            text: '<i class="bi bi-file-earmark-spreadsheet"></i> CSV',
+                            className: 'btn btn-outline-success btn-sm',
+                            title: title,
+                            filename: base,
+                            exportOptions: { columns: exportableColumns }
+                        },
+                        {
+                            extend: 'excelHtml5',
+                            text: '<i class="bi bi-file-earmark-excel"></i> Excel',
+                            className: 'btn btn-outline-primary btn-sm',
+                            title: title,
+                            filename: base,
+                            exportOptions: { columns: exportableColumns }
+                        },
+                        {
+                            extend: 'pdfHtml5',
+                            text: '<i class="bi bi-file-earmark-pdf"></i> PDF',
+                            className: 'btn btn-outline-danger btn-sm',
+                            title: title,
+                            filename: base,
+                            orientation: 'landscape',
+                            pageSize: 'LETTER',
+                            exportOptions: { columns: exportableColumns }
+                        },
+                        {
+                            extend: 'print',
+                            text: '<i class="bi bi-printer"></i> Imprimir',
+                            className: 'btn btn-outline-secondary btn-sm',
+                            title: title,
+                            exportOptions: { columns: exportableColumns }
+                        }
+                    ],
+                    language: {
+                        emptyTable: 'Sin datos disponibles',
+                        info: 'Mostrando _START_ a _END_ de _TOTAL_ registros',
+                        infoEmpty: 'Mostrando 0 registros',
+                        infoFiltered: '(filtrado de _MAX_ registros)',
+                        lengthMenu: 'Mostrar _MENU_',
+                        loadingRecords: 'Cargando...',
+                        processing: 'Procesando...',
+                        search: 'Filtrar:',
+                        zeroRecords: 'No se encontraron registros',
+                        paginate: {
+                            first: 'Primero',
+                            last: 'Ultimo',
+                            next: 'Siguiente',
+                            previous: 'Anterior'
+                        },
+                        buttons: {
+                            copy: 'Copiar',
+                            print: 'Imprimir'
+                        }
+                    }
+                });
+                return;
+            } catch (error) {
+                table.dataset.coreToolsReady = '0';
+                if (window.console && console.warn) {
+                    console.warn('Core-App: DataTables Buttons no pudo iniciar, usando respaldo simple.', error);
+                }
+            }
+        }
+
+        table.dataset.coreToolsReady = '1';
         var tools = document.createElement('div');
         tools.className = 'core-table-tools';
         tools.innerHTML = ''

@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "copy-assets": "xcopy /y node_modules\\admin-lte\\dist\\css\\adminlte.min.css public\\assets\\css\\ && xcopy /y node_modules\\admin-lte\\dist\\js\\adminlte.min.js public\\assets\\js\\ && xcopy /y node_modules\\jquery\\dist\\jquery.min.js public\\assets\\js\\ && xcopy /y node_modules\\bootstrap\\dist\\js\\bootstrap.bundle.min.js public\\assets\\js\\ && xcopy /y node_modules\\bootstrap-icons\\font\\* public\\assets\\css\\ && xcopy /y node_modules\\@fortawesome\\fontawesome-free\\css\\all.min.css public\\assets\\css\\ && xcopy /y node_modules\\@fortawesome\\fontawesome-free\\webfonts\\* public\\assets\\webfonts\\ && xcopy /y node_modules\\datatables.net-bs4\\js\\dataTables.bootstrap4.min.js public\\assets\\js\\ && xcopy /y node_modules\\datatables.net-bs4\\css\\dataTables.bootstrap4.min.css public\\assets\\css\\ && xcopy /y node_modules\\chart.js\\dist\\chart.umd.js public\\assets\\js\\ && xcopy /y node_modules\\vue\\dist\\vue.min.js public\\assets\\js\\",
+    "copy-assets": "xcopy /y node_modules\\admin-lte\\dist\\css\\adminlte.min.css public\\assets\\css\\ && xcopy /y node_modules\\admin-lte\\dist\\js\\adminlte.min.js public\\assets\\js\\ && xcopy /y node_modules\\jquery\\dist\\jquery.min.js public\\assets\\js\\ && xcopy /y node_modules\\bootstrap\\dist\\js\\bootstrap.bundle.min.js public\\assets\\js\\ && xcopy /y node_modules\\bootstrap-icons\\font\\* public\\assets\\css\\ && xcopy /y node_modules\\@fortawesome\\fontawesome-free\\css\\all.min.css public\\assets\\css\\ && xcopy /y node_modules\\@fortawesome\\fontawesome-free\\webfonts\\* public\\assets\\webfonts\\ && xcopy /y node_modules\\datatables.net-bs4\\js\\dataTables.bootstrap4.min.js public\\assets\\js\\ && xcopy /y node_modules\\datatables.net-bs4\\css\\dataTables.bootstrap4.min.css public\\assets\\css\\ && xcopy /y node_modules\\datatables.net-buttons\\js\\dataTables.buttons.min.js public\\assets\\js\\ && xcopy /y node_modules\\datatables.net-buttons-bs4\\js\\buttons.bootstrap4.min.js public\\assets\\js\\ && xcopy /y node_modules\\datatables.net-buttons\\js\\buttons.html5.min.js public\\assets\\js\\ && xcopy /y node_modules\\datatables.net-buttons\\js\\buttons.print.min.js public\\assets\\js\\ && xcopy /y node_modules\\datatables.net-buttons-bs4\\css\\buttons.bootstrap4.min.css public\\assets\\css\\ && xcopy /y node_modules\\jszip\\dist\\jszip.min.js public\\assets\\js\\ && xcopy /y node_modules\\pdfmake\\build\\pdfmake.min.js public\\assets\\js\\ && xcopy /y node_modules\\pdfmake\\build\\vfs_fonts.js public\\assets\\js\\ && xcopy /y node_modules\\chart.js\\dist\\chart.umd.js public\\assets\\js\\ && xcopy /y node_modules\\vue\\dist\\vue.min.js public\\assets\\js\\",
     "copy-editor-assets": "xcopy /e /i /y node_modules\\@ckeditor\\ckeditor5-build-classic\\build public\\assets\\vendor\\admin\\ckeditor5-build-classic && xcopy /e /i /y node_modules\\codemirror public\\assets\\vendor\\admin\\codemirror && xcopy /y node_modules\\grapesjs\\dist\\grapes.min.js public\\assets\\vendor\\admin\\grapesjs\\js\\ && xcopy /y node_modules\\grapesjs\\dist\\css\\grapes.min.css public\\assets\\vendor\\admin\\grapesjs\\css\\",
     "copy-calendar-assets": "xcopy /y node_modules\\fullcalendar\\index.global.min.js public\\assets\\vendor\\admin\\fullcalendar\\"
   },
@@ -21,6 +21,9 @@
     "chart.js": "^4.5.1",
     "codemirror": "^5.65.20",
     "datatables.net-bs4": "^2.3.8",
+    "datatables.net-buttons": "^3.2.6",
+    "datatables.net-buttons-bs4": "^3.2.6",
+    "fullcalendar": "^6.1.15",
     "grapesjs": "^0.22.14",
     "grapesjs-blocks-basic": "^1.0.2",
     "grapesjs-custom-code": "^1.0.2",
@@ -29,7 +32,8 @@
     "grapesjs-preset-webpage": "^1.0.3",
     "grapesjs-tabs": "^1.0.6",
     "grapesjs-touch": "^0.1.1",
-    "fullcalendar": "^6.1.15",
+    "jszip": "^3.10.1",
+    "pdfmake": "^0.3.8",
     "vue": "^2.7.16"
   }
 }
