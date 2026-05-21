@@ -47,6 +47,56 @@
                 <p class="mt-2">Cargando catalogos SAT...</p>
             </div>
 
+            <div v-show="!loading" class="card bg-light border mb-3">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <div>
+                            <h5 class="mb-1">Sincronizacion oficial SAT</h5>
+                            <small class="text-muted">Descarga un archivo CSV, XLSX o Excel-HTML del SAT y actualiza el catalogo seleccionado por codigo.</small>
+                        </div>
+                        <button class="btn btn-success btn-sm" @click="syncCatalog" :disabled="syncing || !currentSyncSource.source_url">
+                            <i class="bi bi-arrow-repeat"></i> {{ syncing ? 'Sincronizando...' : 'Sincronizar' }}
+                        </button>
+                    </div>
+                    <div v-if="syncMessage" class="alert py-2" :class="syncError ? 'alert-warning' : 'alert-info'">{{ syncMessage }}</div>
+                    <div class="row">
+                        <div class="col-md-5">
+                            <label>URL oficial de descarga</label>
+                            <input class="form-control form-control-sm" v-model="currentSyncSource.source_url" placeholder="https://.../catCFDI...">
+                        </div>
+                        <div class="col-md-2">
+                            <label>Formato</label>
+                            <select class="form-control form-control-sm" v-model="currentSyncSource.source_format">
+                                <option value="auto">Auto</option>
+                                <option value="csv">CSV</option>
+                                <option value="xlsx">XLSX</option>
+                                <option value="xls">Excel HTML</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label>Hoja</label>
+                            <input class="form-control form-control-sm" v-model="currentSyncSource.sheet_name">
+                        </div>
+                        <div class="col-md-1">
+                            <label>Codigo</label>
+                            <input class="form-control form-control-sm" v-model="currentSyncSource.code_column">
+                        </div>
+                        <div class="col-md-1">
+                            <label>Nombre</label>
+                            <input class="form-control form-control-sm" v-model="currentSyncSource.name_column">
+                        </div>
+                        <div class="col-md-1 d-flex align-items-end">
+                            <button class="btn btn-outline-primary btn-sm btn-block" @click="saveSyncSource">Guardar</button>
+                        </div>
+                    </div>
+                    <div class="mt-2 small text-muted">
+                        Ultimo estado: <strong>{{ currentSyncSource.last_status || 'pending' }}</strong>
+                        <span class="mx-2">|</span> Ultima sync: {{ currentSyncSource.last_synced_label || 'Nunca' }}
+                        <span v-if="currentSyncSource.last_message">| {{ currentSyncSource.last_message }}</span>
+                    </div>
+                </div>
+            </div>
+
             <table v-show="!loading" class="table table-bordered table-hover">
                 <thead>
                     <tr>
@@ -72,6 +122,25 @@
                     </tr>
                 </tbody>
             </table>
+
+            <div v-show="!loading" class="mt-4">
+                <h5>Bitacora de sincronizacion</h5>
+                <table class="table table-sm table-bordered">
+                    <thead><tr><th>Catalogo</th><th>Estado</th><th>Nuevos</th><th>Actualizados</th><th>Omitidos</th><th>Mensaje</th><th>Fecha</th></tr></thead>
+                    <tbody>
+                        <tr v-for="log in syncLogs" :key="log.id">
+                            <td>{{ log.catalog_key }}</td>
+                            <td><span class="badge" :class="log.status === 'ok' ? 'badge-success' : 'badge-warning'">{{ log.status }}</span></td>
+                            <td>{{ log.inserted_count }}</td>
+                            <td>{{ log.updated_count }}</td>
+                            <td>{{ log.skipped_count }}</td>
+                            <td><small>{{ log.message }}</small></td>
+                            <td>{{ dateLabel(log.created_at) }}</td>
+                        </tr>
+                        <tr v-if="syncLogs.length === 0"><td colspan="7" class="text-muted">Sin sincronizaciones registradas.</td></tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
 
@@ -115,6 +184,11 @@ window.onload = function() {
             definitions: {},
             items: {},
             stats: {},
+            syncSources: {},
+            syncLogs: [],
+            syncing: false,
+            syncMessage: '',
+            syncError: false,
             form: {}
         },
         computed: {
@@ -123,6 +197,25 @@ window.onload = function() {
             currentFields() { return this.currentDefinition.fields || []; },
             tableFields() { return this.currentFields.filter(field => field.name !== 'active'); },
             currentItems() { return this.items[this.currentCatalog] || []; },
+            currentSyncSource() {
+                if (!this.syncSources[this.currentCatalog]) {
+                    this.$set(this.syncSources, this.currentCatalog, {
+                        id: 0,
+                        catalog_key: this.currentCatalog,
+                        source_name: 'SAT CFDI 4.0',
+                        source_url: '',
+                        source_format: 'auto',
+                        sheet_name: '',
+                        code_column: 'code',
+                        name_column: 'name',
+                        active: true,
+                        last_status: 'pending',
+                        last_synced_label: 'Nunca',
+                        last_message: ''
+                    });
+                }
+                return this.syncSources[this.currentCatalog];
+            },
             totalRecords() {
                 return Object.values(this.stats).reduce((total, value) => total + parseInt(value || 0), 0);
             }
@@ -139,6 +232,8 @@ window.onload = function() {
                         this.definitions = data.definitions || {};
                         this.items = data.items || {};
                         this.stats = data.stats || {};
+                        this.syncSources = data.sync_sources || {};
+                        this.syncLogs = data.sync_logs || [];
                     });
             },
             emptyForm() {
@@ -174,6 +269,47 @@ window.onload = function() {
                     this.stats = data.stats || {};
                     this.hideModal('modal-sat-catalog');
                 });
+            },
+            saveSyncSource() {
+                const payload = Object.assign({}, this.currentSyncSource, { catalog_key: this.currentCatalog });
+                fetch('<?php echo Uri::create('admin/sat/save_catalog_sync_source'); ?>', {
+                    ...window.coreAppFetchOptions(payload)
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.error) { this.syncError = true; this.syncMessage = data.error; return; }
+                    this.syncSources = data.sync_sources || this.syncSources;
+                    this.syncError = false;
+                    this.syncMessage = 'Fuente guardada.';
+                });
+            },
+            syncCatalog() {
+                this.syncing = true;
+                this.syncError = false;
+                this.syncMessage = 'Descargando y procesando catalogo...';
+                fetch('<?php echo Uri::create('admin/sat/sync_catalog'); ?>', {
+                    ...window.coreAppFetchOptions({ catalog_key: this.currentCatalog })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    this.syncing = false;
+                    if (data.error) { this.syncError = true; this.syncMessage = data.error; return; }
+                    this.items = data.items || this.items;
+                    this.stats = data.stats || this.stats;
+                    this.syncSources = data.sync_sources || this.syncSources;
+                    this.syncLogs = data.sync_logs || this.syncLogs;
+                    this.syncMessage = data.message || 'Catalogo sincronizado.';
+                })
+                .catch(error => {
+                    this.syncing = false;
+                    this.syncError = true;
+                    this.syncMessage = error.message || 'No se pudo sincronizar.';
+                });
+            },
+            dateLabel(value) {
+                const timestamp = parseInt(value || 0);
+                if (!timestamp) return '-';
+                return new Date(timestamp * 1000).toLocaleString();
             },
             inputType(field) {
                 if (field.type === 'number') return 'number';

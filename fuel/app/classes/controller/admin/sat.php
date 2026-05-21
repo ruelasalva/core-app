@@ -105,6 +105,8 @@ class Controller_Admin_Sat extends Controller_Adminbase
                 'definitions' => $this->get_catalog_definitions(),
                 'items' => $this->get_catalog_items(),
                 'stats' => $this->get_catalog_stats(),
+                'sync_sources' => $this->get_catalog_sync_sources(),
+                'sync_logs' => $this->get_catalog_sync_logs(),
             ]);
         } catch (\Exception $e) {
             \Log::error('Error cargando catalogos SAT: '.$e->getMessage());
@@ -196,6 +198,106 @@ class Controller_Admin_Sat extends Controller_Adminbase
         } catch (\Exception $e) {
             \Log::error('Error guardando catalogo SAT: '.$e->getMessage());
             return $this->json_response(['error' => 'No se pudo guardar el registro SAT.'], 400);
+        }
+    }
+
+    public function post_save_catalog_sync_source()
+    {
+        $this->require_access('sat.access[edit]');
+        $val = (array) \Input::json();
+
+        try {
+            $this->assert_catalog_schema_ready();
+            if (!\DBUtil::table_exists('core_sat_catalog_sync_sources')) {
+                return $this->json_response(['error' => 'Falta ejecutar migraciones de sincronizacion SAT.'], 422);
+            }
+
+            $catalog = trim((string) \Arr::get($val, 'catalog_key', \Arr::get($val, 'catalog', '')));
+            $definitions = $this->get_catalog_definitions();
+            if (!isset($definitions[$catalog])) {
+                return $this->json_response(['error' => 'Catalogo SAT invalido.'], 422);
+            }
+
+            $data = [
+                'catalog_key' => $catalog,
+                'source_name' => trim((string) \Arr::get($val, 'source_name', 'SAT')) ?: 'SAT',
+                'source_url' => trim((string) \Arr::get($val, 'source_url', '')),
+                'source_format' => trim((string) \Arr::get($val, 'source_format', 'auto')) ?: 'auto',
+                'sheet_name' => trim((string) \Arr::get($val, 'sheet_name', '')),
+                'code_column' => trim((string) \Arr::get($val, 'code_column', 'code')) ?: 'code',
+                'name_column' => trim((string) \Arr::get($val, 'name_column', 'name')) ?: 'name',
+                'active' => (int) (bool) \Arr::get($val, 'active', true),
+                'updated_at' => time(),
+            ];
+
+            $id = (int) \Arr::get($val, 'id', 0);
+            if ($id > 0) {
+                \DB::update('core_sat_catalog_sync_sources')->set($data)->where('id', '=', $id)->execute();
+            } else {
+                $data['created_at'] = time();
+                \DB::insert('core_sat_catalog_sync_sources')->set($data)->execute();
+            }
+
+            return $this->json_response([
+                'status' => 'ok',
+                'sync_sources' => $this->get_catalog_sync_sources(),
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error guardando fuente de catalogo SAT: '.$e->getMessage());
+            return $this->json_response(['error' => 'No se pudo guardar la fuente SAT: '.$e->getMessage()], 400);
+        }
+    }
+
+    public function post_sync_catalog()
+    {
+        $this->require_access('sat.access[edit]');
+        $val = (array) \Input::json();
+
+        try {
+            $this->assert_catalog_schema_ready();
+            $catalog = trim((string) \Arr::get($val, 'catalog_key', \Arr::get($val, 'catalog', '')));
+            $definitions = $this->get_catalog_definitions();
+            if (!isset($definitions[$catalog])) {
+                return $this->json_response(['error' => 'Catalogo SAT invalido.'], 422);
+            }
+
+            $source = \DB::select()->from('core_sat_catalog_sync_sources')->where('catalog_key', '=', $catalog)->where('active', '=', 1)->execute()->current();
+            if (!$source) {
+                return $this->json_response(['error' => 'No hay fuente activa para este catalogo. Captura la URL oficial del SAT primero.'], 422);
+            }
+
+            try {
+                $result = (new Service_Core_Sat_Catalog_Sync())->sync((int) $source['id'], $definitions[$catalog], (int) $this->user_id);
+            } catch (\Exception $e) {
+                \DB::update('core_sat_catalog_sync_sources')->set([
+                    'last_synced_at' => time(),
+                    'last_status' => 'error',
+                    'last_message' => $e->getMessage(),
+                    'updated_at' => time(),
+                ])->where('id', '=', (int) $source['id'])->execute();
+                \DB::insert('core_sat_catalog_sync_logs')->set([
+                    'source_id' => (int) $source['id'],
+                    'catalog_key' => $catalog,
+                    'source_url' => (string) $source['source_url'],
+                    'status' => 'error',
+                    'message' => $e->getMessage(),
+                    'created_by' => (int) $this->user_id,
+                    'created_at' => time(),
+                ])->execute();
+                throw $e;
+            }
+
+            return $this->json_response([
+                'status' => 'ok',
+                'message' => $result['message'],
+                'items' => $this->get_catalog_items(),
+                'stats' => $this->get_catalog_stats(),
+                'sync_sources' => $this->get_catalog_sync_sources(),
+                'sync_logs' => $this->get_catalog_sync_logs(),
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error sincronizando catalogo SAT: '.$e->getMessage());
+            return $this->json_response(['error' => 'No se pudo sincronizar: '.$e->getMessage()], 400);
         }
     }
 
@@ -986,6 +1088,34 @@ class Controller_Admin_Sat extends Controller_Adminbase
         }
 
         return $stats;
+    }
+
+    protected function get_catalog_sync_sources()
+    {
+        if (!\DBUtil::table_exists('core_sat_catalog_sync_sources')) {
+            return [];
+        }
+
+        $items = [];
+        $rows = \DB::select()->from('core_sat_catalog_sync_sources')->order_by('catalog_key', 'asc')->execute()->as_array();
+        foreach ($rows as $row) {
+            $row['last_synced_label'] = (int) $row['last_synced_at'] > 0 ? date('d/m/Y H:i', (int) $row['last_synced_at']) : 'Nunca';
+            $items[(string) $row['catalog_key']] = $row;
+        }
+        return $items;
+    }
+
+    protected function get_catalog_sync_logs()
+    {
+        if (!\DBUtil::table_exists('core_sat_catalog_sync_logs')) {
+            return [];
+        }
+
+        return \DB::select()->from('core_sat_catalog_sync_logs')
+            ->order_by('id', 'desc')
+            ->limit(30)
+            ->execute()
+            ->as_array();
     }
 
     /**

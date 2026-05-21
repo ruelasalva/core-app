@@ -863,6 +863,38 @@ class Configsetup
                 ->where_close()
                 ->execute();
         }
+
+        if (\DBUtil::table_exists('core_sat_catalog_sync_sources')) {
+            $sources = [
+                ['payment_forms', 'c_FormaPago', 'Descripcion', 'c_FormaPago'],
+                ['payment_methods', 'c_MetodoPago', 'Descripcion', 'c_MetodoPago'],
+                ['cfdi_uses', 'c_UsoCFDI', 'Descripcion', 'c_UsoCFDI'],
+                ['tax_regimes', 'c_RegimenFiscal', 'Descripcion', 'c_RegimenFiscal'],
+                ['unit_keys', 'c_ClaveUnidad', 'Nombre', 'c_ClaveUnidad'],
+                ['taxes', 'c_Impuesto', 'Descripcion', 'c_Impuesto'],
+                ['product_service_keys', 'c_ClaveProdServ', 'Descripcion', 'c_ClaveProdServ'],
+                ['object_tax_codes', 'c_ObjetoImp', 'Descripcion', 'c_ObjetoImp'],
+                ['payroll_regimes', 'c_TipoRegimen', 'Descripcion', 'c_TipoRegimen'],
+            ];
+
+            foreach ($sources as $source) {
+                $this->insert_if_missing('core_sat_catalog_sync_sources', 'catalog_key', $source[0], [
+                    'catalog_key' => $source[0],
+                    'source_name' => 'SAT CFDI 4.0',
+                    'source_url' => '',
+                    'source_format' => 'auto',
+                    'sheet_name' => $source[3],
+                    'code_column' => $source[1],
+                    'name_column' => $source[2],
+                    'active' => 1,
+                    'last_synced_at' => 0,
+                    'last_status' => 'pending',
+                    'last_message' => 'Captura la URL oficial del archivo de catalogos SAT antes de sincronizar.',
+                    'created_at' => time(),
+                    'updated_at' => time(),
+                ]);
+            }
+        }
     }
 
     protected function seed_catalogs()
@@ -2674,7 +2706,7 @@ class Configsetup
             'title' => 'Catalogos SAT en el ERP',
             'category' => 'SAT',
             'summary' => 'Uso de regimenes fiscales, usos CFDI, formas de pago, metodos de pago, unidades, claves producto y objeto de impuesto.',
-            'content' => '<h3>Objetivo</h3><p>Core-App guarda los codigos oficiales SAT para timbrado y auditoria, pero las pantallas deben mostrar codigo y descripcion para evitar capturas a ciegas.</p><h4>Catalogos base</h4><ul><li><strong>Regimen fiscal</strong>: se usa en terceros, portales y datos fiscales.</li><li><strong>Regimen nomina</strong>: se usa en RH para el campo TipoRegimen del complemento de nomina.</li><li><strong>Uso CFDI</strong>: se usa en facturacion y reglas fiscales.</li><li><strong>Forma de pago</strong>: se usa en facturas, pagos y REP.</li><li><strong>Metodo de pago</strong>: PUE o PPD para controlar cobranza y complemento de pago.</li><li><strong>Clave unidad</strong>: se usa en conceptos de factura y productos.</li><li><strong>Clave producto/servicio</strong>: se usa en productos, conceptos y servicios recurrentes.</li><li><strong>Objeto de impuesto</strong>: define si el concepto causa o no impuesto.</li></ul><h4>Productos y servicios</h4><p>En <strong>Admin &gt; Comercial &gt; Productos</strong> cada producto debe tener unidad interna, clave producto/servicio SAT, clave unidad SAT, objeto de impuesto, impuesto SAT, factor y tasa. Para productos fisicos el default operativo es <code>H87 - Pieza</code>; para servicios normalmente se usa <code>E48 - Unidad de servicio</code>. Los servicios internos pueden existir para facturacion recurrente sin mostrarse en el frontend.</p><h4>RH</h4><p>En <strong>Admin &gt; RH</strong> el empleado debe seleccionar regimen SAT de nomina desde catalogo. No se debe capturar solo el numero sin descripcion, porque ese dato se usa para preparar CFDI de nomina.</p><h4>Regla de uso</h4><p>El usuario debe seleccionar desde catalogo siempre que exista. Si el SAT cambia un catalogo, se actualiza en <strong>Admin &gt; SAT &gt; Catalogos</strong> y luego se usa en los modulos relacionados.</p><h4>Importante</h4><p>Guardar solo el numero o codigo es correcto para el XML; mostrar solo el numero en pantalla no es correcto para operacion. Por eso los selectores deben presentar <code>codigo - descripcion</code>.</p>',
+            'content' => '<h3>Objetivo</h3><p>Core-App guarda los codigos oficiales SAT para timbrado y auditoria, pero las pantallas deben mostrar codigo y descripcion para evitar capturas a ciegas.</p><h4>Catalogos base</h4><ul><li><strong>Regimen fiscal</strong>: se usa en terceros, portales y datos fiscales.</li><li><strong>Regimen nomina</strong>: se usa en RH para el campo TipoRegimen del complemento de nomina.</li><li><strong>Uso CFDI</strong>: se usa en facturacion y reglas fiscales.</li><li><strong>Forma de pago</strong>: se usa en facturas, pagos y REP.</li><li><strong>Metodo de pago</strong>: PUE o PPD para controlar cobranza y complemento de pago.</li><li><strong>Clave unidad</strong>: se usa en conceptos de factura y productos.</li><li><strong>Clave producto/servicio</strong>: se usa en productos, conceptos y servicios recurrentes.</li><li><strong>Objeto de impuesto</strong>: define si el concepto causa o no impuesto.</li></ul><h4>Sincronizar desde SAT</h4><ol><li>Entra a <strong>Admin &gt; SAT &gt; Catalogos SAT</strong>.</li><li>Selecciona el catalogo que quieres actualizar.</li><li>En <strong>Sincronizacion oficial SAT</strong> pega la URL oficial del archivo descargable del SAT.</li><li>Confirma formato, hoja, columna codigo y columna nombre. Los valores default apuntan a nombres comunes como <code>c_FormaPago</code>, <code>c_ClaveUnidad</code> o <code>Descripcion</code>.</li><li>Guarda la fuente y presiona <strong>Sincronizar</strong>.</li></ol><p>El sistema descarga el archivo en almacenamiento interno, actualiza por codigo, conserva registros existentes y deja bitacora con nuevos, actualizados, omitidos y errores. Soporta CSV, XLSX y Excel guardado como HTML. Si el SAT publica un XLS binario antiguo, conviene abrirlo y guardarlo como XLSX/CSV antes de sincronizar.</p><h4>Productos y servicios</h4><p>En <strong>Admin &gt; Comercial &gt; Productos</strong> cada producto debe tener unidad interna, clave producto/servicio SAT, clave unidad SAT, objeto de impuesto, impuesto SAT, factor y tasa. Para productos fisicos el default operativo es <code>H87 - Pieza</code>; para servicios normalmente se usa <code>E48 - Unidad de servicio</code>. Los servicios internos pueden existir para facturacion recurrente sin mostrarse en el frontend.</p><h4>RH</h4><p>En <strong>Admin &gt; RH</strong> el empleado debe seleccionar regimen SAT de nomina desde catalogo. No se debe capturar solo el numero sin descripcion, porque ese dato se usa para preparar CFDI de nomina.</p><h4>Regla de uso</h4><p>El usuario debe seleccionar desde catalogo siempre que exista. Si el SAT cambia un catalogo, se actualiza en <strong>Admin &gt; SAT &gt; Catalogos</strong> y luego se usa en los modulos relacionados.</p><h4>Importante</h4><p>Guardar solo el numero o codigo es correcto para el XML; mostrar solo el numero en pantalla no es correcto para operacion. Por eso los selectores deben presentar <code>codigo - descripcion</code>.</p>',
             'sort_order' => 59,
             'active' => 1,
             'created_at' => time(),

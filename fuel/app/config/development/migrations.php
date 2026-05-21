@@ -53,6 +53,7 @@ return array (
         47 => '048_create_core_hr_tables',
         48 => '049_create_core_sat_product_and_object_tax_catalogs',
         49 => '050_add_product_sat_fields_and_payroll_regimes',
+        50 => '051_create_sat_catalog_sync_tables',
       ),
     ),
     'module' => array(    
