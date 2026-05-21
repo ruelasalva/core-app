@@ -21,6 +21,8 @@
     <style>
         .sidebar-dark-primary { background-color: #343a40; }
         .nav-link.active { background-color: #007bff !important; }
+        .core-table-tools { display: flex; flex-wrap: wrap; gap: .35rem; justify-content: flex-end; align-items: center; margin-bottom: .5rem; }
+        .core-table-tools .core-table-filter { max-width: 260px; min-width: 180px; }
     </style>
     <?php echo Asset::js('vue.min.js'); ?>
 </head>
@@ -473,6 +475,161 @@ window.coreAppJson = function(response) {
     });
 };
 
+window.coreAppTableTools = (function() {
+    var counter = 0;
+    var observerStarted = false;
+    var timer = null;
+
+    function tableTitle(table) {
+        var card = table.closest('.card');
+        var title = card ? card.querySelector('.card-title, h3, h5, h6') : null;
+        if (title && title.innerText.trim()) {
+            return title.innerText.trim();
+        }
+        var header = document.querySelector('.content-header h1');
+        return header ? header.innerText.trim() : 'Listado';
+    }
+
+    function slug(value) {
+        return (value || 'listado').toLowerCase()
+            .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '') || 'listado';
+    }
+
+    function shouldEnhance(table) {
+        if (!table || table.dataset.coreToolsReady === '1') return false;
+        if (table.classList.contains('core-no-tools') || table.closest('.core-no-tools')) return false;
+        if (!table.querySelector('thead') || !table.querySelector('tbody')) return false;
+        if (table.closest('.modal')) return false;
+        if (table.querySelectorAll('tbody tr').length === 0) return false;
+        return table.classList.contains('table-bordered') || table.classList.contains('table-hover') || table.id;
+    }
+
+    function visibleRows(table) {
+        return Array.prototype.slice.call(table.querySelectorAll('tr')).filter(function(row) {
+            return row.offsetParent !== null && row.style.display !== 'none';
+        });
+    }
+
+    function cleanText(cell) {
+        return (cell ? cell.innerText : '').replace(/\s+/g, ' ').trim();
+    }
+
+    function rowsData(table) {
+        var skip = [];
+        var headers = table.querySelectorAll('thead tr:last-child th, thead tr:last-child td');
+        Array.prototype.slice.call(headers).forEach(function(cell, index) {
+            var text = cleanText(cell).toLowerCase();
+            if (cell.classList.contains('core-no-export') || text === '' || text === 'acciones' || text === 'accion') {
+                skip.push(index);
+            }
+        });
+        return visibleRows(table).map(function(row) {
+            return Array.prototype.slice.call(row.children).filter(function(cell, index) {
+                return skip.indexOf(index) === -1 && !cell.classList.contains('core-no-export');
+            }).map(cleanText);
+        });
+    }
+
+    function download(filename, type, content) {
+        var blob = new Blob([content], { type: type });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+
+    function exportCsv(table, filename) {
+        var csv = rowsData(table).map(function(row) {
+            return row.map(function(cell) {
+                return '"' + cell.replace(/"/g, '""') + '"';
+            }).join(',');
+        }).join('\n');
+        download(filename, 'text/csv;charset=utf-8;', '\ufeff' + csv);
+    }
+
+    function exportExcel(table, filename, title) {
+        var html = '<html><head><meta charset="utf-8"></head><body><h3>' + title + '</h3>' + table.outerHTML + '</body></html>';
+        download(filename, 'application/vnd.ms-excel;charset=utf-8;', html);
+    }
+
+    function printTable(table, title) {
+        var win = window.open('', '_blank');
+        if (!win) return;
+        win.document.write('<html><head><title>' + title + '</title><link rel="stylesheet" href="<?php echo Uri::base(false); ?>assets/css/bootstrap.min.css"></head><body><h3>' + title + '</h3>' + table.outerHTML + '</body></html>');
+        win.document.close();
+        win.focus();
+        win.print();
+    }
+
+    function applyFilter(table, value) {
+        var q = (value || '').toLowerCase();
+        Array.prototype.slice.call(table.querySelectorAll('tbody tr')).forEach(function(row) {
+            row.style.display = cleanText(row).toLowerCase().indexOf(q) === -1 ? 'none' : '';
+        });
+    }
+
+    function enhance(table) {
+        if (!shouldEnhance(table)) return;
+        table.dataset.coreToolsReady = '1';
+        if (!table.id) {
+            counter += 1;
+            table.id = 'core-table-' + counter;
+        }
+
+        var title = tableTitle(table);
+        var base = slug(title);
+        var tools = document.createElement('div');
+        tools.className = 'core-table-tools';
+        tools.innerHTML = ''
+            + '<input type="search" class="form-control form-control-sm core-table-filter" placeholder="Filtrar listado...">'
+            + '<button type="button" class="btn btn-outline-success btn-sm" data-action="csv"><i class="bi bi-file-earmark-spreadsheet"></i> CSV</button>'
+            + '<button type="button" class="btn btn-outline-primary btn-sm" data-action="excel"><i class="bi bi-file-earmark-excel"></i> Excel</button>'
+            + '<button type="button" class="btn btn-outline-secondary btn-sm" data-action="print"><i class="bi bi-printer"></i> PDF</button>';
+
+        var parent = table.parentNode;
+        parent.insertBefore(tools, table);
+
+        tools.querySelector('.core-table-filter').addEventListener('input', function() {
+            applyFilter(table, this.value);
+        });
+        tools.querySelector('[data-action="csv"]').addEventListener('click', function() {
+            exportCsv(table, base + '.csv');
+        });
+        tools.querySelector('[data-action="excel"]').addEventListener('click', function() {
+            exportExcel(table, base + '.xls', title);
+        });
+        tools.querySelector('[data-action="print"]').addEventListener('click', function() {
+            printTable(table, title);
+        });
+    }
+
+    function scan() {
+        Array.prototype.slice.call(document.querySelectorAll('.content table.table')).forEach(enhance);
+    }
+
+    function schedule() {
+        window.clearTimeout(timer);
+        timer = window.setTimeout(scan, 250);
+    }
+
+    function start() {
+        scan();
+        if (observerStarted) return;
+        observerStarted = true;
+        var target = document.querySelector('.content-wrapper');
+        if (!target || !window.MutationObserver) return;
+        new MutationObserver(schedule).observe(target, { childList: true, subtree: true });
+    }
+
+    return { start: start, scan: scan };
+})();
+
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', function() {
         navigator.serviceWorker.register('<?php echo Uri::base(false); ?>sw.js', { scope: '<?php echo Uri::base(false); ?>admin/' }).catch(function() {});
@@ -522,6 +679,10 @@ new Vue({
             });
         }
     }
+});
+
+document.addEventListener('DOMContentLoaded', function() {
+    window.coreAppTableTools.start();
 });
 </script>
 

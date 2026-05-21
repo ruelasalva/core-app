@@ -2521,6 +2521,18 @@ class Configsetup
             'created_at' => time(),
             'updated_at' => time(),
         ]);
+
+        $this->upsert_seed('core_knowledge_articles', 'code', 'exportacion_listados_admin', [
+            'code' => 'exportacion_listados_admin',
+            'title' => 'Exportacion y filtros en listados',
+            'category' => 'Administracion',
+            'summary' => 'Filtro rapido y salida CSV, Excel e impresion PDF para tablas administrativas.',
+            'content' => '<h3>Objetivo</h3><p>Los listados administrativos deben poder filtrarse y exportarse sin repetir codigo en cada modulo. Core-App agrega una capa comun en el template administrativo para tablas principales.</p><h4>Que incluye</h4><ul><li>Filtro rapido por texto visible.</li><li>Exportacion CSV compatible con Excel.</li><li>Exportacion Excel basada en tabla HTML.</li><li>Impresion del listado como PDF desde el navegador.</li></ul><h4>Alcance</h4><p>La herramienta se aplica automaticamente a tablas administrativas con estructura <code>thead</code> y <code>tbody</code>. Para excluir una tabla tecnica o de captura se puede usar la clase <code>core-no-tools</code>. Para excluir una columna de exportacion se puede usar <code>core-no-export</code>.</p><h4>DataTables</h4><p>El proyecto tiene DataTables base y Bootstrap para ordenamiento/busqueda cuando un modulo lo inicializa. La extension oficial Buttons no esta instalada todavia; para usarla despues se deben agregar tambien Buttons, JSZip y pdfmake completos al asset pipeline.</p>',
+            'sort_order' => 58,
+            'active' => 1,
+            'created_at' => time(),
+            'updated_at' => time(),
+        ]);
     }
 
     protected function sync_groups()

@@ -21,9 +21,6 @@
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h3 class="h6 mb-0">Expediente laboral</h3>
                     <div>
-                        <button class="btn btn-outline-success btn-sm" @click="exportCsv('employees-table', 'empleados.csv')"><i class="bi bi-file-earmark-spreadsheet"></i> CSV</button>
-                        <button class="btn btn-outline-primary btn-sm" @click="exportExcel('employees-table', 'empleados.xls')"><i class="bi bi-file-earmark-excel"></i> Excel</button>
-                        <button class="btn btn-outline-secondary btn-sm" @click="printTable('employees-table', 'Empleados')"><i class="bi bi-printer"></i> PDF</button>
                         <button class="btn btn-primary btn-sm" @click="openEmployee({})"><i class="bi bi-plus-lg"></i> Empleado</button>
                     </div>
                 </div>
@@ -53,8 +50,6 @@
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h3 class="h6 mb-0">Periodos de nomina</h3>
                     <div>
-                        <button class="btn btn-outline-success btn-sm" @click="exportCsv('periods-table', 'periodos-nomina.csv')"><i class="bi bi-file-earmark-spreadsheet"></i> CSV</button>
-                        <button class="btn btn-outline-secondary btn-sm" @click="printTable('periods-table', 'Periodos de nomina')"><i class="bi bi-printer"></i> PDF</button>
                         <button class="btn btn-primary btn-sm" @click="openPeriod({})"><i class="bi bi-plus-lg"></i> Periodo</button>
                     </div>
                 </div>
@@ -82,8 +77,6 @@
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h3 class="h6 mb-0">Corridas de nomina</h3>
                     <div>
-                        <button class="btn btn-outline-success btn-sm" @click="exportCsv('runs-table', 'corridas-nomina.csv')"><i class="bi bi-file-earmark-spreadsheet"></i> CSV</button>
-                        <button class="btn btn-outline-secondary btn-sm" @click="printTable('runs-table', 'Corridas de nomina')"><i class="bi bi-printer"></i> PDF</button>
                         <button class="btn btn-primary btn-sm" @click="openRun({})"><i class="bi bi-plus-lg"></i> Corrida</button>
                     </div>
                 </div>
@@ -262,35 +255,6 @@ window.onload = function() {
                     }
                     if (modal) this.hideModal(modal);
                 });
-            },
-            exportCsv: function(tableId, filename) {
-                var csv = this.tableRows(tableId).map(row => row.map(cell => '"' + cell.replace(/"/g, '""') + '"').join(',')).join('\n');
-                this.download(filename, 'text/csv;charset=utf-8;', csv);
-            },
-            exportExcel: function(tableId, filename) {
-                var table = document.getElementById(tableId);
-                this.download(filename, 'application/vnd.ms-excel', '<html><head><meta charset="utf-8"></head><body>' + table.outerHTML + '</body></html>');
-            },
-            printTable: function(tableId, title) {
-                var win = window.open('', '_blank');
-                win.document.write('<html><head><title>' + title + '</title><link rel="stylesheet" href="<?php echo Uri::base(false); ?>assets/css/bootstrap.min.css"></head><body><h3>' + title + '</h3>' + document.getElementById(tableId).outerHTML + '</body></html>');
-                win.document.close();
-                win.focus();
-                win.print();
-            },
-            tableRows: function(tableId) {
-                return Array.prototype.slice.call(document.querySelectorAll('#' + tableId + ' tr')).map(function(row) {
-                    return Array.prototype.slice.call(row.children).map(function(cell) { return cell.innerText.trim(); });
-                });
-            },
-            download: function(filename, type, content) {
-                var blob = new Blob([content], { type: type });
-                var url = URL.createObjectURL(blob);
-                var a = document.createElement('a');
-                a.href = url;
-                a.download = filename;
-                a.click();
-                URL.revokeObjectURL(url);
             },
             payrollStatusLabel: function(v) { return ({active:'Activo', inactive:'Inactivo', suspended:'Suspendido', terminated:'Baja'})[v] || v; },
             periodStatusLabel: function(v) { return ({open:'Abierto', closed:'Cerrado', cancelled:'Cancelado'})[v] || v; },
