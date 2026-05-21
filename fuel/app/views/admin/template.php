@@ -525,6 +525,37 @@ window.coreAppTableTools = (function() {
             && window.pdfMake;
     }
 
+    function configureDataTablesErrors() {
+        if (window.jQuery && jQuery.fn && jQuery.fn.dataTable && jQuery.fn.dataTable.ext) {
+            jQuery.fn.dataTable.ext.errMode = 'none';
+        }
+    }
+
+    function tableColumnCount(table) {
+        var headers = table.querySelectorAll('thead tr:last-child th, thead tr:last-child td');
+        var count = 0;
+        Array.prototype.slice.call(headers).forEach(function(cell) {
+            count += parseInt(cell.getAttribute('colspan') || '1', 10);
+        });
+        return count;
+    }
+
+    function rowColumnCount(row) {
+        var count = 0;
+        Array.prototype.slice.call(row.children).forEach(function(cell) {
+            count += parseInt(cell.getAttribute('colspan') || '1', 10);
+        });
+        return count;
+    }
+
+    function canUseOfficialDataTable(table) {
+        var columns = tableColumnCount(table);
+        if (columns === 0) return false;
+        return Array.prototype.slice.call(table.querySelectorAll('tbody tr')).every(function(row) {
+            return rowColumnCount(row) === columns;
+        });
+    }
+
     function visibleRows(table) {
         return Array.prototype.slice.call(table.querySelectorAll('tr')).filter(function(row) {
             return row.offsetParent !== null && row.style.display !== 'none';
@@ -609,7 +640,7 @@ window.coreAppTableTools = (function() {
 
         var title = tableTitle(table);
         var base = slug(title);
-        if (hasOfficialButtons()) {
+        if (hasOfficialButtons() && canUseOfficialDataTable(table)) {
             try {
                 jQuery(table).DataTable({
                     pageLength: 25,
@@ -719,6 +750,7 @@ window.coreAppTableTools = (function() {
     }
 
     function start() {
+        configureDataTablesErrors();
         scan();
         if (observerStarted) return;
         observerStarted = true;
