@@ -68,7 +68,7 @@
                 </li>
                 <li class="nav-item">
                     <a class="nav-link" data-toggle="tab" data-bs-toggle="tab" href="#tab-model" role="tab">
-                        <i class="bi bi-layers mr-1"></i> Modelo
+                        <i class="bi bi-layers mr-1"></i> Modelo operativo
                     </a>
                 </li>
             </ul>
@@ -327,7 +327,11 @@
                 </div>
 
                 <div class="tab-pane fade" id="tab-model" role="tabpanel">
-                    <h5>Jerarquia base</h5>
+                    <h5>Modelo operativo del ERP</h5>
+                    <p class="text-muted">
+                        Este apartado es el mapa de gobierno del sistema: explica el orden recomendado para que los modulos convivan.
+                        No captura operaciones; sirve como guia de estructura para empresa, usuarios, permisos, backends, modulos y logs.
+                    </p>
                     <ol class="mb-0">
                         <li>Empresa</li>
                         <li>Sucursales</li>
@@ -340,6 +344,10 @@
                         <li>Permisos</li>
                         <li>Logs</li>
                     </ol>
+                    <div class="alert alert-info mt-3 mb-0">
+                        En terminos practicos: primero defines la empresa y estructura interna, despues usuarios/permisos, luego modulos operativos.
+                        RH usa empleados; usuarios solo son quienes inician sesion. Un empleado puede existir sin usuario.
+                    </div>
                 </div>
             </div>
         </div>

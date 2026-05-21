@@ -369,6 +369,7 @@ class Controller_Admin_Purchases extends Controller_Adminbase
                     'receipt_id' => (int) $receipt->id,
                     'invoice_id' => (int) $invoice->id,
                     'amount' => $amount,
+                    'notes' => trim((string) \Arr::get($val, 'notes', '')),
                     'active' => 1,
                 ])->save();
                 $invoice->status = 'in_receipt';

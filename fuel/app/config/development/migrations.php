@@ -50,6 +50,7 @@ return array (
         44 => '045_create_core_fiscal_documents',
         45 => '046_create_core_dashboard_assignments',
         46 => '047_add_product_stock_min',
+        47 => '048_create_core_hr_tables',
       ),
     ),
     'module' => array(    

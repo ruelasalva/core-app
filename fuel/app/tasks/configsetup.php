@@ -28,6 +28,7 @@ class Configsetup
             $this->seed_purchases();
             $this->seed_calendar();
             $this->seed_dashboards();
+            $this->seed_hr();
             $this->seed_frontend();
             $this->seed_knowledge();
             $this->sync_groups();
@@ -60,6 +61,7 @@ class Configsetup
             echo " - Compras y portal proveedores base\n";
             echo " - Calendario y sala de juntas base\n";
             echo " - Dashboards base\n";
+            echo " - Recursos Humanos y nomina base\n";
             echo " - Frontend administrable base\n";
             echo " - Ayuda y conocimiento base\n";
             echo " - Grupos de acceso recomendados\n";
@@ -1616,6 +1618,35 @@ class Configsetup
         }
     }
 
+    protected function seed_hr()
+    {
+        if (\DBUtil::table_exists('core_backends')) {
+            $this->upsert_seed('core_backends', 'code', 'hr', [
+                'code' => 'hr',
+                'name' => 'Recursos Humanos',
+                'description' => 'Empleados, expedientes laborales, periodos de nomina y relacion con CFDI/bancos.',
+                'base_route' => 'admin/hr',
+                'active' => 1,
+                'created_at' => time(),
+                'updated_at' => time(),
+            ]);
+        }
+
+        if (\DBUtil::table_exists('core_knowledge_articles')) {
+            $this->upsert_seed('core_knowledge_articles', 'code', 'rh_nomina', [
+                'code' => 'rh_nomina',
+                'title' => 'Recursos Humanos y nomina',
+                'category' => 'Operacion',
+                'summary' => 'Base para empleados, periodos de nomina, timbrado CFDI y pagos bancarios.',
+                'content' => '<h3>Objetivo</h3><p>RH administra empleados que pueden o no tener usuario del sistema. La nomina se prepara por periodo y queda lista para relacionarse con CFDI de nomina, bancos, pagos y contabilidad.</p><h4>Flujo recomendado</h4><ol><li>Captura empleado con RFC, CURP, NSS, departamento, sucursal, salario y forma de pago.</li><li>Crea periodo de nomina: semanal, quincenal o mensual.</li><li>Crea corrida de nomina y agrega empleados con percepciones, deducciones y neto.</li><li>Cuando se timbre, relaciona el item con CFDI/fiscal document.</li><li>Cuando se pague, relaciona con bancos/pagos para dejar evidencia de flujo.</li></ol><h4>Relacion ERP</h4><p>RH no sustituye SAT, Bancos ni Contabilidad: prepara la operacion y guarda las llaves para conectar nomina timbrada, pago y poliza.</p>',
+                'sort_order' => 60,
+                'active' => 1,
+                'created_at' => time(),
+                'updated_at' => time(),
+            ]);
+        }
+    }
+
     protected function seed_frontend()
     {
         $this->insert_if_missing('core_frontend_themes', 'code', 'core_default', [
@@ -2540,6 +2571,7 @@ class Configsetup
             'purchases' => 'Gestion de compras, ordenes, facturas proveedor, contrarecibos y evidencias',
             'sales' => 'Gestion de cotizaciones, pedidos y solicitudes comerciales',
             'inventory' => 'Gestion de almacenes, existencias y movimientos de inventario',
+            'hr' => 'Gestion de recursos humanos, empleados y nomina',
             'billing' => 'Gestion de facturacion, conceptos y preparacion CFDI',
             'audit' => 'Consulta de auditoria funcional del sistema',
             'sat' => 'Gestion SAT, CFDI y sincronizacion fiscal',

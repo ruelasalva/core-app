@@ -143,6 +143,14 @@
             </a>
         </li>
         <?php endif; ?>
+        <?php if ($menu['hr']): ?>
+        <li class="nav-item">
+            <a href="<?php echo Uri::create('admin/hr'); ?>" class="nav-link <?php echo (Uri::segment(2) == 'hr') ? 'active' : ''; ?>">
+                <i class="nav-icon bi bi-person-badge"></i>
+                <p>Recursos Humanos</p>
+            </a>
+        </li>
+        <?php endif; ?>
 
         <li class="nav-header">RELACIONES</li>
         <?php if ($menu['parties']): ?>
