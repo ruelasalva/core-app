@@ -372,6 +372,7 @@ class Controller_Admin_Hr extends Controller_Adminbase
             'employees' => $this->select_options('core_employees', 'id', 'full_name'),
             'payments' => \DBUtil::table_exists('core_payments') ? $this->payment_options() : [],
             'cfdi_payroll' => \DBUtil::table_exists('core_sat_cfdi') ? $this->cfdi_payroll_options() : [],
+            'sat_payroll_regimes' => \DBUtil::table_exists('core_sat_payroll_regimes') ? Helper_Core_Sat_Catalog::options('core_sat_payroll_regimes') : [],
         ];
     }
 

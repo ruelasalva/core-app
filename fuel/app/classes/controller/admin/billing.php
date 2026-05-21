@@ -682,21 +682,21 @@ class Controller_Admin_Billing extends Controller_Adminbase
             $item_count = 0;
             foreach ($delivery_items as $item) {
                 $product = $item['product_id'] ? Model_Core_Commerce_Product::find((int) $item['product_id']) : null;
-                $tax_rate = $this->tax_rate($product ? (string) $product->tax_code : 'iva_16');
+                $tax_rate = $product && isset($product->sat_tax_rate) ? (float) $product->sat_tax_rate : $this->tax_rate($product ? (string) $product->tax_code : 'iva_16');
                 $base = (float) $item['quantity'] * (float) $item['unit_price'];
                 $tax_amount = round($base * $tax_rate, 2);
                 Model_Core_Billing_Invoice_Item::forge([
                     'invoice_id' => (int) $invoice->id,
                     'product_id' => (int) $item['product_id'],
-                    'sat_product_service_code' => '01010101',
+                    'sat_product_service_code' => $product && isset($product->sat_product_service_code) && (string) $product->sat_product_service_code !== '' ? (string) $product->sat_product_service_code : '01010101',
                     'description' => (string) $item['name'],
                     'quantity' => (float) $item['quantity'],
-                    'unit_code' => $product ? (string) $product->unit_code : 'H87',
-                    'sat_object_tax_code' => '02',
+                    'unit_code' => $product && isset($product->sat_unit_code) && (string) $product->sat_unit_code !== '' ? (string) $product->sat_unit_code : 'H87',
+                    'sat_object_tax_code' => $product && isset($product->sat_object_tax_code) && (string) $product->sat_object_tax_code !== '' ? (string) $product->sat_object_tax_code : ($tax_rate > 0 ? '02' : '01'),
                     'unit_price' => (float) $item['unit_price'],
                     'discount_amount' => 0,
                     'tax_code' => $product ? (string) $product->tax_code : 'iva_16',
-                    'tax_factor_type' => 'Tasa',
+                    'tax_factor_type' => $product && isset($product->sat_tax_factor_type) && (string) $product->sat_tax_factor_type !== '' ? (string) $product->sat_tax_factor_type : 'Tasa',
                     'tax_rate' => $tax_rate,
                     'tax_amount' => $tax_amount,
                     'retention_amount' => 0,
@@ -925,20 +925,30 @@ class Controller_Admin_Billing extends Controller_Adminbase
         }
 
         $items = [];
-        $rows = \DB::select(
-                'id',
-                'sku',
-                'name',
-                'unit_code',
-                'currency_code',
-                'price',
-                'tax_code',
-                'product_type',
-                'is_internal_service',
-                'stock_quantity',
-                'stock_reserved',
-                'main_image_path'
-            )
+        $select = [
+            'id',
+            'sku',
+            'name',
+            'unit_code',
+            'currency_code',
+            'price',
+            'tax_code',
+            'product_type',
+            'is_internal_service',
+            'stock_quantity',
+            'stock_reserved',
+            'main_image_path',
+        ];
+        if (\DBUtil::field_exists('core_commerce_products', ['sat_product_service_code'])) {
+            $select[] = 'sat_product_service_code';
+            $select[] = 'sat_unit_code';
+            $select[] = 'sat_object_tax_code';
+            $select[] = 'sat_tax_code';
+            $select[] = 'sat_tax_factor_type';
+            $select[] = 'sat_tax_rate';
+        }
+
+        $rows = \DB::select_array($select)
             ->from('core_commerce_products')
             ->where('active', '=', 1)
             ->order_by('name', 'asc')
@@ -954,12 +964,17 @@ class Controller_Admin_Billing extends Controller_Adminbase
                 'label' => trim((string) $row['name'].' '.($row['sku'] ? '('.$row['sku'].')' : '')),
                 'name' => (string) $row['name'],
                 'unit_code' => (string) $row['unit_code'],
+                'sat_product_service_code' => (string) \Arr::get($row, 'sat_product_service_code', '01010101'),
+                'sat_unit_code' => (string) \Arr::get($row, 'sat_unit_code', ((string) \Arr::get($row, 'product_type', 'product') === 'service' ? 'E48' : 'H87')),
+                'sat_object_tax_code' => (string) \Arr::get($row, 'sat_object_tax_code', '02'),
                 'currency_code' => (string) $row['currency_code'],
                 'price' => (float) $row['price'],
                 'tax_code' => (string) $row['tax_code'],
+                'sat_tax_code' => (string) \Arr::get($row, 'sat_tax_code', '002'),
+                'sat_tax_factor_type' => (string) \Arr::get($row, 'sat_tax_factor_type', 'Tasa'),
                 'product_type' => (string) $row['product_type'],
                 'is_internal_service' => (int) $row['is_internal_service'],
-                'tax_rate' => $this->tax_rate((string) $row['tax_code']),
+                'tax_rate' => (float) \Arr::get($row, 'sat_tax_rate', $this->tax_rate((string) $row['tax_code'])),
                 'stock_quantity' => $stock,
                 'stock_reserved' => $reserved,
                 'available_stock' => max(0, $stock - $reserved),

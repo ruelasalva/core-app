@@ -150,7 +150,7 @@
                 <div class="col-md-3 mt-2"><label>Frecuencia</label><select class="form-control" v-model="employeeForm.payment_frequency"><option value="semanal">Semanal</option><option value="quincenal">Quincenal</option><option value="mensual">Mensual</option></select></div>
                 <div class="col-md-3 mt-2"><label>Salario diario</label><input type="number" step="0.01" class="form-control" v-model.number="employeeForm.salary_daily"></div>
                 <div class="col-md-3 mt-2"><label>Salario integrado</label><input type="number" step="0.01" class="form-control" v-model.number="employeeForm.salary_integrated"></div>
-                <div class="col-md-3 mt-2"><label>Regimen SAT nomina</label><input class="form-control" v-model="employeeForm.sat_regime_code"></div>
+                <div class="col-md-3 mt-2"><label>Regimen SAT nomina</label><select class="form-control" v-model="employeeForm.sat_regime_code"><option v-for="r in options.sat_payroll_regimes" :value="r.value">{{ r.label }}</option></select></div>
                 <div class="col-md-3 mt-2"><label>Contrato</label><select class="form-control" v-model="employeeForm.contract_type"><option value="indefinido">Indefinido</option><option value="determinado">Determinado</option><option value="obra">Obra</option><option value="prueba">Prueba</option></select></div>
                 <div class="col-md-3 mt-2"><label>Jornada</label><select class="form-control" v-model="employeeForm.work_shift"><option value="diurna">Diurna</option><option value="nocturna">Nocturna</option><option value="mixta">Mixta</option></select></div>
                 <div class="col-md-3 mt-2"><label>Riesgo</label><input class="form-control" v-model="employeeForm.risk_class"></div>

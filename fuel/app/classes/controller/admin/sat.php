@@ -927,6 +927,17 @@ class Controller_Admin_Sat extends Controller_Adminbase
                     ['name' => 'active', 'label' => 'Activo', 'type' => 'checkbox', 'default' => 1],
                 ],
             ],
+            'payroll_regimes' => [
+                'title' => 'Regimen nomina',
+                'model' => 'Model_Core_Sat_Catalog_Payroll_Regime',
+                'table' => 'core_sat_payroll_regimes',
+                'required' => ['code', 'name'],
+                'fields' => [
+                    ['name' => 'code', 'label' => 'Codigo', 'type' => 'text', 'default' => ''],
+                    ['name' => 'name', 'label' => 'Nombre', 'type' => 'text', 'default' => ''],
+                    ['name' => 'active', 'label' => 'Activo', 'type' => 'checkbox', 'default' => 1],
+                ],
+            ],
         ];
     }
 

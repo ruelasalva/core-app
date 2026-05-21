@@ -138,6 +138,15 @@ class Controller_Admin_Commerce extends Controller_Adminbase
                 $data['sku'] = strtoupper(trim($data['sku']));
             }
 
+            if ($section === 'products') {
+                $data['sat_product_service_code'] = trim((string) \Arr::get($data, 'sat_product_service_code', '01010101')) ?: '01010101';
+                $data['sat_unit_code'] = trim((string) \Arr::get($data, 'sat_unit_code', '')) ?: (((string) \Arr::get($data, 'product_type', 'product') === 'service') ? 'E48' : 'H87');
+                $data['sat_object_tax_code'] = trim((string) \Arr::get($data, 'sat_object_tax_code', '02')) ?: '02';
+                $data['sat_tax_code'] = trim((string) \Arr::get($data, 'sat_tax_code', '002')) ?: '002';
+                $data['sat_tax_factor_type'] = trim((string) \Arr::get($data, 'sat_tax_factor_type', 'Tasa')) ?: 'Tasa';
+                $data['sat_tax_rate'] = max(0, (float) \Arr::get($data, 'sat_tax_rate', 0.16));
+            }
+
             # VALIDAR RELACIONES DE PRODUCTO
             if ($section === 'product_relations' && (int) $data['product_id'] === (int) $data['related_product_id']) {
                 return $this->json_response(['error' => 'El producto relacionado debe ser distinto al producto principal.'], 422);
@@ -332,11 +341,17 @@ class Controller_Admin_Commerce extends Controller_Adminbase
                     ['name' => 'subcategory_id', 'label' => 'Subcategoria', 'type' => 'select', 'options' => 'subcategories', 'default' => 0],
                     ['name' => 'product_type', 'label' => 'Tipo', 'type' => 'select', 'options' => 'product_types', 'default' => 'product'],
                     ['name' => 'is_internal_service', 'label' => 'Servicio interno', 'type' => 'checkbox', 'default' => 0],
-                    ['name' => 'unit_code', 'label' => 'Unidad', 'type' => 'select', 'options' => 'units', 'default' => 'pieza'],
+                    ['name' => 'unit_code', 'label' => 'Unidad interna', 'type' => 'select', 'options' => 'units', 'default' => 'pieza'],
+                    ['name' => 'sat_product_service_code', 'label' => 'Clave producto/servicio SAT', 'type' => 'select', 'options' => 'sat_product_service_keys', 'default' => '01010101'],
+                    ['name' => 'sat_unit_code', 'label' => 'Clave unidad SAT', 'type' => 'select', 'options' => 'sat_unit_keys', 'default' => 'H87'],
+                    ['name' => 'sat_object_tax_code', 'label' => 'Objeto impuesto SAT', 'type' => 'select', 'options' => 'sat_object_tax_codes', 'default' => '02'],
                     ['name' => 'currency_code', 'label' => 'Moneda', 'type' => 'select', 'options' => 'currencies', 'default' => 'MXN'],
                     ['name' => 'price', 'label' => 'Precio', 'type' => 'number', 'default' => 0],
                     ['name' => 'cost', 'label' => 'Costo', 'type' => 'number', 'default' => 0],
                     ['name' => 'tax_code', 'label' => 'Impuesto', 'type' => 'select', 'options' => 'taxes', 'default' => 'iva_16'],
+                    ['name' => 'sat_tax_code', 'label' => 'Impuesto SAT', 'type' => 'select', 'options' => 'sat_taxes', 'default' => '002'],
+                    ['name' => 'sat_tax_factor_type', 'label' => 'Factor SAT', 'type' => 'select', 'options' => 'sat_factor_types', 'default' => 'Tasa'],
+                    ['name' => 'sat_tax_rate', 'label' => 'Tasa SAT', 'type' => 'number', 'default' => 0.16],
                     ['name' => 'stock_quantity', 'label' => 'Existencia', 'type' => 'number', 'default' => 0],
                     ['name' => 'stock_reserved', 'label' => 'Reservado', 'type' => 'number', 'default' => 0],
                     ['name' => 'main_image_path', 'label' => 'Imagen principal', 'type' => 'image', 'default' => ''],
@@ -465,6 +480,15 @@ class Controller_Admin_Commerce extends Controller_Adminbase
             'currencies' => $this->select_options('core_catalog_currencies', 'code', 'name'),
             'units' => $this->select_options('core_catalog_units', 'code', 'name'),
             'taxes' => $this->select_options('core_catalog_taxes', 'code', 'name'),
+            'sat_product_service_keys' => Helper_Core_Sat_Catalog::options('core_sat_product_service_keys'),
+            'sat_unit_keys' => Helper_Core_Sat_Catalog::options('core_sat_unit_keys'),
+            'sat_object_tax_codes' => Helper_Core_Sat_Catalog::options('core_sat_object_tax_codes'),
+            'sat_taxes' => Helper_Core_Sat_Catalog::options('core_sat_taxes'),
+            'sat_factor_types' => [
+                ['value' => 'Tasa', 'label' => 'Tasa'],
+                ['value' => 'Cuota', 'label' => 'Cuota'],
+                ['value' => 'Exento', 'label' => 'Exento'],
+            ],
             'relation_types' => [
                 ['value' => 'manual', 'label' => 'Manual'],
                 ['value' => 'complement', 'label' => 'Complemento'],

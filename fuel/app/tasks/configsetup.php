@@ -817,6 +817,52 @@ class Configsetup
                 ]);
             }
         }
+
+        if (\DBUtil::table_exists('core_sat_payroll_regimes')) {
+            $payroll_regimes = [
+                ['02', 'Sueldos'],
+                ['03', 'Jubilados'],
+                ['04', 'Pensionados'],
+                ['05', 'Asimilados miembros sociedades cooperativas produccion'],
+                ['06', 'Asimilados integrantes sociedades asociaciones civiles'],
+                ['07', 'Asimilados miembros consejos'],
+                ['08', 'Asimilados comisionistas'],
+                ['09', 'Asimilados honorarios'],
+                ['10', 'Asimilados acciones'],
+                ['11', 'Asimilados otros'],
+                ['12', 'Jubilados o pensionados'],
+                ['13', 'Indemnizacion o separacion'],
+                ['99', 'Otro regimen'],
+            ];
+
+            foreach ($payroll_regimes as $item) {
+                $this->insert_if_missing('core_sat_payroll_regimes', 'code', $item[0], [
+                    'code' => $item[0],
+                    'name' => $item[1],
+                    'active' => 1,
+                    'created_at' => time(),
+                    'updated_at' => time(),
+                ]);
+            }
+        }
+
+        if (\DBUtil::table_exists('core_commerce_products') && \DBUtil::field_exists('core_commerce_products', ['sat_product_service_code'])) {
+            \DB::update('core_commerce_products')
+                ->set([
+                    'sat_product_service_code' => '01010101',
+                    'sat_unit_code' => 'H87',
+                    'sat_object_tax_code' => '02',
+                    'sat_tax_code' => '002',
+                    'sat_tax_factor_type' => 'Tasa',
+                    'sat_tax_rate' => 0.160000,
+                ])
+                ->where_open()
+                    ->where('sat_product_service_code', '=', '')
+                    ->or_where('sat_unit_code', '=', '')
+                    ->or_where('sat_object_tax_code', '=', '')
+                ->where_close()
+                ->execute();
+        }
     }
 
     protected function seed_catalogs()
@@ -2628,7 +2674,7 @@ class Configsetup
             'title' => 'Catalogos SAT en el ERP',
             'category' => 'SAT',
             'summary' => 'Uso de regimenes fiscales, usos CFDI, formas de pago, metodos de pago, unidades, claves producto y objeto de impuesto.',
-            'content' => '<h3>Objetivo</h3><p>Core-App guarda los codigos oficiales SAT para timbrado y auditoria, pero las pantallas deben mostrar codigo y descripcion para evitar capturas a ciegas.</p><h4>Catalogos base</h4><ul><li><strong>Regimen fiscal</strong>: se usa en terceros, portales y datos fiscales.</li><li><strong>Uso CFDI</strong>: se usa en facturacion y reglas fiscales.</li><li><strong>Forma de pago</strong>: se usa en facturas, pagos y REP.</li><li><strong>Metodo de pago</strong>: PUE o PPD para controlar cobranza y complemento de pago.</li><li><strong>Clave unidad</strong>: se usa en conceptos de factura y productos.</li><li><strong>Clave producto/servicio</strong>: se usa en conceptos y servicios recurrentes.</li><li><strong>Objeto de impuesto</strong>: define si el concepto causa o no impuesto.</li></ul><h4>Regla de uso</h4><p>El usuario debe seleccionar desde catalogo siempre que exista. Si el SAT cambia un catalogo, se actualiza en <strong>Admin &gt; SAT &gt; Catalogos</strong> y luego se usa en los modulos relacionados.</p><h4>Importante</h4><p>Guardar solo el numero o codigo es correcto para el XML; mostrar solo el numero en pantalla no es correcto para operacion. Por eso los selectores deben presentar <code>codigo - descripcion</code>.</p>',
+            'content' => '<h3>Objetivo</h3><p>Core-App guarda los codigos oficiales SAT para timbrado y auditoria, pero las pantallas deben mostrar codigo y descripcion para evitar capturas a ciegas.</p><h4>Catalogos base</h4><ul><li><strong>Regimen fiscal</strong>: se usa en terceros, portales y datos fiscales.</li><li><strong>Regimen nomina</strong>: se usa en RH para el campo TipoRegimen del complemento de nomina.</li><li><strong>Uso CFDI</strong>: se usa en facturacion y reglas fiscales.</li><li><strong>Forma de pago</strong>: se usa en facturas, pagos y REP.</li><li><strong>Metodo de pago</strong>: PUE o PPD para controlar cobranza y complemento de pago.</li><li><strong>Clave unidad</strong>: se usa en conceptos de factura y productos.</li><li><strong>Clave producto/servicio</strong>: se usa en productos, conceptos y servicios recurrentes.</li><li><strong>Objeto de impuesto</strong>: define si el concepto causa o no impuesto.</li></ul><h4>Productos y servicios</h4><p>En <strong>Admin &gt; Comercial &gt; Productos</strong> cada producto debe tener unidad interna, clave producto/servicio SAT, clave unidad SAT, objeto de impuesto, impuesto SAT, factor y tasa. Para productos fisicos el default operativo es <code>H87 - Pieza</code>; para servicios normalmente se usa <code>E48 - Unidad de servicio</code>. Los servicios internos pueden existir para facturacion recurrente sin mostrarse en el frontend.</p><h4>RH</h4><p>En <strong>Admin &gt; RH</strong> el empleado debe seleccionar regimen SAT de nomina desde catalogo. No se debe capturar solo el numero sin descripcion, porque ese dato se usa para preparar CFDI de nomina.</p><h4>Regla de uso</h4><p>El usuario debe seleccionar desde catalogo siempre que exista. Si el SAT cambia un catalogo, se actualiza en <strong>Admin &gt; SAT &gt; Catalogos</strong> y luego se usa en los modulos relacionados.</p><h4>Importante</h4><p>Guardar solo el numero o codigo es correcto para el XML; mostrar solo el numero en pantalla no es correcto para operacion. Por eso los selectores deben presentar <code>codigo - descripcion</code>.</p>',
             'sort_order' => 59,
             'active' => 1,
             'created_at' => time(),

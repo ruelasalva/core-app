@@ -880,11 +880,13 @@ new Vue({
         chooseRecurringProduct: function(product) {
             this.recurringItemForm.product_id = product.value;
             this.recurringItemForm.description = product.name || product.label || '';
-            this.recurringItemForm.unit_code = product.unit_code || (product.product_type === 'product' ? 'H87' : 'E48');
+            this.recurringItemForm.unit_code = product.sat_unit_code || product.unit_code || (product.product_type === 'product' ? 'H87' : 'E48');
             this.recurringItemForm.unit_price = parseFloat(product.price || 0);
             this.recurringItemForm.tax_code = product.tax_code || 'iva_16';
+            this.recurringItemForm.sat_product_service_code = product.sat_product_service_code || '01010101';
             this.recurringItemForm.tax_rate = parseFloat(product.tax_rate || 0);
-            this.recurringItemForm.sat_object_tax_code = this.recurringItemForm.tax_rate > 0 ? '02' : '01';
+            this.recurringItemForm.sat_object_tax_code = product.sat_object_tax_code || (this.recurringItemForm.tax_rate > 0 ? '02' : '01');
+            this.recurringItemForm.tax_factor_type = product.sat_tax_factor_type || 'Tasa';
             this.productSearch = product.label || product.name || '';
         },
         saveRecurringItem: function() {
@@ -972,11 +974,13 @@ new Vue({
                 product_id: product.value,
                 description: product.name || product.label || '',
                 quantity: this.invoiceDraftConcept.quantity || 1,
-                unit_code: product.unit_code || 'H87',
+                unit_code: product.sat_unit_code || product.unit_code || 'H87',
                 unit_price: parseFloat(product.price || 0),
                 tax_code: product.tax_code || 'iva_16',
+                sat_product_service_code: product.sat_product_service_code || '01010101',
                 tax_rate: parseFloat(product.tax_rate || 0),
-                sat_object_tax_code: parseFloat(product.tax_rate || 0) > 0 ? '02' : '01'
+                tax_factor_type: product.sat_tax_factor_type || 'Tasa',
+                sat_object_tax_code: product.sat_object_tax_code || (parseFloat(product.tax_rate || 0) > 0 ? '02' : '01')
             });
             this.invoiceDraftSearch = product.label || product.name || '';
         },
@@ -1035,11 +1039,13 @@ new Vue({
         chooseProduct: function(product) {
             this.itemForm.product_id = product.value;
             this.itemForm.description = product.name || product.label || '';
-            this.itemForm.unit_code = product.unit_code || 'H87';
+            this.itemForm.unit_code = product.sat_unit_code || product.unit_code || 'H87';
             this.itemForm.unit_price = parseFloat(product.price || 0);
             this.itemForm.tax_code = product.tax_code || 'iva_16';
+            this.itemForm.sat_product_service_code = product.sat_product_service_code || '01010101';
             this.itemForm.tax_rate = parseFloat(product.tax_rate || 0);
-            this.itemForm.sat_object_tax_code = this.itemForm.tax_rate > 0 ? '02' : '01';
+            this.itemForm.tax_factor_type = product.sat_tax_factor_type || 'Tasa';
+            this.itemForm.sat_object_tax_code = product.sat_object_tax_code || (this.itemForm.tax_rate > 0 ? '02' : '01');
             this.productSearch = product.label || product.name || '';
         },
         saveItem: function() {
