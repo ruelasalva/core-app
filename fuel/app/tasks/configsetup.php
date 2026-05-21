@@ -620,7 +620,23 @@ class Configsetup
             ['02', 'Cheque nominativo', 1],
             ['03', 'Transferencia electronica de fondos', 1],
             ['04', 'Tarjeta de credito', 1],
+            ['05', 'Monedero electronico', 1],
+            ['06', 'Dinero electronico', 1],
+            ['08', 'Vales de despensa', 0],
+            ['12', 'Dacion en pago', 0],
+            ['13', 'Pago por subrogacion', 0],
+            ['14', 'Pago por consignacion', 0],
+            ['15', 'Condonacion', 0],
+            ['17', 'Compensacion', 0],
+            ['23', 'Novacion', 0],
+            ['24', 'Confusion', 0],
+            ['25', 'Remision de deuda', 0],
+            ['26', 'Prescripcion o caducidad', 0],
+            ['27', 'A satisfaccion del acreedor', 0],
             ['28', 'Tarjeta de debito', 1],
+            ['29', 'Tarjeta de servicios', 1],
+            ['30', 'Aplicacion de anticipos', 0],
+            ['31', 'Intermediario pagos', 1],
             ['99', 'Por definir', 0],
         ];
 
@@ -653,9 +669,28 @@ class Configsetup
 
         $cfdi_uses = [
             ['G01', 'Adquisicion de mercancias', 1, 1],
+            ['G02', 'Devoluciones, descuentos o bonificaciones', 1, 1],
             ['G03', 'Gastos en general', 1, 1],
             ['I01', 'Construcciones', 1, 1],
-            ['P01', 'Por definir', 1, 1],
+            ['I02', 'Mobiliario y equipo de oficina por inversiones', 1, 1],
+            ['I03', 'Equipo de transporte', 1, 1],
+            ['I04', 'Equipo de computo y accesorios', 1, 1],
+            ['I05', 'Dados, troqueles, moldes, matrices y herramental', 1, 1],
+            ['I06', 'Comunicaciones telefonicas', 1, 1],
+            ['I07', 'Comunicaciones satelitales', 1, 1],
+            ['I08', 'Otra maquinaria y equipo', 1, 1],
+            ['D01', 'Honorarios medicos, dentales y gastos hospitalarios', 1, 0],
+            ['D02', 'Gastos medicos por incapacidad o discapacidad', 1, 0],
+            ['D03', 'Gastos funerales', 1, 0],
+            ['D04', 'Donativos', 1, 1],
+            ['D05', 'Intereses reales efectivamente pagados por creditos hipotecarios', 1, 0],
+            ['D06', 'Aportaciones voluntarias al SAR', 1, 0],
+            ['D07', 'Primas por seguros de gastos medicos', 1, 0],
+            ['D08', 'Gastos de transportacion escolar obligatoria', 1, 0],
+            ['D09', 'Depositos en cuentas para el ahorro, primas de pension', 1, 0],
+            ['D10', 'Pagos por servicios educativos', 1, 0],
+            ['CP01', 'Pagos', 1, 1],
+            ['CN01', 'Nomina', 1, 0],
             ['S01', 'Sin efectos fiscales', 1, 1],
         ];
 
@@ -675,8 +710,21 @@ class Configsetup
             ['601', 'General de Ley Personas Morales', 0, 1],
             ['603', 'Personas Morales con Fines no Lucrativos', 0, 1],
             ['605', 'Sueldos y Salarios e Ingresos Asimilados a Salarios', 1, 0],
+            ['606', 'Arrendamiento', 1, 0],
+            ['607', 'Regimen de Enajenacion o Adquisicion de Bienes', 1, 0],
+            ['608', 'Demas ingresos', 1, 0],
+            ['610', 'Residentes en el Extranjero sin Establecimiento Permanente en Mexico', 1, 1],
+            ['611', 'Ingresos por Dividendos socios y accionistas', 1, 0],
             ['612', 'Personas Fisicas con Actividades Empresariales y Profesionales', 1, 0],
+            ['614', 'Ingresos por intereses', 1, 0],
+            ['615', 'Regimen de los ingresos por obtencion de premios', 1, 0],
             ['616', 'Sin obligaciones fiscales', 1, 0],
+            ['620', 'Sociedades Cooperativas de Produccion que optan por diferir sus ingresos', 0, 1],
+            ['621', 'Incorporacion Fiscal', 1, 0],
+            ['622', 'Actividades Agricolas, Ganaderas, Silvicolas y Pesqueras', 1, 1],
+            ['623', 'Opcional para Grupos de Sociedades', 0, 1],
+            ['624', 'Coordinados', 0, 1],
+            ['625', 'Actividades Empresariales con ingresos a traves de Plataformas Tecnologicas', 1, 0],
             ['626', 'Regimen Simplificado de Confianza', 1, 1],
         ];
 
@@ -695,9 +743,13 @@ class Configsetup
         $unit_keys = [
             ['H87', 'Pieza', ''],
             ['E48', 'Unidad de servicio', ''],
+            ['ACT', 'Actividad', ''],
             ['KGM', 'Kilogramo', 'kg'],
             ['MTR', 'Metro', 'm'],
             ['LTR', 'Litro', 'l'],
+            ['XBX', 'Caja', ''],
+            ['XPK', 'Paquete', ''],
+            ['XUN', 'Unidad', ''],
         ];
 
         foreach ($unit_keys as $item) {
@@ -728,6 +780,42 @@ class Configsetup
                 'created_at' => time(),
                 'updated_at' => time(),
             ]);
+        }
+
+        if (\DBUtil::table_exists('core_sat_product_service_keys')) {
+            $product_service_keys = [
+                ['01010101', 'No existe en el catalogo'],
+                ['14111514', 'Cartoncillo'],
+                ['43211500', 'Computadoras'],
+                ['44103100', 'Suministros para impresora, fax y fotocopiadora'],
+                ['44121700', 'Instrumentos de escritura'],
+                ['78101800', 'Transporte de carga por carretera'],
+                ['80131500', 'Alquiler y arrendamiento de propiedades o edificaciones'],
+                ['81112200', 'Mantenimiento y soporte de software'],
+                ['84111506', 'Servicios de facturacion'],
+            ];
+
+            foreach ($product_service_keys as $item) {
+                $this->insert_if_missing('core_sat_product_service_keys', 'code', $item[0], [
+                    'code' => $item[0],
+                    'name' => $item[1],
+                    'active' => 1,
+                    'created_at' => time(),
+                    'updated_at' => time(),
+                ]);
+            }
+        }
+
+        if (\DBUtil::table_exists('core_sat_object_tax_codes')) {
+            foreach ([['01', 'No objeto de impuesto'], ['02', 'Si objeto de impuesto'], ['03', 'Si objeto de impuesto y no obligado al desglose'], ['04', 'Si objeto de impuesto y no causa impuesto']] as $item) {
+                $this->insert_if_missing('core_sat_object_tax_codes', 'code', $item[0], [
+                    'code' => $item[0],
+                    'name' => $item[1],
+                    'active' => 1,
+                    'created_at' => time(),
+                    'updated_at' => time(),
+                ]);
+            }
         }
     }
 
@@ -1645,6 +1733,7 @@ class Configsetup
                 'updated_at' => time(),
             ]);
         }
+
     }
 
     protected function seed_frontend()
@@ -2529,6 +2618,18 @@ class Configsetup
             'summary' => 'Filtro rapido y salida CSV, Excel, PDF e impresion para tablas administrativas.',
             'content' => '<h3>Objetivo</h3><p>Los listados administrativos deben poder filtrarse y exportarse sin repetir codigo en cada modulo. Core-App agrega una capa comun en el template administrativo para tablas principales.</p><h4>Que incluye</h4><ul><li>Busqueda rapida por texto visible.</li><li>Ordenamiento y paginacion con DataTables.</li><li>Exportacion CSV compatible con Excel.</li><li>Exportacion Excel con JSZip.</li><li>Exportacion PDF con pdfmake.</li><li>Impresion directa del listado.</li></ul><h4>Alcance</h4><p>La herramienta se aplica automaticamente a tablas administrativas con estructura <code>thead</code> y <code>tbody</code>. Para excluir una tabla tecnica o de captura se puede usar la clase <code>core-no-tools</code>. Para excluir una columna de exportacion se puede usar <code>core-no-export</code>.</p><h4>DataTables Buttons</h4><p>El proyecto usa la extension oficial Buttons junto con JSZip y pdfmake desde assets locales, sin CDN. Si por alguna razon la extension no carga, el template conserva un respaldo simple con filtro, CSV, Excel HTML e impresion para no dejar sin herramienta al usuario.</p>',
             'sort_order' => 58,
+            'active' => 1,
+            'created_at' => time(),
+            'updated_at' => time(),
+        ]);
+
+        $this->upsert_seed('core_knowledge_articles', 'code', 'catalogos_sat_erp', [
+            'code' => 'catalogos_sat_erp',
+            'title' => 'Catalogos SAT en el ERP',
+            'category' => 'SAT',
+            'summary' => 'Uso de regimenes fiscales, usos CFDI, formas de pago, metodos de pago, unidades, claves producto y objeto de impuesto.',
+            'content' => '<h3>Objetivo</h3><p>Core-App guarda los codigos oficiales SAT para timbrado y auditoria, pero las pantallas deben mostrar codigo y descripcion para evitar capturas a ciegas.</p><h4>Catalogos base</h4><ul><li><strong>Regimen fiscal</strong>: se usa en terceros, portales y datos fiscales.</li><li><strong>Uso CFDI</strong>: se usa en facturacion y reglas fiscales.</li><li><strong>Forma de pago</strong>: se usa en facturas, pagos y REP.</li><li><strong>Metodo de pago</strong>: PUE o PPD para controlar cobranza y complemento de pago.</li><li><strong>Clave unidad</strong>: se usa en conceptos de factura y productos.</li><li><strong>Clave producto/servicio</strong>: se usa en conceptos y servicios recurrentes.</li><li><strong>Objeto de impuesto</strong>: define si el concepto causa o no impuesto.</li></ul><h4>Regla de uso</h4><p>El usuario debe seleccionar desde catalogo siempre que exista. Si el SAT cambia un catalogo, se actualiza en <strong>Admin &gt; SAT &gt; Catalogos</strong> y luego se usa en los modulos relacionados.</p><h4>Importante</h4><p>Guardar solo el numero o codigo es correcto para el XML; mostrar solo el numero en pantalla no es correcto para operacion. Por eso los selectores deben presentar <code>codigo - descripcion</code>.</p>',
+            'sort_order' => 59,
             'active' => 1,
             'created_at' => time(),
             'updated_at' => time(),

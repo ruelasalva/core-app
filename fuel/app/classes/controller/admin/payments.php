@@ -325,7 +325,7 @@ class Controller_Admin_Payments extends Controller_Adminbase
             'parties' => $this->select_options('core_parties', 'id', 'name'),
             'bank_accounts' => $this->select_options('core_catalog_bank_accounts', 'id', 'name'),
             'currencies' => $this->select_options('core_catalog_currencies', 'code', 'name'),
-            'sat_payment_forms' => $this->select_options('core_sat_payment_forms', 'code', 'name'),
+            'sat_payment_forms' => Helper_Core_Sat_Catalog::options('core_sat_payment_forms'),
             'integrations' => $this->select_options('core_integration_connections', 'id', 'name'),
         ];
     }

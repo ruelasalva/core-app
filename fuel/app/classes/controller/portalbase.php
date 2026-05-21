@@ -1025,6 +1025,9 @@ class Controller_Portalbase extends Controller_Template
                 'customer' => $this->portal_code === 'clientes',
                 'reseller' => $this->portal_code === 'revendedores',
             ],
+            'options' => [
+                'sat_tax_regimes' => Helper_Core_Sat_Catalog::options('core_sat_tax_regimes'),
+            ],
             'labels' => $this->portal_profile_labels(),
         ], $extra);
     }

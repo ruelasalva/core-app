@@ -558,12 +558,12 @@ class Controller_Admin_Catalogs extends Controller_Adminbase
             'shipping_carriers' => $this->select_options('core_catalog_shipping_carriers', 'id', 'name'),
             'shipping_methods' => $this->select_options('core_catalog_shipping_methods', 'id', 'name'),
             'fiscal_operation_types' => $this->select_options('core_catalog_fiscal_operation_types', 'id', 'name'),
-            'sat_cfdi_uses' => $this->select_options('core_sat_cfdi_uses', 'code', 'name'),
-            'sat_payment_forms' => $this->select_options('core_sat_payment_forms', 'code', 'name'),
-            'sat_payment_methods' => $this->select_options('core_sat_payment_methods', 'code', 'name'),
-            'sat_tax_regimes' => $this->select_options('core_sat_tax_regimes', 'code', 'name'),
+            'sat_cfdi_uses' => Helper_Core_Sat_Catalog::options('core_sat_cfdi_uses'),
+            'sat_payment_forms' => Helper_Core_Sat_Catalog::options('core_sat_payment_forms'),
+            'sat_payment_methods' => Helper_Core_Sat_Catalog::options('core_sat_payment_methods'),
+            'sat_tax_regimes' => Helper_Core_Sat_Catalog::options('core_sat_tax_regimes'),
             'sat_taxes' => $this->select_options('core_sat_taxes', 'code', 'name'),
-            'sat_unit_keys' => $this->select_options('core_sat_unit_keys', 'code', 'name'),
+            'sat_unit_keys' => Helper_Core_Sat_Catalog::options('core_sat_unit_keys'),
         ];
     }
 

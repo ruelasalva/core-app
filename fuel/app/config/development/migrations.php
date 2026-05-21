@@ -51,6 +51,7 @@ return array (
         45 => '046_create_core_dashboard_assignments',
         46 => '047_add_product_stock_min',
         47 => '048_create_core_hr_tables',
+        48 => '049_create_core_sat_product_and_object_tax_catalogs',
       ),
     ),
     'module' => array(    

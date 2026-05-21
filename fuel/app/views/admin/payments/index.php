@@ -21,7 +21,7 @@
                         <td>{{ invoice.party_name || label(options.parties, invoice.party_id) || '-' }}</td>
                         <td>{{ invoice.issue_date || '-' }}</td>
                         <td>{{ invoice.due_date || '-' }}</td>
-                        <td><span class="badge" :class="invoice.sat_payment_method_code === 'PPD' ? 'badge-info' : 'badge-success'">{{ invoice.sat_payment_method_code || '-' }}</span></td>
+                        <td><span class="badge" :class="invoice.sat_payment_method_code === 'PPD' ? 'badge-info' : 'badge-success'">{{ paymentMethodLabel(invoice.sat_payment_method_code) }}</span></td>
                         <td>{{ invoice.currency_code }} {{ money(invoice.total) }}</td>
                         <td><strong>{{ invoice.currency_code }} {{ money(invoice.balance_due) }}</strong></td>
                         <td><span class="badge badge-light">{{ invoice.status }}</span></td>
@@ -48,7 +48,7 @@
                         <td>{{ label(options.parties, payment.party_id) || '-' }}</td>
                         <td>{{ payment.payment_date }}</td>
                         <td>{{ payment.amount }} {{ payment.currency_code }}</td>
-                        <td>{{ payment.sat_payment_form_code }}</td>
+                        <td>{{ label(options.sat_payment_forms, payment.sat_payment_form_code) || payment.sat_payment_form_code }}</td>
                         <td><span class="badge" :class="payment.fiscal_mode === 'fiscal_required' ? 'badge-info' : 'badge-light'">{{ fiscalModeLabel(payment.fiscal_mode) }}</span><div class="small text-muted" v-if="payment.rep_status && payment.rep_status !== 'not_required'">REP {{ repStatusLabel(payment.rep_status) }}</div></td>
                         <td><span class="badge badge-light">{{ payment.status }}</span></td>
                         <td class="text-center"><button class="btn btn-xs btn-outline-primary" @click="openPayment(payment)"><i class="bi bi-pencil"></i></button></td>
@@ -194,6 +194,9 @@ window.onload = function() {
             label(options, value) {
                 const found = (options || []).find(option => String(option.value) === String(value));
                 return found ? found.label : '';
+            },
+            paymentMethodLabel(value) {
+                return ({ PUE: 'PUE - Pago en una sola exhibicion', PPD: 'PPD - Pago en parcialidades o diferido' })[value] || value || '-';
             },
             money(value) {
                 return Number(value || 0).toFixed(2);

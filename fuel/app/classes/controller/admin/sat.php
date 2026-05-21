@@ -905,6 +905,28 @@ class Controller_Admin_Sat extends Controller_Adminbase
                     ['name' => 'active', 'label' => 'Activo', 'type' => 'checkbox', 'default' => 1],
                 ],
             ],
+            'product_service_keys' => [
+                'title' => 'Claves producto/servicio',
+                'model' => 'Model_Core_Sat_Catalog_Product_Service_Key',
+                'table' => 'core_sat_product_service_keys',
+                'required' => ['code', 'name'],
+                'fields' => [
+                    ['name' => 'code', 'label' => 'Codigo', 'type' => 'text', 'default' => ''],
+                    ['name' => 'name', 'label' => 'Nombre', 'type' => 'text', 'default' => ''],
+                    ['name' => 'active', 'label' => 'Activo', 'type' => 'checkbox', 'default' => 1],
+                ],
+            ],
+            'object_tax_codes' => [
+                'title' => 'Objeto de impuesto',
+                'model' => 'Model_Core_Sat_Catalog_Object_Tax_Code',
+                'table' => 'core_sat_object_tax_codes',
+                'required' => ['code', 'name'],
+                'fields' => [
+                    ['name' => 'code', 'label' => 'Codigo', 'type' => 'text', 'default' => ''],
+                    ['name' => 'name', 'label' => 'Nombre', 'type' => 'text', 'default' => ''],
+                    ['name' => 'active', 'label' => 'Activo', 'type' => 'checkbox', 'default' => 1],
+                ],
+            ],
         ];
     }
 

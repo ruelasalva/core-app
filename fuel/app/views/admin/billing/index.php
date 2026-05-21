@@ -356,19 +356,19 @@
                         <div class="form-group col-md-4">
                             <label>Uso CFDI</label>
                             <select v-model="invoiceForm.sat_cfdi_use_code" class="form-control">
-                                <option v-for="option in options.sat_cfdi_uses" :value="option.value">{{ option.value }} - {{ option.label }}</option>
+                                <option v-for="option in options.sat_cfdi_uses" :value="option.value">{{ option.label }}</option>
                             </select>
                         </div>
                         <div class="form-group col-md-4">
                             <label>Forma pago</label>
                             <select v-model="invoiceForm.sat_payment_form_code" class="form-control">
-                                <option v-for="option in options.sat_payment_forms" :value="option.value">{{ option.value }} - {{ option.label }}</option>
+                                <option v-for="option in options.sat_payment_forms" :value="option.value">{{ option.label }}</option>
                             </select>
                         </div>
                         <div class="form-group col-md-4">
                             <label>Metodo pago</label>
                             <select v-model="invoiceForm.sat_payment_method_code" class="form-control">
-                                <option v-for="option in options.sat_payment_methods" :value="option.value">{{ option.value }} - {{ option.label }}</option>
+                                <option v-for="option in options.sat_payment_methods" :value="option.value">{{ option.label }}</option>
                             </select>
                         </div>
                         <div class="form-group col-12">
@@ -520,19 +520,19 @@
                         <div class="form-group col-md-4">
                             <label>Unidad SAT</label>
                             <select v-model="itemForm.unit_code" class="form-control">
-                                <option v-for="option in options.units" :value="option.value">{{ option.value }} - {{ option.label }}</option>
+                                <option v-for="option in options.units" :value="option.value">{{ option.label }}</option>
                             </select>
                         </div>
                         <div class="form-group col-md-4">
                             <label>Clave producto SAT</label>
-                            <input v-model="itemForm.sat_product_service_code" class="form-control">
+                            <select v-model="itemForm.sat_product_service_code" class="form-control">
+                                <option v-for="option in options.sat_product_service_keys" :value="option.value">{{ option.label }}</option>
+                            </select>
                         </div>
                         <div class="form-group col-md-4">
                             <label>Objeto impuesto</label>
                             <select v-model="itemForm.sat_object_tax_code" class="form-control">
-                                <option value="01">01 - No objeto</option>
-                                <option value="02">02 - Si objeto</option>
-                                <option value="03">03 - Si objeto no obligado</option>
+                                <option v-for="option in options.sat_object_tax_codes" :value="option.value">{{ option.label }}</option>
                             </select>
                         </div>
                         <div class="form-group col-md-4">
@@ -589,9 +589,9 @@
                         <div class="form-group col-md-3"><label>Fin contrato</label><input v-model="recurringForm.end_date" type="date" class="form-control"></div>
                         <div class="form-group col-md-3"><label>Estado</label><select v-model="recurringForm.status" class="form-control"><option value="active">Activo</option><option value="paused">Pausado</option><option value="finished">Terminado</option></select></div>
                         <div class="form-group col-md-3"><label>Moneda</label><select v-model="recurringForm.currency_code" class="form-control"><option v-for="option in options.currencies" :value="option.value">{{ option.value }}</option></select></div>
-                        <div class="form-group col-md-3"><label>Forma pago</label><select v-model="recurringForm.sat_payment_form_code" class="form-control"><option v-for="option in options.sat_payment_forms" :value="option.value">{{ option.value }} - {{ option.label }}</option></select></div>
-                        <div class="form-group col-md-3"><label>Metodo pago</label><select v-model="recurringForm.sat_payment_method_code" class="form-control"><option v-for="option in options.sat_payment_methods" :value="option.value">{{ option.value }} - {{ option.label }}</option></select></div>
-                        <div class="form-group col-md-4"><label>Uso CFDI</label><select v-model="recurringForm.sat_cfdi_use_code" class="form-control"><option v-for="option in options.sat_cfdi_uses" :value="option.value">{{ option.value }} - {{ option.label }}</option></select></div>
+                        <div class="form-group col-md-3"><label>Forma pago</label><select v-model="recurringForm.sat_payment_form_code" class="form-control"><option v-for="option in options.sat_payment_forms" :value="option.value">{{ option.label }}</option></select></div>
+                        <div class="form-group col-md-3"><label>Metodo pago</label><select v-model="recurringForm.sat_payment_method_code" class="form-control"><option v-for="option in options.sat_payment_methods" :value="option.value">{{ option.label }}</option></select></div>
+                        <div class="form-group col-md-4"><label>Uso CFDI</label><select v-model="recurringForm.sat_cfdi_use_code" class="form-control"><option v-for="option in options.sat_cfdi_uses" :value="option.value">{{ option.label }}</option></select></div>
                         <div class="form-group col-md-4"><label>Serie Factura.com</label><input v-model="recurringForm.pac_series_id" class="form-control"></div>
                         <div class="form-group col-md-4"><label>UID receptor Factura.com</label><input v-model="recurringForm.pac_receptor_uid" class="form-control"></div>
                         <div class="form-group col-12"><label>Notas</label><textarea v-model="recurringForm.notes" class="form-control" rows="2"></textarea></div>
@@ -626,10 +626,10 @@
                         </div>
                         <div class="form-group col-md-4"><label>Cantidad</label><input v-model.number="recurringItemForm.quantity" type="number" step="0.0001" class="form-control"></div>
                         <div class="form-group col-md-12"><label>Descripcion</label><input v-model="recurringItemForm.description" class="form-control"></div>
-                        <div class="form-group col-md-3"><label>Unidad</label><input v-model="recurringItemForm.unit_code" class="form-control"></div>
+                        <div class="form-group col-md-3"><label>Unidad</label><select v-model="recurringItemForm.unit_code" class="form-control"><option v-for="option in options.units" :value="option.value">{{ option.label }}</option></select></div>
                         <div class="form-group col-md-3"><label>Precio</label><input v-model.number="recurringItemForm.unit_price" type="number" step="0.01" class="form-control"></div>
                         <div class="form-group col-md-3"><label>IVA</label><input v-model.number="recurringItemForm.tax_rate" type="number" step="0.000001" class="form-control"></div>
-                        <div class="form-group col-md-3"><label>Clave SAT</label><input v-model="recurringItemForm.sat_product_service_code" class="form-control"></div>
+                        <div class="form-group col-md-3"><label>Clave SAT</label><select v-model="recurringItemForm.sat_product_service_code" class="form-control"><option v-for="option in options.sat_product_service_keys" :value="option.value">{{ option.label }}</option></select></div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -687,7 +687,7 @@ new Vue({
         items: [],
         selectedInvoice: null,
         stats: {},
-        options: { parties: [], products: [], currencies: [], payment_terms: [], sat_cfdi_uses: [], sat_payment_forms: [], sat_payment_methods: [], units: [], taxes: [], retentions: [], pac_connections: [] },
+        options: { parties: [], products: [], currencies: [], payment_terms: [], sat_cfdi_uses: [], sat_payment_forms: [], sat_payment_methods: [], sat_tax_regimes: [], units: [], sat_product_service_keys: [], sat_object_tax_codes: [], taxes: [], retentions: [], pac_connections: [] },
         noImage: '<?php echo $no_image_svg; ?>',
         productSearch: '',
         invoiceDraftSearch: '',

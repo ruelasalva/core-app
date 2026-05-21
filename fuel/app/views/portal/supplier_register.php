@@ -48,7 +48,14 @@
                     </div>
                     <div class="col-md-4 form-group">
                         <label>Regimen fiscal</label>
-                        <input class="form-control" name="sat_tax_regime_code" value="<?php echo e(\Arr::get($values, 'sat_tax_regime_code', '')); ?>" placeholder="601, 612, 626...">
+                        <select class="form-control" name="sat_tax_regime_code">
+                            <option value="">Selecciona regimen</option>
+                            <?php foreach (($sat_tax_regimes ?? []) as $option): ?>
+                                <option value="<?php echo e($option['value']); ?>" <?php echo \Arr::get($values, 'sat_tax_regime_code', '') === $option['value'] ? 'selected' : ''; ?>>
+                                    <?php echo e($option['label']); ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
                     </div>
                     <div class="col-md-4 form-group">
                         <label>Giro / servicio</label>

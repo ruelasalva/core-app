@@ -34,7 +34,10 @@
                         </div>
                         <div class="form-group col-md-6">
                             <label>Regimen fiscal</label>
-                            <input class="form-control" v-model="party.sat_tax_regime_code">
+                            <select class="form-control" v-model="party.sat_tax_regime_code">
+                                <option value="">Selecciona regimen</option>
+                                <option v-for="option in options.sat_tax_regimes" :value="option.value">{{ option.label }}</option>
+                            </select>
                         </div>
                     </div>
                     <div class="form-group">
@@ -229,6 +232,7 @@ document.addEventListener('DOMContentLoaded', function() {
             reseller_customers: [],
             features: {},
             labels: {},
+            options: { sat_tax_regimes: [] },
             address: {},
             contact: {},
             reseller_customer: {},
@@ -269,6 +273,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 this.reseller_customers = json.reseller_customers || [];
                 this.features = json.features || {};
                 this.labels = json.labels || {};
+                this.options = json.options || { sat_tax_regimes: [] };
                 this.message = json.message || '';
             },
             saveParty: function() { this.request('perfil_save', this.party); },

@@ -336,8 +336,8 @@ class Controller_Admin_Parties extends Controller_Adminbase
             'users' => $this->select_user_options(),
             'price_lists' => $this->select_options('core_commerce_price_lists', 'id', 'name'),
             'payment_terms' => $this->select_options('core_catalog_payment_terms', 'id', 'name'),
-            'sat_cfdi_uses' => $this->select_options('core_sat_cfdi_uses', 'code', 'name'),
-            'sat_tax_regimes' => $this->select_options('core_sat_tax_regimes', 'code', 'name'),
+            'sat_cfdi_uses' => Helper_Core_Sat_Catalog::options('core_sat_cfdi_uses'),
+            'sat_tax_regimes' => Helper_Core_Sat_Catalog::options('core_sat_tax_regimes'),
             'fiscal_operation_types' => $this->select_options('core_catalog_fiscal_operation_types', 'id', 'name'),
             'shipping_methods' => $this->select_options('core_catalog_shipping_methods', 'id', 'name'),
         ];

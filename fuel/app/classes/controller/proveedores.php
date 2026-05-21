@@ -27,6 +27,7 @@ class Controller_Proveedores extends Controller_Proveedores_Compras
             'error' => '',
             'success' => '',
             'values' => [],
+            'sat_tax_regimes' => Helper_Core_Sat_Catalog::options('core_sat_tax_regimes'),
         ]));
     }
 
@@ -119,6 +120,7 @@ class Controller_Proveedores extends Controller_Proveedores_Compras
                 'error' => '',
                 'success' => 'Solicitud recibida. Nuestro equipo revisara tu informacion y activara el portal cuando sea aprobada.',
                 'values' => [],
+                'sat_tax_regimes' => Helper_Core_Sat_Catalog::options('core_sat_tax_regimes'),
             ]));
         } catch (\Exception $e) {
             return \Response::forge(View::forge('portal/supplier_register', [
@@ -126,6 +128,7 @@ class Controller_Proveedores extends Controller_Proveedores_Compras
                 'error' => $e->getMessage(),
                 'success' => '',
                 'values' => $values,
+                'sat_tax_regimes' => Helper_Core_Sat_Catalog::options('core_sat_tax_regimes'),
             ]), 400);
         }
     }
