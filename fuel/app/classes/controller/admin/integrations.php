@@ -165,6 +165,7 @@ class Controller_Admin_Integrations extends Controller_Adminbase
             if ($provider_id < 1 || $name === '' || $code === '') {
                 return $this->json_response(['error' => 'Proveedor, codigo y nombre son obligatorios.'], 422);
             }
+            $provider_code = $this->provider_code($provider_id);
 
             # SE PREPARAN DATOS PERMITIDOS
             $data = [
@@ -178,6 +179,10 @@ class Controller_Admin_Integrations extends Controller_Adminbase
                 'enabled' => (int) (bool) \Arr::get($val, 'enabled', false),
                 'active' => (int) (bool) \Arr::get($val, 'active', true),
             ];
+            if ($provider_code === 'inegi_denue') {
+                $data['public_key'] = '';
+                $data['public_value'] = '';
+            }
 
             # SE CREA O ACTUALIZA
             $id = (int) \Arr::get($val, 'id', 0);
@@ -195,6 +200,9 @@ class Controller_Admin_Integrations extends Controller_Adminbase
 
             # SE CIFRAN SECRETOS SOLO SI SE CAPTURAN VALORES NUEVOS
             $secret_value = trim((string) \Arr::get($val, 'secret_value', ''));
+            if ($provider_code === 'inegi_denue' && $secret_value === '') {
+                $secret_value = trim((string) \Arr::get($val, 'public_key', ''));
+            }
             if ($secret_value !== '') {
                 $connection->secret_value = \Crypt::encode($secret_value);
             }
@@ -329,6 +337,25 @@ class Controller_Admin_Integrations extends Controller_Adminbase
         $connection['has_secret'] = $has_secret;
         $connection['has_webhook_secret'] = $has_webhook_secret;
         return $connection;
+    }
+
+    /**
+     * PROVIDER CODE
+     *
+     * OBTIENE CODIGO DEL PROVEEDOR PARA REGLAS DE CREDENCIALES
+     *
+     * @access  protected
+     * @return  String
+     */
+    protected function provider_code($provider_id)
+    {
+        $provider = \DB::select('code')
+            ->from('core_integration_providers')
+            ->where('id', '=', (int) $provider_id)
+            ->execute()
+            ->current();
+
+        return $provider ? (string) $provider['code'] : '';
     }
 
     /**

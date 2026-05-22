@@ -79,7 +79,7 @@
                         <th>Conexion</th>
                         <th>Proveedor</th>
                         <th>Ambiente</th>
-                        <th>Public key</th>
+                        <th>Credencial visible</th>
                         <th>Secretos</th>
                         <th>Activa</th>
                         <th class="text-center">Acciones</th>
@@ -90,7 +90,7 @@
                         <td><strong>{{ connection.name }}</strong><div class="text-muted small">{{ connection.code }}</div></td>
                         <td>{{ providerName(connection.provider_id) }}</td>
                         <td><span class="badge badge-light">{{ connection.environment }}</span></td>
-                        <td>{{ connection.public_key || '-' }}</td>
+                        <td>{{ isTokenOnly(connection.provider_id) ? 'No aplica' : (connection.public_key || '-') }}</td>
                         <td>{{ connection.has_secret ? 'Configurado' : 'Pendiente' }}</td>
                         <td>{{ connection.enabled == 1 ? 'Si' : 'No' }}</td>
                         <td class="text-center">
@@ -159,15 +159,15 @@
                     <button type="button" class="close text-white" @click="hideModal('modal-connection')"><span>&times;</span></button>
                 </div>
                 <div class="modal-body">
-                    <div class="alert alert-warning small">Los secretos se cifran y no se muestran de vuelta. Para cambiarlos, captura un valor nuevo.</div>
+                    <div class="alert alert-warning small">{{ credentialHelp(connectionForm.provider_id) }}</div>
                     <div class="row">
                         <div class="col-md-4"><div class="form-group"><label>Proveedor</label><select class="form-control" v-model="connectionForm.provider_id"><option value="0">Selecciona</option><option v-for="provider in providers" :value="provider.id">{{ provider.name }}</option></select></div></div>
                         <div class="col-md-4"><div class="form-group"><label>Codigo</label><input class="form-control" v-model="connectionForm.code"></div></div>
                         <div class="col-md-4"><div class="form-group"><label>Nombre</label><input class="form-control" v-model="connectionForm.name"></div></div>
                         <div class="col-md-4"><div class="form-group"><label>Ambiente</label><select class="form-control" v-model="connectionForm.environment"><option value="sandbox">Sandbox</option><option value="production">Produccion</option></select></div></div>
-                        <div class="col-md-8"><div class="form-group"><label>Public key</label><input class="form-control" v-model="connectionForm.public_key"></div></div>
-                        <div class="col-md-6"><div class="form-group"><label>Secret value</label><input type="password" class="form-control" v-model="connectionForm.secret_value"></div></div>
-                        <div class="col-md-6"><div class="form-group"><label>Webhook secret</label><input type="password" class="form-control" v-model="connectionForm.webhook_secret"></div></div>
+                        <div class="col-md-8" v-if="!isTokenOnly(connectionForm.provider_id)"><div class="form-group"><label>Public key</label><input class="form-control" v-model="connectionForm.public_key"></div></div>
+                        <div :class="isTokenOnly(connectionForm.provider_id) ? 'col-md-8' : 'col-md-6'"><div class="form-group"><label>{{ secretLabel(connectionForm.provider_id) }}</label><input type="password" class="form-control" v-model="connectionForm.secret_value" :placeholder="connectionForm.has_secret ? 'Ya hay un valor guardado; captura uno nuevo solo si deseas cambiarlo' : ''"></div></div>
+                        <div class="col-md-6" v-if="!isTokenOnly(connectionForm.provider_id)"><div class="form-group"><label>Webhook secret</label><input type="password" class="form-control" v-model="connectionForm.webhook_secret"></div></div>
                         <div class="col-md-12"><div class="form-group"><label>Configuracion JSON</label><textarea class="form-control" rows="3" v-model="connectionForm.config_json"></textarea></div></div>
                         <div class="col-md-6"><div class="custom-control custom-switch"><input type="checkbox" class="custom-control-input" id="connection-enabled" v-model="connectionForm.enabled"><label class="custom-control-label" for="connection-enabled">Habilitada</label></div></div>
                         <div class="col-md-6"><div class="custom-control custom-switch"><input type="checkbox" class="custom-control-input" id="connection-active" v-model="connectionForm.active"><label class="custom-control-label" for="connection-active">Activa</label></div></div>
@@ -216,13 +216,33 @@ window.onload = function() {
                 const provider = this.providers.find(item => String(item.id) === String(id));
                 return provider ? provider.name : '-';
             },
+            providerCode(id) {
+                const provider = this.providers.find(item => String(item.id) === String(id));
+                return provider ? provider.code : '';
+            },
+            isTokenOnly(providerId) {
+                return this.providerCode(providerId) === 'inegi_denue';
+            },
+            secretLabel(providerId) {
+                return this.isTokenOnly(providerId) ? 'Token DENUE INEGI' : 'Secret value';
+            },
+            credentialHelp(providerId) {
+                if (this.isTokenOnly(providerId)) {
+                    return 'DENUE solo usa un token. Capturalo aqui; se guarda cifrado y no se muestra de vuelta.';
+                }
+                return 'Los secretos se cifran y no se muestran de vuelta. Para cambiarlos, captura un valor nuevo.';
+            },
             openProvider(provider) {
                 this.providerForm = Object.assign({ id: 0, code: '', name: '', category: 'general', description: '', website_url: '', adapter_class: '', requires_install: false, install_notes: '', config_schema_json: '', sort_order: 0, active: true }, provider);
                 this.showModal('modal-provider');
             },
             openConnection(connection) {
                 this.connectionForm = Object.assign({ id: 0, provider_id: 0, code: '', name: '', environment: 'sandbox', public_key: '', public_value: '', secret_value: '', webhook_secret: '', config_json: '', enabled: false, active: true }, connection);
-                this.connectionForm.secret_value = '';
+                if (this.isTokenOnly(this.connectionForm.provider_id) && this.connectionForm.public_key && !this.connectionForm.has_secret) {
+                    this.connectionForm.secret_value = this.connectionForm.public_key;
+                } else {
+                    this.connectionForm.secret_value = '';
+                }
                 this.connectionForm.webhook_secret = '';
                 this.showModal('modal-connection');
             },

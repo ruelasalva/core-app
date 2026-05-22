@@ -1701,6 +1701,31 @@ class Configsetup
         ])->execute();
     }
 
+    protected function normalize_denue_connection_credentials()
+    {
+        if (!\DBUtil::table_exists('core_integration_providers') || !\DBUtil::table_exists('core_integration_connections')) {
+            return;
+        }
+
+        $provider = \DB::select('id')->from('core_integration_providers')->where('code', '=', 'inegi_denue')->execute()->current();
+        if (!$provider) {
+            return;
+        }
+
+        foreach (\DB::select('id', 'public_key', 'secret_value')->from('core_integration_connections')->where('provider_id', '=', (int) $provider['id'])->execute() as $connection) {
+            $public_key = trim((string) $connection['public_key']);
+            if ($public_key === '') {
+                continue;
+            }
+
+            $update = ['public_key' => '', 'updated_at' => time()];
+            if (trim((string) $connection['secret_value']) === '') {
+                $update['secret_value'] = \Crypt::encode($public_key);
+            }
+            \DB::update('core_integration_connections')->set($update)->where('id', '=', (int) $connection['id'])->execute();
+        }
+    }
+
     /**
      * SEED CALENDAR
      *
@@ -1800,7 +1825,8 @@ class Configsetup
             ]);
         }
 
-        $this->seed_default_integration_connection('inegi_denue', 'inegi_denue_api', 'INEGI DENUE API', 'production', '{"module":"crm","use":"prospecting","docs":"https://www.inegi.org.mx/servicios/api_denue.html","auth":"token","token_field":"secret_value","notes":"Captura el token DENUE como secreto y activa la conexion para importar prospectos."}');
+        $this->seed_default_integration_connection('inegi_denue', 'inegi_denue_api', 'INEGI DENUE API', 'production', '{"module":"crm","use":"prospecting","docs":"https://www.inegi.org.mx/servicios/api_denue.html","auth":"token","token_field":"secret_value","notes":"DENUE solo requiere token. Capturalo en el campo Token DENUE INEGI y activa la conexion para importar prospectos."}');
+        $this->normalize_denue_connection_credentials();
 
         if (\DBUtil::table_exists('core_crm_external_sources')) {
             $this->upsert_seed('core_crm_external_sources', 'code', 'denue', [
@@ -1906,7 +1932,7 @@ class Configsetup
             'title' => 'CRM prospectos DENUE INEGI',
             'category' => 'crm',
             'summary' => 'Busqueda, importacion y conversion de establecimientos DENUE a prospectos y clientes.',
-            'content' => '<h3>Objetivo</h3><p>CRM puede consultar el DENUE de INEGI para encontrar establecimientos, negocios y pymes por giro, estado o ubicacion. Los registros importados son <strong>prospectos</strong>, no clientes, hasta que un vendedor los califique y los convierta.</p><h4>Configuracion</h4><ol><li>Solicita o valida tu token de la API DENUE en INEGI.</li><li>Entra a <strong>Admin &gt; Integraciones</strong>.</li><li>Abre la conexion <strong>INEGI DENUE API</strong>.</li><li>Captura el token como <strong>secreto</strong> y activa la conexion.</li></ol><h4>Busqueda</h4><ol><li>Entra a <strong>Admin &gt; CRM &gt; Prospectos DENUE</strong>.</li><li>Captura palabra clave o giro, por ejemplo <code>papeleria</code>, <code>ferreteria</code> o <code>toner</code>.</li><li>Filtra por estado INEGI o por coordenadas y radio.</li><li>Presiona buscar para previsualizar resultados.</li><li>Selecciona solo los negocios que quieras trabajar e importalos.</li></ol><h4>Seguimiento</h4><ul><li>Asigna responsable o vendedor.</li><li>Cambia estado: nuevo, asignado, contactado, interesado, no interesado, convertido o descartado.</li><li>Agenda proxima accion para seguimiento comercial.</li><li>Convierte a cliente solo cuando exista contacto real o interes comercial.</li></ul><h4>Regla importante</h4><p>No se debe importar masivamente sin filtro ni convertir todo a clientes. DENUE es una fuente publica para prospeccion, pero la calidad comercial se obtiene al depurar, contactar y calificar.</p>',
+            'content' => '<h3>Objetivo</h3><p>CRM puede consultar el DENUE de INEGI para encontrar establecimientos, negocios y pymes por giro, estado o ubicacion. Los registros importados son <strong>prospectos</strong>, no clientes, hasta que un vendedor los califique y los convierta.</p><h4>Configuracion</h4><ol><li>Solicita o valida tu token de la API DENUE en INEGI.</li><li>Entra a <strong>Admin &gt; Integraciones</strong>.</li><li>Abre la conexion <strong>INEGI DENUE API</strong>.</li><li>Captura el valor en <strong>Token DENUE INEGI</strong>. DENUE no usa public key, secret key ni webhook secret.</li><li>Activa la conexion con los switches <strong>Habilitada</strong> y <strong>Activa</strong>.</li></ol><h4>Busqueda</h4><ol><li>Entra a <strong>Admin &gt; CRM &gt; Prospectos DENUE</strong>.</li><li>Captura palabra clave o giro, por ejemplo <code>papeleria</code>, <code>ferreteria</code> o <code>toner</code>.</li><li>Filtra por estado INEGI o por coordenadas y radio.</li><li>Presiona buscar para previsualizar resultados.</li><li>Selecciona solo los negocios que quieras trabajar e importalos.</li></ol><h4>Seguimiento</h4><ul><li>Asigna responsable o vendedor.</li><li>Cambia estado: nuevo, asignado, contactado, interesado, no interesado, convertido o descartado.</li><li>Agenda proxima accion para seguimiento comercial.</li><li>Convierte a cliente solo cuando exista contacto real o interes comercial.</li></ul><h4>Regla importante</h4><p>No se debe importar masivamente sin filtro ni convertir todo a clientes. DENUE es una fuente publica para prospeccion, pero la calidad comercial se obtiene al depurar, contactar y calificar.</p>',
             'sort_order' => 1020,
             'active' => 1,
             'created_at' => time(),

@@ -845,7 +845,9 @@ class Controller_Admin_Crm extends Controller_Adminbase
         if ($lat !== '' && $lng !== '') {
             $url = 'https://www.inegi.org.mx/app/api/denue/v1/consulta/Buscar/'.$keyword.'/'.$lat.','.$lng.'/'.$radius.'/'.$token;
         } elseif ($state !== '') {
-            $url = 'https://www.inegi.org.mx/app/api/denue/v1/consulta/BuscarEntidad/'.$keyword.'/'.$state.'/'.$token;
+            $start = max(1, (int) \Arr::get($payload, 'start_record', 1));
+            $end = min(200, max($start, (int) \Arr::get($payload, 'end_record', 50)));
+            $url = 'https://www.inegi.org.mx/app/api/denue/v1/consulta/BuscarEntidad/'.$keyword.'/'.$state.'/'.$start.'/'.$end.'/'.$token;
         } else {
             throw new \RuntimeException('Captura estado o coordenadas con radio.');
         }
