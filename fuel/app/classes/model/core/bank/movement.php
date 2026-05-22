@@ -6,7 +6,8 @@ class Model_Core_Bank_Movement extends \Orm\Model
     protected static $_primary_key = ['id'];
     protected static $_properties = [
         'id', 'bank_account_id', 'movement_date', 'movement_type', 'amount', 'currency_code',
-        'reference', 'description', 'source', 'payment_id', 'reconciled', 'active', 'created_at', 'updated_at',
+        'balance_after', 'reference', 'description', 'checksum', 'source_row_json', 'source',
+        'statement_import_id', 'payment_id', 'reconciled', 'active', 'created_at', 'updated_at',
     ];
     protected static $_observers = [
         'Orm\Observer_CreatedAt' => ['events' => ['before_insert'], 'property' => 'created_at', 'mysql_timestamp' => false],

@@ -2593,6 +2593,18 @@ class Configsetup
             'updated_at' => time(),
         ]);
 
+        $this->upsert_seed('core_knowledge_articles', 'code', 'bancos_estados_cuenta_conciliacion', [
+            'code' => 'bancos_estados_cuenta_conciliacion',
+            'title' => 'Estados de cuenta y conciliacion asistida',
+            'category' => 'Finanzas',
+            'summary' => 'Importacion de estados de cuenta bancarios, deteccion de duplicados y cruce asistido contra pagos, compras y facturas.',
+            'content' => '<h3>Objetivo</h3><p>Permitir cargar estados de cuenta bancarios y cruzarlos contra la operacion sin aplicar movimientos automaticamente. Core-App sugiere coincidencias y el usuario confirma.</p><h4>Que ya existe</h4><ul><li><code>core_payments</code>: pagos recibidos y enviados.</li><li><code>core_payment_allocations</code>: aplicacion de pagos contra facturas u otros documentos.</li><li><code>core_bank_movements</code>: movimientos bancarios manuales o importados.</li><li><code>core_bank_reconciliations</code>: periodos de conciliacion.</li><li><code>core_catalog_bank_accounts</code>: cuentas bancarias configuradas.</li></ul><h4>Importar estado de cuenta</h4><ol><li>Entra a <strong>Admin &gt; Pagos y Bancos</strong>.</li><li>En <strong>Estados de cuenta bancarios</strong> selecciona cuenta bancaria.</li><li>Carga un archivo CSV. La primera version acepta columnas como fecha, descripcion, referencia, cargo, abono, importe y saldo.</li><li>El sistema guarda el archivo, crea un registro en <code>core_bank_statement_imports</code> y genera movimientos en <code>core_bank_movements</code>.</li><li>Cada movimiento tiene <code>checksum</code> para evitar duplicados si se carga el mismo archivo otra vez.</li></ol><h4>Conciliacion asistida</h4><ol><li>Presiona <strong>Sugerir cruces</strong>.</li><li>El sistema compara importe, fecha cercana, referencia, folio, RFC o texto contra pagos existentes, facturas de cliente y facturas de proveedor.</li><li>Las coincidencias quedan en <code>core_bank_reconciliation_suggestions</code> con porcentaje de confianza.</li><li>El usuario revisa y presiona <strong>Aplicar</strong> solo si esta seguro.</li></ol><h4>Que pasa al aplicar</h4><ul><li>Si la sugerencia es contra un pago existente, el movimiento bancario queda ligado y conciliado.</li><li>Si es contra factura de cliente, se crea un pago recibido y se aplica al saldo.</li><li>Si es contra factura de proveedor, se crea un pago enviado y se aplica al saldo de compra.</li><li>Todo queda auditado. El sistema no debe conciliar automaticamente sin confirmacion humana.</li></ul><h4>Reglas</h4><ul><li>No reemplaza SAT ni CFDI; solo cruza flujo bancario contra operacion.</li><li>No debe cargar archivos con macros ni formatos desconocidos; CSV es el formato seguro inicial.</li><li>Antes de cerrar un periodo, revisar movimientos sin sugerencia y movimientos con baja confianza.</li></ul>',
+            'sort_order' => 53,
+            'active' => 1,
+            'created_at' => time(),
+            'updated_at' => time(),
+        ]);
+
         $this->upsert_seed('core_knowledge_articles', 'code', 'facturacion_cfdi_base', [
             'code' => 'facturacion_cfdi_base',
             'title' => 'Facturacion y preparacion CFDI',

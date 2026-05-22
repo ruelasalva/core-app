@@ -3,10 +3,88 @@
         <div class="col-lg-3 col-6"><div class="small-box bg-info"><div class="inner"><h3>{{ stats.receivables || 0 }}</h3><p>Cuentas por cobrar</p></div><div class="icon"><i class="bi bi-file-earmark-text"></i></div></div></div>
         <div class="col-lg-3 col-6"><div class="small-box bg-warning"><div class="inner"><h3>{{ stats.pending || 0 }}</h3><p>Pendientes</p></div><div class="icon"><i class="bi bi-hourglass-split"></i></div></div></div>
         <div class="col-lg-3 col-6"><div class="small-box bg-success"><div class="inner"><h3>{{ stats.movements || 0 }}</h3><p>Movimientos</p></div><div class="icon"><i class="bi bi-bank"></i></div></div></div>
-        <div class="col-lg-3 col-6"><div class="small-box bg-secondary"><div class="inner"><h3>{{ stats.rep_pending || 0 }}</h3><p>REP pendientes</p></div><div class="icon"><i class="bi bi-receipt"></i></div></div></div>
+        <div class="col-lg-3 col-6"><div class="small-box bg-secondary"><div class="inner"><h3>{{ stats.reconciliation_suggestions || 0 }}</h3><p>Sugerencias</p></div><div class="icon"><i class="bi bi-shuffle"></i></div></div></div>
     </div>
 
     <div v-if="error" class="alert alert-danger">{{ error }}</div>
+    <div v-if="message" class="alert alert-info">{{ message }}</div>
+
+    <div class="card card-info card-outline">
+        <div class="card-header">
+            <h3 class="card-title mb-0">Estados de cuenta bancarios</h3>
+        </div>
+        <div class="card-body">
+            <div class="row align-items-end">
+                <div class="col-md-4">
+                    <div class="form-group">
+                        <label>Cuenta bancaria</label>
+                        <select class="form-control" v-model="statementForm.bank_account_id">
+                            <option value="0">Selecciona</option>
+                            <option v-for="option in options.bank_accounts" :value="option.value">{{ option.label }}</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="form-group">
+                        <label>Archivo CSV</label>
+                        <input type="file" class="form-control" accept=".csv,.txt,text/csv" @change="selectStatementFile">
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <button class="btn btn-info mr-2" @click="importStatement"><i class="bi bi-upload"></i> Importar estado</button>
+                    <button class="btn btn-outline-info" @click="suggestReconciliation"><i class="bi bi-shuffle"></i> Sugerir cruces</button>
+                </div>
+            </div>
+            <div class="table-responsive mt-2">
+                <table class="table table-sm table-bordered">
+                    <thead><tr><th>Archivo</th><th>Cuenta</th><th>Periodo</th><th>Filas</th><th>Nuevos</th><th>Duplicados</th><th>Carga</th></tr></thead>
+                    <tbody>
+                        <tr v-for="statement in statement_imports" :key="statement.id">
+                            <td>{{ statement.original_name }}</td>
+                            <td>{{ label(options.bank_accounts, statement.bank_account_id) }}</td>
+                            <td>{{ statement.period_start || '-' }} a {{ statement.period_end || '-' }}</td>
+                            <td>{{ statement.rows_count }}</td>
+                            <td>{{ statement.imported_count }}</td>
+                            <td>{{ statement.duplicate_count }}</td>
+                            <td>{{ statement.created_at_label }}</td>
+                        </tr>
+                        <tr v-if="statement_imports.length === 0"><td colspan="7" class="text-center text-muted">Sin estados de cuenta importados</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="card card-info card-outline">
+        <div class="card-header">
+            <h3 class="card-title mb-0">Conciliacion asistida</h3>
+        </div>
+        <div class="card-body table-responsive">
+            <table class="table table-bordered table-hover">
+                <thead><tr><th>Movimiento</th><th>Sugerencia</th><th>Tercero</th><th>Importe</th><th>Confianza</th><th>Motivos</th><th class="text-center">Acciones</th></tr></thead>
+                <tbody>
+                    <tr v-for="suggestion in suggestions" :key="suggestion.id">
+                        <td>
+                            <strong>{{ suggestion.movement_date }}</strong>
+                            <div>{{ suggestion.movement_reference || '-' }}</div>
+                            <div class="text-muted small">{{ suggestion.movement_description }}</div>
+                        </td>
+                        <td>{{ suggestion.entity_label }}</td>
+                        <td>{{ suggestion.party_name || label(options.parties, suggestion.party_id) || '-' }}</td>
+                        <td>{{ suggestion.currency_code }} {{ money(suggestion.amount) }}</td>
+                        <td><span class="badge" :class="suggestion.score >= 85 ? 'badge-success' : 'badge-warning'">{{ suggestion.score }}%</span></td>
+                        <td><span v-for="reason in suggestion.reasons" class="badge badge-light mr-1">{{ reason }}</span></td>
+                        <td class="text-center">
+                            <button class="btn btn-xs btn-outline-success" @click="applySuggestion(suggestion)">
+                                <i class="bi bi-check2-circle"></i> Aplicar
+                            </button>
+                        </td>
+                    </tr>
+                    <tr v-if="suggestions.length === 0"><td colspan="7" class="text-center text-muted">Sin sugerencias pendientes</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
 
     <div class="card card-warning card-outline">
         <div class="card-header">
@@ -127,7 +205,7 @@
 window.onload = function() {
     new Vue({
         el: '#app-payments',
-        data: { error: '', payments: [], receivables: [], movements: [], reconciliations: [], options: { parties: [], bank_accounts: [], currencies: [], sat_payment_forms: [], integrations: [] }, stats: {}, paymentForm: {}, movementForm: {} },
+        data: { error: '', message: '', payments: [], receivables: [], movements: [], reconciliations: [], statement_imports: [], suggestions: [], options: { parties: [], bank_accounts: [], currencies: [], sat_payment_forms: [], integrations: [] }, stats: {}, paymentForm: {}, movementForm: {}, statementForm: { bank_account_id: 0, file: null } },
         mounted() { this.loadData(); },
         methods: {
             loadData() {
@@ -137,6 +215,8 @@ window.onload = function() {
                     this.receivables = data.receivables || [];
                     this.movements = data.movements || [];
                     this.reconciliations = data.reconciliations || [];
+                    this.statement_imports = data.statement_imports || [];
+                    this.suggestions = data.suggestions || [];
                     this.options = data.options || this.options;
                     this.stats = data.stats || {};
                 });
@@ -171,7 +251,7 @@ window.onload = function() {
                 this.showModal('modal-payment');
             },
             openMovement(movement) {
-                this.movementForm = Object.assign({ id: 0, bank_account_id: 0, movement_date: new Date().toISOString().slice(0, 10), movement_type: 'deposit', amount: 0, currency_code: 'MXN', reference: '', description: '', source: 'manual', payment_id: 0, reconciled: false, active: true }, movement);
+                this.movementForm = Object.assign({ id: 0, bank_account_id: 0, movement_date: new Date().toISOString().slice(0, 10), movement_type: 'deposit', amount: 0, balance_after: 0, currency_code: 'MXN', reference: '', description: '', source: 'manual', statement_import_id: 0, checksum: '', source_row_json: '', payment_id: 0, reconciled: false, active: true }, movement);
                 this.showModal('modal-movement');
             },
             savePayment() {
@@ -189,6 +269,52 @@ window.onload = function() {
                     this.movements = data.movements || [];
                     this.stats = data.stats || this.stats;
                     this.hideModal('modal-movement');
+                });
+            },
+            selectStatementFile(event) {
+                this.statementForm.file = event.target.files[0] || null;
+            },
+            importStatement() {
+                this.error = '';
+                this.message = '';
+                if (!this.statementForm.bank_account_id || this.statementForm.bank_account_id == 0) { this.error = 'Selecciona una cuenta bancaria.'; return; }
+                if (!this.statementForm.file) { this.error = 'Selecciona un CSV de estado de cuenta.'; return; }
+                const form = new FormData();
+                form.append('bank_account_id', this.statementForm.bank_account_id);
+                form.append('file', this.statementForm.file);
+                form.append(window.coreAppCsrfKey, fuel_csrf_token());
+                fetch('<?php echo Uri::create('admin/payments/import_statement'); ?>', { method: 'POST', body: form }).then(res => res.json()).then(data => {
+                    if (data.error) { this.error = data.error; return; }
+                    this.message = data.message || 'Estado importado.';
+                    this.movements = data.movements || this.movements;
+                    this.statement_imports = data.statement_imports || [];
+                    this.suggestions = data.suggestions || [];
+                    this.stats = data.stats || this.stats;
+                    this.statementForm.file = null;
+                });
+            },
+            suggestReconciliation() {
+                this.error = '';
+                this.message = '';
+                fetch('<?php echo Uri::create('admin/payments/suggest_reconciliation'); ?>', window.coreAppFetchOptions({})).then(res => res.json()).then(data => {
+                    if (data.error) { this.error = data.error; return; }
+                    this.message = data.message || 'Sugerencias actualizadas.';
+                    this.suggestions = data.suggestions || [];
+                    this.stats = data.stats || this.stats;
+                });
+            },
+            applySuggestion(suggestion) {
+                if (!confirm('Aplicar esta conciliacion?')) return;
+                this.error = '';
+                this.message = '';
+                fetch('<?php echo Uri::create('admin/payments/apply_suggestion'); ?>', window.coreAppFetchOptions({ id: suggestion.id })).then(res => res.json()).then(data => {
+                    if (data.error) { this.error = data.error; return; }
+                    this.message = data.message || 'Movimiento conciliado.';
+                    this.payments = data.payments || this.payments;
+                    this.receivables = data.receivables || this.receivables;
+                    this.movements = data.movements || this.movements;
+                    this.suggestions = data.suggestions || [];
+                    this.stats = data.stats || this.stats;
                 });
             },
             label(options, value) {

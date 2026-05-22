@@ -61,6 +61,8 @@ class Controller_Admin_Payments extends Controller_Adminbase
                 'receivables' => $this->get_receivables(),
                 'movements' => $this->get_movements(),
                 'reconciliations' => $this->get_reconciliations(),
+                'statement_imports' => $this->get_statement_imports(),
+                'suggestions' => $this->get_reconciliation_suggestions(),
                 'options' => $this->get_options(),
                 'stats' => $this->get_stats(),
             ]);
@@ -186,10 +188,14 @@ class Controller_Admin_Payments extends Controller_Adminbase
                 'movement_date' => trim((string) \Arr::get($val, 'movement_date', date('Y-m-d'))),
                 'movement_type' => $this->codeify(\Arr::get($val, 'movement_type', 'deposit')),
                 'amount' => (float) \Arr::get($val, 'amount', 0),
+                'balance_after' => (float) \Arr::get($val, 'balance_after', 0),
                 'currency_code' => strtoupper(substr((string) \Arr::get($val, 'currency_code', 'MXN'), 0, 3)),
                 'reference' => trim((string) \Arr::get($val, 'reference', '')),
                 'description' => trim((string) \Arr::get($val, 'description', '')),
                 'source' => $this->codeify(\Arr::get($val, 'source', 'manual')),
+                'statement_import_id' => (int) \Arr::get($val, 'statement_import_id', 0),
+                'checksum' => trim((string) \Arr::get($val, 'checksum', '')),
+                'source_row_json' => trim((string) \Arr::get($val, 'source_row_json', '')),
                 'payment_id' => (int) \Arr::get($val, 'payment_id', 0),
                 'reconciled' => (int) (bool) \Arr::get($val, 'reconciled', false),
                 'active' => (int) (bool) \Arr::get($val, 'active', true),
@@ -225,6 +231,235 @@ class Controller_Admin_Payments extends Controller_Adminbase
         } catch (\Exception $e) {
             \Log::error('Error guardando movimiento bancario: '.$e->getMessage());
             return $this->json_response(['error' => 'No se pudo guardar el movimiento.'], 400);
+        }
+    }
+
+    /**
+     * IMPORT STATEMENT
+     *
+     * IMPORTA ESTADO DE CUENTA CSV COMO MOVIMIENTOS BANCARIOS.
+     *
+     * @access  public
+     * @return  Response
+     */
+    public function action_import_statement()
+    {
+        $this->require_access('payments.access[edit]');
+
+        try {
+            $this->assert_schema_ready();
+            $bank_account_id = (int) \Input::post('bank_account_id', 0);
+            if ($bank_account_id < 1) {
+                return $this->json_response(['error' => 'Selecciona una cuenta bancaria.'], 422);
+            }
+
+            $file = \Input::file('file');
+            if (!$file || (int) \Arr::get($file, 'error', UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+                return $this->json_response(['error' => 'Selecciona un archivo CSV valido.'], 422);
+            }
+
+            $extension = strtolower(pathinfo((string) \Arr::get($file, 'name', ''), PATHINFO_EXTENSION));
+            if (!in_array($extension, ['csv', 'txt'], true)) {
+                return $this->json_response(['error' => 'Por seguridad esta primera version solo acepta CSV/TXT.'], 422);
+            }
+
+            $relative_dir = 'assets/uploads/documents/bank_statements/'.date('Y').'/'.date('m');
+            $absolute_dir = DOCROOT.$relative_dir;
+            if (!is_dir($absolute_dir)) {
+                mkdir($absolute_dir, 0755, true);
+            }
+
+            $filename = time().'_'.\Str::random('alnum', 10).'_'.$this->codeify(pathinfo((string) \Arr::get($file, 'name', 'estado'), PATHINFO_FILENAME)).'.'.$extension;
+            $target = $absolute_dir.DS.$filename;
+            if (!@move_uploaded_file((string) \Arr::get($file, 'tmp_name', ''), $target)) {
+                return $this->json_response(['error' => 'No se pudo guardar el archivo.'], 400);
+            }
+
+            $rows = $this->parse_statement_csv($target);
+            if (empty($rows)) {
+                return $this->json_response(['error' => 'No se detectaron movimientos en el archivo.'], 422);
+            }
+
+            $statement = Model_Core_Bank_Statement_Import::forge([
+                'bank_account_id' => $bank_account_id,
+                'source_format' => 'csv',
+                'original_name' => (string) \Arr::get($file, 'name', ''),
+                'file_path' => str_replace('\\', '/', $relative_dir.'/'.$filename),
+                'period_start' => $this->statement_period_date($rows, 'min'),
+                'period_end' => $this->statement_period_date($rows, 'max'),
+                'rows_count' => count($rows),
+                'imported_count' => 0,
+                'duplicate_count' => 0,
+                'status' => 'processed',
+                'notes' => trim((string) \Input::post('notes', '')),
+                'created_by' => (int) $this->user_id,
+            ]);
+            $statement->save();
+
+            $imported = 0;
+            $duplicates = 0;
+            foreach ($rows as $row) {
+                $checksum = $this->movement_checksum($bank_account_id, $row);
+                if (\DB::select('id')->from('core_bank_movements')->where('checksum', '=', $checksum)->execute()->current()) {
+                    $duplicates++;
+                    continue;
+                }
+
+                Model_Core_Bank_Movement::forge([
+                    'bank_account_id' => $bank_account_id,
+                    'movement_date' => $row['movement_date'],
+                    'movement_type' => $row['movement_type'],
+                    'amount' => $row['amount'],
+                    'balance_after' => $row['balance_after'],
+                    'currency_code' => $row['currency_code'],
+                    'reference' => $row['reference'],
+                    'description' => $row['description'],
+                    'checksum' => $checksum,
+                    'source_row_json' => json_encode($row['raw'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                    'source' => 'statement_csv',
+                    'statement_import_id' => (int) $statement->id,
+                    'payment_id' => 0,
+                    'reconciled' => 0,
+                    'active' => 1,
+                ])->save();
+                $imported++;
+            }
+
+            $statement->imported_count = $imported;
+            $statement->duplicate_count = $duplicates;
+            $statement->save();
+            $this->generate_reconciliation_suggestions();
+
+            Helper_Core_Audit::log([
+                'module' => 'payments',
+                'action' => 'import_bank_statement',
+                'entity_type' => 'bank_statement_import',
+                'entity_id' => (int) $statement->id,
+                'summary' => 'Estado de cuenta importado: '.$imported.' movimientos, '.$duplicates.' duplicados',
+                'new_values' => $statement->to_array(),
+            ]);
+
+            return $this->json_response([
+                'status' => 'ok',
+                'message' => 'Estado de cuenta importado: '.$imported.' movimientos nuevos, '.$duplicates.' duplicados.',
+                'movements' => $this->get_movements(),
+                'statement_imports' => $this->get_statement_imports(),
+                'suggestions' => $this->get_reconciliation_suggestions(),
+                'stats' => $this->get_stats(),
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error importando estado de cuenta: '.$e->getMessage());
+            return $this->json_response(['error' => $e->getMessage()], 400);
+        }
+    }
+
+    /**
+     * SUGGEST RECONCILIATION
+     *
+     * GENERA SUGERENCIAS DE CRUCE PARA MOVIMIENTOS NO CONCILIADOS.
+     *
+     * @access  public
+     * @return  Response
+     */
+    public function action_suggest_reconciliation()
+    {
+        $this->require_access('payments.access[edit]');
+
+        try {
+            $created = $this->generate_reconciliation_suggestions();
+            return $this->json_response([
+                'status' => 'ok',
+                'message' => 'Sugerencias generadas: '.$created,
+                'suggestions' => $this->get_reconciliation_suggestions(),
+                'stats' => $this->get_stats(),
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error generando sugerencias de conciliacion: '.$e->getMessage());
+            return $this->json_response(['error' => 'No se pudieron generar sugerencias.'], 400);
+        }
+    }
+
+    /**
+     * APPLY SUGGESTION
+     *
+     * APLICA UNA SUGERENCIA DE CONCILIACION CONFIRMADA POR EL USUARIO.
+     *
+     * @access  public
+     * @return  Response
+     */
+    public function action_apply_suggestion()
+    {
+        $this->require_access('payments.access[edit]');
+        $val = (array) \Input::json();
+
+        try {
+            $suggestion = Model_Core_Bank_Reconciliation_Suggestion::find((int) \Arr::get($val, 'id', 0));
+            if (!$suggestion || $suggestion->status !== 'pending') {
+                return $this->json_response(['error' => 'Sugerencia no encontrada o ya aplicada.'], 404);
+            }
+
+            $movement = Model_Core_Bank_Movement::find((int) $suggestion->movement_id);
+            if (!$movement || (int) $movement->reconciled === 1) {
+                return $this->json_response(['error' => 'Movimiento no disponible para conciliacion.'], 422);
+            }
+
+            if ($suggestion->suggested_entity_type === 'payment') {
+                $payment = Model_Core_Payment::find((int) $suggestion->suggested_entity_id);
+                if (!$payment) {
+                    return $this->json_response(['error' => 'Pago sugerido no encontrado.'], 404);
+                }
+            } elseif ($suggestion->suggested_entity_type === 'billing_invoice') {
+                $invoice = Model_Core_Billing_Invoice::find((int) $suggestion->suggested_entity_id);
+                if (!$invoice) {
+                    return $this->json_response(['error' => 'Factura de cliente no encontrada.'], 404);
+                }
+                $payment = $this->create_payment_from_movement($movement, 'received', (int) $invoice->party_id, (string) $invoice->folio);
+                $this->apply_payment_to_invoice($payment, (int) $invoice->id);
+            } elseif ($suggestion->suggested_entity_type === 'purchase_invoice') {
+                $invoice = Model_Core_Purchase_Invoice::find((int) $suggestion->suggested_entity_id);
+                if (!$invoice) {
+                    return $this->json_response(['error' => 'Factura de proveedor no encontrada.'], 404);
+                }
+                $payment = $this->create_payment_from_movement($movement, 'sent', (int) $invoice->party_id, (string) $invoice->folio);
+                $this->apply_payment_to_purchase_invoice($payment, (int) $invoice->id);
+            } else {
+                return $this->json_response(['error' => 'Tipo de sugerencia no soportado.'], 422);
+            }
+
+            $movement->payment_id = (int) $payment->id;
+            $movement->reconciled = 1;
+            $movement->save();
+
+            $suggestion->status = 'applied';
+            $suggestion->applied_by = (int) $this->user_id;
+            $suggestion->applied_at = time();
+            $suggestion->save();
+
+            Helper_Core_Audit::log([
+                'module' => 'payments',
+                'action' => 'apply_bank_reconciliation_suggestion',
+                'entity_type' => 'bank_movement',
+                'entity_id' => (int) $movement->id,
+                'summary' => 'Movimiento bancario conciliado con '.$suggestion->suggested_entity_type.' #'.$suggestion->suggested_entity_id,
+                'new_values' => [
+                    'movement_id' => (int) $movement->id,
+                    'payment_id' => (int) $payment->id,
+                    'suggestion_id' => (int) $suggestion->id,
+                ],
+            ]);
+
+            return $this->json_response([
+                'status' => 'ok',
+                'message' => 'Movimiento conciliado.',
+                'payments' => $this->get_payments(),
+                'receivables' => $this->get_receivables(),
+                'movements' => $this->get_movements(),
+                'suggestions' => $this->get_reconciliation_suggestions(),
+                'stats' => $this->get_stats(),
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error aplicando sugerencia de conciliacion: '.$e->getMessage());
+            return $this->json_response(['error' => 'No se pudo aplicar la sugerencia.'], 400);
         }
     }
 
@@ -319,6 +554,63 @@ class Controller_Admin_Payments extends Controller_Adminbase
         return $items;
     }
 
+    protected function get_statement_imports()
+    {
+        if (!\DBUtil::table_exists('core_bank_statement_imports')) {
+            return [];
+        }
+
+        $items = [];
+        foreach (Model_Core_Bank_Statement_Import::query()->order_by('id', 'desc')->limit(50)->get() as $statement) {
+            $row = $statement->to_array();
+            $row['created_at_label'] = $statement->created_at ? date('d/m/Y H:i', (int) $statement->created_at) : '';
+            $items[] = $row;
+        }
+        return $items;
+    }
+
+    protected function get_reconciliation_suggestions()
+    {
+        if (!\DBUtil::table_exists('core_bank_reconciliation_suggestions')) {
+            return [];
+        }
+
+        $items = [];
+        $rows = \DB::select(
+                ['s.id', 'id'],
+                ['s.movement_id', 'movement_id'],
+                ['s.suggested_entity_type', 'suggested_entity_type'],
+                ['s.suggested_entity_id', 'suggested_entity_id'],
+                ['s.payment_type', 'payment_type'],
+                ['s.party_id', 'party_id'],
+                ['p.name', 'party_name'],
+                ['s.amount', 'amount'],
+                ['s.currency_code', 'currency_code'],
+                ['s.score', 'score'],
+                ['s.reasons_json', 'reasons_json'],
+                ['s.status', 'status'],
+                ['m.movement_date', 'movement_date'],
+                ['m.movement_type', 'movement_type'],
+                ['m.reference', 'movement_reference'],
+                ['m.description', 'movement_description']
+            )
+            ->from(['core_bank_reconciliation_suggestions', 's'])
+            ->join(['core_bank_movements', 'm'], 'left')->on('s.movement_id', '=', 'm.id')
+            ->join(['core_parties', 'p'], 'left')->on('s.party_id', '=', 'p.id')
+            ->where('s.status', '=', 'pending')
+            ->order_by('s.score', 'desc')
+            ->order_by('s.id', 'desc')
+            ->limit(200)
+            ->execute();
+
+        foreach ($rows as $row) {
+            $row['reasons'] = json_decode((string) $row['reasons_json'], true) ?: [];
+            $row['entity_label'] = $this->reconciliation_entity_label((string) $row['suggested_entity_type'], (int) $row['suggested_entity_id']);
+            $items[] = $row;
+        }
+        return $items;
+    }
+
     protected function get_options()
     {
         return [
@@ -347,6 +639,8 @@ class Controller_Admin_Payments extends Controller_Adminbase
             'rep_pending' => \DBUtil::field_exists('core_payments', ['rep_status']) ? (int) \DB::select()->from('core_payments')->where('rep_status', '=', 'pending')->execute()->count() : 0,
             'movements' => (int) \DB::count_records('core_bank_movements'),
             'unreconciled' => (int) \DB::select()->from('core_bank_movements')->where('reconciled', '=', 0)->execute()->count(),
+            'statement_imports' => \DBUtil::table_exists('core_bank_statement_imports') ? (int) \DB::count_records('core_bank_statement_imports') : 0,
+            'reconciliation_suggestions' => \DBUtil::table_exists('core_bank_reconciliation_suggestions') ? (int) \DB::select()->from('core_bank_reconciliation_suggestions')->where('status', '=', 'pending')->execute()->count() : 0,
         ];
     }
 
@@ -374,6 +668,12 @@ class Controller_Admin_Payments extends Controller_Adminbase
         }
         if (!\DBUtil::field_exists('core_payments', ['fiscal_mode', 'rep_status', 'fiscal_document_id'])) {
             throw new \RuntimeException('Falta ejecutar migracion fiscal de pagos.');
+        }
+        if (!\DBUtil::table_exists('core_bank_statement_imports') || !\DBUtil::table_exists('core_bank_reconciliation_suggestions')) {
+            throw new \RuntimeException('Falta ejecutar migracion de conciliacion bancaria.');
+        }
+        if (!\DBUtil::field_exists('core_bank_movements', ['statement_import_id', 'checksum'])) {
+            throw new \RuntimeException('Falta ejecutar migracion de estados de cuenta bancarios.');
         }
     }
 
@@ -412,6 +712,413 @@ class Controller_Admin_Payments extends Controller_Adminbase
         $invoice->balance_due = round(max(0, $balance - $amount), 2);
         $invoice->status = $invoice->balance_due <= 0 ? 'paid' : 'partial';
         $invoice->save();
+    }
+
+    protected function apply_payment_to_purchase_invoice(Model_Core_Payment $payment, $invoice_id)
+    {
+        $invoice = Model_Core_Purchase_Invoice::find((int) $invoice_id);
+        if (!$invoice || (int) $invoice->active !== 1) {
+            return;
+        }
+
+        $balance = max(0, (float) $invoice->balance_due);
+        $amount = min(max(0, (float) $payment->amount), $balance);
+        if ($amount <= 0) {
+            return;
+        }
+
+        Model_Core_Payment_Allocation::forge([
+            'payment_id' => (int) $payment->id,
+            'entity_type' => 'purchase_invoice',
+            'entity_id' => (int) $invoice->id,
+            'amount' => round($amount, 2),
+            'notes' => 'Aplicacion de pago a proveedor desde conciliacion bancaria',
+            'active' => 1,
+        ])->save();
+
+        $invoice->balance_due = round(max(0, $balance - $amount), 2);
+        $invoice->status = $invoice->balance_due <= 0 ? 'paid' : 'partial';
+        $invoice->save();
+    }
+
+    protected function create_payment_from_movement(Model_Core_Bank_Movement $movement, $payment_type, $party_id, $reference)
+    {
+        $payment = Model_Core_Payment::forge([
+            'folio' => $this->next_payment_folio(),
+            'payment_type' => $payment_type,
+            'party_id' => (int) $party_id,
+            'bank_account_id' => (int) $movement->bank_account_id,
+            'integration_connection_id' => 0,
+            'fiscal_document_id' => 0,
+            'fiscal_mode' => $payment_type === 'received' ? 'fiscal_optional' : 'system_only',
+            'rep_status' => 'not_required',
+            'payment_date' => (string) $movement->movement_date,
+            'currency_code' => (string) $movement->currency_code,
+            'exchange_rate' => 1,
+            'amount' => (float) $movement->amount,
+            'sat_payment_form_code' => '03',
+            'reference' => trim((string) $reference.' '.(string) $movement->reference),
+            'external_id' => (string) $movement->checksum,
+            'status' => 'confirmed',
+            'notes' => 'Creado desde conciliacion bancaria: '.$movement->description,
+            'created_by' => (int) $this->user_id,
+            'active' => 1,
+        ]);
+        $payment->save();
+        return $payment;
+    }
+
+    protected function parse_statement_csv($path)
+    {
+        $handle = fopen($path, 'r');
+        if (!$handle) {
+            throw new \RuntimeException('No se pudo leer el CSV.');
+        }
+
+        $first = fgets($handle);
+        if ($first === false) {
+            fclose($handle);
+            return [];
+        }
+        $delimiter = $this->detect_csv_delimiter($first);
+        rewind($handle);
+
+        $headers = fgetcsv($handle, 0, $delimiter);
+        if (!$headers) {
+            fclose($handle);
+            return [];
+        }
+        $map = $this->statement_header_map($headers);
+        $rows = [];
+        while (($data = fgetcsv($handle, 0, $delimiter)) !== false) {
+            if (count(array_filter($data, 'strlen')) === 0) {
+                continue;
+            }
+            $raw = [];
+            foreach ($headers as $index => $header) {
+                $raw[(string) $header] = isset($data[$index]) ? $data[$index] : '';
+            }
+            $row = $this->normalize_statement_row($data, $map, $raw);
+            if ($row) {
+                $rows[] = $row;
+            }
+        }
+        fclose($handle);
+
+        return $rows;
+    }
+
+    protected function detect_csv_delimiter($line)
+    {
+        $counts = [
+            ',' => substr_count($line, ','),
+            ';' => substr_count($line, ';'),
+            "\t" => substr_count($line, "\t"),
+        ];
+        arsort($counts);
+        return key($counts) ?: ',';
+    }
+
+    protected function statement_header_map(array $headers)
+    {
+        $map = [];
+        foreach ($headers as $index => $header) {
+            $key = $this->codeify($header);
+            if (in_array($key, ['fecha', 'date', 'fecha_operacion', 'fecha_movimiento'], true)) {
+                $map['date'] = $index;
+            } elseif (in_array($key, ['descripcion', 'description', 'concepto', 'detalle', 'movimiento'], true)) {
+                $map['description'] = $index;
+            } elseif (in_array($key, ['referencia', 'reference', 'ref', 'folio', 'numero_referencia'], true)) {
+                $map['reference'] = $index;
+            } elseif (in_array($key, ['cargo', 'retiro', 'debit', 'egreso', 'salida'], true)) {
+                $map['withdrawal'] = $index;
+            } elseif (in_array($key, ['abono', 'deposito', 'credit', 'ingreso', 'entrada'], true)) {
+                $map['deposit'] = $index;
+            } elseif (in_array($key, ['importe', 'amount', 'monto'], true)) {
+                $map['amount'] = $index;
+            } elseif (in_array($key, ['saldo', 'balance', 'saldo_final'], true)) {
+                $map['balance'] = $index;
+            }
+        }
+        return $map;
+    }
+
+    protected function normalize_statement_row(array $data, array $map, array $raw)
+    {
+        $date_raw = isset($map['date']) ? trim((string) \Arr::get($data, $map['date'], '')) : '';
+        $date = $this->normalize_statement_date($date_raw);
+        if ($date === '') {
+            return null;
+        }
+
+        $deposit = isset($map['deposit']) ? $this->money_value(\Arr::get($data, $map['deposit'], 0)) : 0;
+        $withdrawal = isset($map['withdrawal']) ? $this->money_value(\Arr::get($data, $map['withdrawal'], 0)) : 0;
+        $amount = isset($map['amount']) ? $this->money_value(\Arr::get($data, $map['amount'], 0)) : 0;
+        $movement_type = 'deposit';
+        if ($withdrawal > 0) {
+            $amount = $withdrawal;
+            $movement_type = 'withdrawal';
+        } elseif ($deposit > 0) {
+            $amount = $deposit;
+            $movement_type = 'deposit';
+        } elseif ($amount < 0) {
+            $amount = abs($amount);
+            $movement_type = 'withdrawal';
+        }
+
+        if ($amount <= 0) {
+            return null;
+        }
+
+        return [
+            'movement_date' => $date,
+            'movement_type' => $movement_type,
+            'amount' => round($amount, 2),
+            'balance_after' => isset($map['balance']) ? round($this->money_value(\Arr::get($data, $map['balance'], 0)), 2) : 0,
+            'currency_code' => 'MXN',
+            'reference' => isset($map['reference']) ? trim((string) \Arr::get($data, $map['reference'], '')) : '',
+            'description' => isset($map['description']) ? trim((string) \Arr::get($data, $map['description'], '')) : '',
+            'raw' => $raw,
+        ];
+    }
+
+    protected function normalize_statement_date($value)
+    {
+        $value = trim((string) $value);
+        if ($value === '') {
+            return '';
+        }
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) {
+            return $value;
+        }
+        if (preg_match('/^(\d{2})[\/\-](\d{2})[\/\-](\d{4})$/', $value, $m)) {
+            return $m[3].'-'.$m[2].'-'.$m[1];
+        }
+        $time = strtotime($value);
+        return $time ? date('Y-m-d', $time) : '';
+    }
+
+    protected function money_value($value)
+    {
+        $value = trim((string) $value);
+        if ($value === '') {
+            return 0;
+        }
+        $value = str_replace(['$', ' ', ','], '', $value);
+        $negative = strpos($value, '(') !== false || strpos($value, '-') === 0;
+        $value = str_replace(['(', ')', '+', '-'], '', $value);
+        $amount = (float) $value;
+        return $negative ? -$amount : $amount;
+    }
+
+    protected function movement_checksum($bank_account_id, array $row)
+    {
+        return hash('sha256', implode('|', [
+            (int) $bank_account_id,
+            $row['movement_date'],
+            $row['movement_type'],
+            number_format((float) $row['amount'], 2, '.', ''),
+            $this->codeify($row['reference']),
+            $this->codeify($row['description']),
+        ]));
+    }
+
+    protected function statement_period_date(array $rows, $mode)
+    {
+        $dates = array_map(function ($row) { return $row['movement_date']; }, $rows);
+        sort($dates);
+        return $mode === 'max' ? end($dates) : reset($dates);
+    }
+
+    protected function generate_reconciliation_suggestions()
+    {
+        if (!\DBUtil::table_exists('core_bank_reconciliation_suggestions')) {
+            return 0;
+        }
+
+        $created = 0;
+        $movements = Model_Core_Bank_Movement::query()
+            ->where('reconciled', 0)
+            ->where('active', 1)
+            ->order_by('id', 'desc')
+            ->limit(200)
+            ->get();
+
+        foreach ($movements as $movement) {
+            $existing = \DB::select('id')
+                ->from('core_bank_reconciliation_suggestions')
+                ->where('movement_id', '=', (int) $movement->id)
+                ->where('status', '=', 'pending')
+                ->execute()
+                ->current();
+            if ($existing) {
+                continue;
+            }
+
+            foreach ($this->movement_candidates($movement) as $candidate) {
+                Model_Core_Bank_Reconciliation_Suggestion::forge([
+                    'movement_id' => (int) $movement->id,
+                    'suggested_entity_type' => $candidate['entity_type'],
+                    'suggested_entity_id' => (int) $candidate['entity_id'],
+                    'payment_type' => $candidate['payment_type'],
+                    'party_id' => (int) $candidate['party_id'],
+                    'amount' => (float) $movement->amount,
+                    'currency_code' => (string) $movement->currency_code,
+                    'score' => (int) $candidate['score'],
+                    'reasons_json' => json_encode($candidate['reasons'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                    'status' => 'pending',
+                    'created_by' => (int) $this->user_id,
+                ])->save();
+                $created++;
+            }
+        }
+
+        return $created;
+    }
+
+    protected function movement_candidates(Model_Core_Bank_Movement $movement)
+    {
+        $candidates = [];
+        $payment_type = $movement->movement_type === 'withdrawal' ? 'sent' : 'received';
+        $candidates = array_merge($candidates, $this->payment_candidates($movement, $payment_type));
+        if ($payment_type === 'received') {
+            $candidates = array_merge($candidates, $this->billing_invoice_candidates($movement));
+        } else {
+            $candidates = array_merge($candidates, $this->purchase_invoice_candidates($movement));
+        }
+
+        usort($candidates, function ($a, $b) {
+            return $b['score'] <=> $a['score'];
+        });
+        return array_slice(array_filter($candidates, function ($candidate) {
+            return (int) $candidate['score'] >= 60;
+        }), 0, 3);
+    }
+
+    protected function payment_candidates(Model_Core_Bank_Movement $movement, $payment_type)
+    {
+        $items = [];
+        $rows = \DB::select('id', 'party_id', 'payment_date', 'amount', 'currency_code', 'reference', 'external_id')
+            ->from('core_payments')
+            ->where('payment_type', '=', $payment_type)
+            ->where('active', '=', 1)
+            ->where('status', '!=', 'cancelled')
+            ->where('amount', 'between', [max(0, (float) $movement->amount - 0.01), (float) $movement->amount + 0.01])
+            ->limit(50)
+            ->execute();
+        foreach ($rows as $row) {
+            $score = $this->candidate_score($movement, $row['payment_date'], $row['reference'], 'pago existente');
+            $items[] = [
+                'entity_type' => 'payment',
+                'entity_id' => (int) $row['id'],
+                'payment_type' => $payment_type,
+                'party_id' => (int) $row['party_id'],
+                'score' => $score['score'],
+                'reasons' => $score['reasons'],
+            ];
+        }
+        return $items;
+    }
+
+    protected function billing_invoice_candidates(Model_Core_Bank_Movement $movement)
+    {
+        if (!\DBUtil::table_exists('core_billing_invoices')) {
+            return [];
+        }
+
+        $items = [];
+        $rows = \DB::select(['i.id', 'id'], ['i.party_id', 'party_id'], ['i.issue_date', 'issue_date'], ['i.due_date', 'due_date'], ['i.balance_due', 'balance_due'], ['i.folio', 'folio'], ['i.uuid', 'uuid'], ['p.name', 'party_name'], ['p.rfc', 'party_rfc'])
+            ->from(['core_billing_invoices', 'i'])
+            ->join(['core_parties', 'p'], 'left')->on('i.party_id', '=', 'p.id')
+            ->where('i.invoice_type', '=', 'sale')
+            ->where('i.active', '=', 1)
+            ->where('i.balance_due', 'between', [max(0, (float) $movement->amount - 0.01), (float) $movement->amount + 0.01])
+            ->limit(50)
+            ->execute();
+        foreach ($rows as $row) {
+            $score = $this->candidate_score($movement, $row['due_date'] ?: $row['issue_date'], $row['folio'].' '.$row['uuid'].' '.$row['party_name'].' '.$row['party_rfc'], 'factura cliente');
+            $items[] = [
+                'entity_type' => 'billing_invoice',
+                'entity_id' => (int) $row['id'],
+                'payment_type' => 'received',
+                'party_id' => (int) $row['party_id'],
+                'score' => $score['score'],
+                'reasons' => $score['reasons'],
+            ];
+        }
+        return $items;
+    }
+
+    protected function purchase_invoice_candidates(Model_Core_Bank_Movement $movement)
+    {
+        if (!\DBUtil::table_exists('core_purchase_invoices')) {
+            return [];
+        }
+
+        $items = [];
+        $rows = \DB::select(['i.id', 'id'], ['i.party_id', 'party_id'], ['i.invoice_date', 'invoice_date'], ['i.due_date', 'due_date'], ['i.balance_due', 'balance_due'], ['i.folio', 'folio'], ['i.uuid', 'uuid'], ['p.name', 'party_name'], ['p.rfc', 'party_rfc'])
+            ->from(['core_purchase_invoices', 'i'])
+            ->join(['core_parties', 'p'], 'left')->on('i.party_id', '=', 'p.id')
+            ->where('i.active', '=', 1)
+            ->where('i.balance_due', 'between', [max(0, (float) $movement->amount - 0.01), (float) $movement->amount + 0.01])
+            ->limit(50)
+            ->execute();
+        foreach ($rows as $row) {
+            $score = $this->candidate_score($movement, $row['due_date'] ?: $row['invoice_date'], $row['folio'].' '.$row['uuid'].' '.$row['party_name'].' '.$row['party_rfc'], 'factura proveedor');
+            $items[] = [
+                'entity_type' => 'purchase_invoice',
+                'entity_id' => (int) $row['id'],
+                'payment_type' => 'sent',
+                'party_id' => (int) $row['party_id'],
+                'score' => $score['score'],
+                'reasons' => $score['reasons'],
+            ];
+        }
+        return $items;
+    }
+
+    protected function candidate_score(Model_Core_Bank_Movement $movement, $candidate_date, $candidate_text, $base_reason)
+    {
+        $score = 45;
+        $reasons = ['Importe exacto', ucfirst($base_reason)];
+
+        $days = $candidate_date ? abs((strtotime((string) $movement->movement_date) - strtotime((string) $candidate_date)) / 86400) : 99;
+        if ($days <= 1) {
+            $score += 25;
+            $reasons[] = 'Fecha muy cercana';
+        } elseif ($days <= 5) {
+            $score += 15;
+            $reasons[] = 'Fecha cercana';
+        }
+
+        $movement_text = $this->codeify($movement->reference.' '.$movement->description);
+        $candidate_text = $this->codeify($candidate_text);
+        foreach (explode('_', $movement_text) as $token) {
+            if (strlen($token) >= 5 && strpos($candidate_text, $token) !== false) {
+                $score += 20;
+                $reasons[] = 'Referencia o texto coincide';
+                break;
+            }
+        }
+
+        return ['score' => min(100, $score), 'reasons' => array_values(array_unique($reasons))];
+    }
+
+    protected function reconciliation_entity_label($entity_type, $entity_id)
+    {
+        if ($entity_type === 'payment') {
+            $row = \DB::select('folio')->from('core_payments')->where('id', '=', $entity_id)->execute()->current();
+            return $row ? 'Pago '.$row['folio'] : 'Pago #'.$entity_id;
+        }
+        if ($entity_type === 'billing_invoice') {
+            $row = \DB::select('folio')->from('core_billing_invoices')->where('id', '=', $entity_id)->execute()->current();
+            return $row ? 'Factura cliente '.$row['folio'] : 'Factura cliente #'.$entity_id;
+        }
+        if ($entity_type === 'purchase_invoice') {
+            $row = \DB::select('folio')->from('core_purchase_invoices')->where('id', '=', $entity_id)->execute()->current();
+            return $row ? 'Factura proveedor '.$row['folio'] : 'Factura proveedor #'.$entity_id;
+        }
+        return $entity_type.' #'.$entity_id;
     }
 
     protected function create_payment_complement_document(Model_Core_Payment $payment, Model_Core_Billing_Invoice $invoice)

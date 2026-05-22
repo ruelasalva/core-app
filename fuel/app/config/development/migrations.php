@@ -54,6 +54,7 @@ return array (
         48 => '049_create_core_sat_product_and_object_tax_catalogs',
         49 => '050_add_product_sat_fields_and_payroll_regimes',
         50 => '051_create_sat_catalog_sync_tables',
+        51 => '052_enhance_bank_statement_reconciliation',
       ),
     ),
     'module' => array(    
