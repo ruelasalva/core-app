@@ -242,6 +242,12 @@ class Configsetup
             }
         }
 
+        foreach (['core_crm_external_sources', 'core_crm_prospect_imports', 'core_crm_prospects'] as $table) {
+            if (!\DBUtil::table_exists($table)) {
+                throw new \Exception('Primero ejecuta: php oil refine migrate');
+            }
+        }
+
         foreach (['core_purchase_orders', 'core_purchase_order_items', 'core_purchase_invoices', 'core_purchase_receipts', 'core_purchase_receipt_items', 'core_purchase_approval_rules'] as $table) {
             if (!\DBUtil::table_exists($table)) {
                 throw new \Exception('Primero ejecuta: php oil refine migrate');
@@ -548,6 +554,7 @@ class Configsetup
             ['sat', 'SAT', 'tax_authority', 'Integracion fiscal para CFDI, descargas, validaciones y eventos fiscales.', 'https://www.sat.gob.mx/', 'Adapter_Tax_Sat', 1, 70],
             ['factura_com', 'Factura.com', 'pac_cfdi', 'PAC para timbrado, cancelacion, descarga y envio de CFDI. Las credenciales viven en conexiones, no en Facturacion.', 'https://factura.com/apidocs/', 'Adapter_Pac_FacturaCom', 1, 80],
             ['whatsapp_business', 'WhatsApp Business', 'messaging', 'Mensajeria y notificaciones externas. Requiere proveedor/API autorizado.', 'https://developers.facebook.com/docs/whatsapp', 'Adapter_Messaging_WhatsApp', 1, 90],
+            ['inegi_denue', 'INEGI DENUE', 'public_data', 'Directorio Estadistico Nacional de Unidades Economicas para prospeccion comercial. Usar API oficial con token.', 'https://www.inegi.org.mx/servicios/api_denue.html', 'Adapter_PublicData_InegiDenue', 0, 100],
         ];
 
         foreach ($providers as $provider) {
@@ -1792,6 +1799,21 @@ class Configsetup
                 'updated_at' => time(),
             ]);
         }
+
+        $this->seed_default_integration_connection('inegi_denue', 'inegi_denue_api', 'INEGI DENUE API', 'production', '{"module":"crm","use":"prospecting","docs":"https://www.inegi.org.mx/servicios/api_denue.html","auth":"token","token_field":"secret_value","notes":"Captura el token DENUE como secreto y activa la conexion para importar prospectos."}');
+
+        if (\DBUtil::table_exists('core_crm_external_sources')) {
+            $this->upsert_seed('core_crm_external_sources', 'code', 'denue', [
+                'code' => 'denue',
+                'name' => 'DENUE INEGI',
+                'provider_code' => 'inegi_denue',
+                'description' => 'Directorio Estadistico Nacional de Unidades Economicas para prospeccion CRM.',
+                'website_url' => 'https://www.inegi.org.mx/servicios/api_denue.html',
+                'active' => 1,
+                'created_at' => time(),
+                'updated_at' => time(),
+            ]);
+        }
     }
 
     protected function seed_hr()
@@ -1875,6 +1897,18 @@ class Configsetup
             'content' => '<h3>Objetivo</h3><p>Comisiones separa la operacion comercial de RH y de pagos. Un vendedor puede ser un empleado interno, un revendedor externo o una relacion futura, y la venta conserva el vendedor aplicado para poder calcular aunque despues cambie la asignacion del cliente.</p><h4>Flujo recomendado</h4><ol><li>Crea el empleado en <strong>Recursos Humanos</strong> o el tercero revendedor en <strong>Clientes y proveedores</strong>.</li><li>Entra a <strong>Ventas &gt; Vendedores y comisiones</strong>.</li><li>Crea el vendedor y relaciona empleado, usuario o tercero revendedor.</li><li>Crea un plan de comision si necesitas separar politicas por area, canal o vigencia.</li><li>Crea reglas por venta, pago, producto, marca, categoria, cliente o vendedor.</li><li>En una cotizacion selecciona vendedor o deja automatico para tomar el vendedor asignado al cliente/usuario.</li><li>Cuando exista pedido, genera comisiones por venta desde movimientos. Las reglas al pago quedan preparadas para conectarse al flujo de cobro.</li><li>Usa ajustes manuales solo con autorizacion; quedan auditados.</li><li>Liquida por vendedor y periodo cuando las comisiones esten ganadas.</li></ol><h4>Ejemplos</h4><ul><li><strong>Producto toner 5% al pago</strong>: regla por producto/categoria con evento pago y valor 5%.</li><li><strong>Vendedor 2% al vender</strong>: regla por vendedor con evento venta y valor 2%.</li><li><strong>Cuota +3%</strong>: registra cuota mensual con bono 3% para liquidar cuando el periodo se cumpla.</li></ul><h4>Reglas de seguridad</h4><ul><li>No se debe borrar una comision pagada; se corrige con ajuste auditado.</li><li>Las reglas nuevas aplican hacia adelante. Si una venta ya genero movimiento, no se duplica por tener llave de origen.</li><li>Las liquidaciones deben quedar relacionadas a pagos cuando se conecte el flujo financiero.</li></ul>',
             'active' => 1,
             'sort_order' => 1010,
+            'created_at' => time(),
+            'updated_at' => time(),
+        ]);
+
+        $this->upsert_seed('core_knowledge_articles', 'code', 'crm_prospectos_denue_inegi', [
+            'code' => 'crm_prospectos_denue_inegi',
+            'title' => 'CRM prospectos DENUE INEGI',
+            'category' => 'crm',
+            'summary' => 'Busqueda, importacion y conversion de establecimientos DENUE a prospectos y clientes.',
+            'content' => '<h3>Objetivo</h3><p>CRM puede consultar el DENUE de INEGI para encontrar establecimientos, negocios y pymes por giro, estado o ubicacion. Los registros importados son <strong>prospectos</strong>, no clientes, hasta que un vendedor los califique y los convierta.</p><h4>Configuracion</h4><ol><li>Solicita o valida tu token de la API DENUE en INEGI.</li><li>Entra a <strong>Admin &gt; Integraciones</strong>.</li><li>Abre la conexion <strong>INEGI DENUE API</strong>.</li><li>Captura el token como <strong>secreto</strong> y activa la conexion.</li></ol><h4>Busqueda</h4><ol><li>Entra a <strong>Admin &gt; CRM &gt; Prospectos DENUE</strong>.</li><li>Captura palabra clave o giro, por ejemplo <code>papeleria</code>, <code>ferreteria</code> o <code>toner</code>.</li><li>Filtra por estado INEGI o por coordenadas y radio.</li><li>Presiona buscar para previsualizar resultados.</li><li>Selecciona solo los negocios que quieras trabajar e importalos.</li></ol><h4>Seguimiento</h4><ul><li>Asigna responsable o vendedor.</li><li>Cambia estado: nuevo, asignado, contactado, interesado, no interesado, convertido o descartado.</li><li>Agenda proxima accion para seguimiento comercial.</li><li>Convierte a cliente solo cuando exista contacto real o interes comercial.</li></ul><h4>Regla importante</h4><p>No se debe importar masivamente sin filtro ni convertir todo a clientes. DENUE es una fuente publica para prospeccion, pero la calidad comercial se obtiene al depurar, contactar y calificar.</p>',
+            'sort_order' => 1020,
+            'active' => 1,
             'created_at' => time(),
             'updated_at' => time(),
         ]);

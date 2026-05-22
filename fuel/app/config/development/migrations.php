@@ -56,6 +56,7 @@ return array (
         50 => '051_create_sat_catalog_sync_tables',
         51 => '052_enhance_bank_statement_reconciliation',
         52 => '053_create_sales_sellers_and_commissions',
+        53 => '054_create_crm_denue_prospect_tables',
       ),
     ),
     'module' => array(    
