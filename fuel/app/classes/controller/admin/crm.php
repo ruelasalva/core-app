@@ -256,7 +256,7 @@ class Controller_Admin_Crm extends Controller_Adminbase
             $this->assert_schema_ready();
             $connection = $this->denue_connection();
             if (!$connection) {
-                return $this->json_response(['error' => 'Configura y activa la conexion INEGI DENUE en Integraciones. Captura el token como secreto.'], 422);
+                return $this->json_response(['error' => 'Configura y activa la conexion INEGI DENUE en Integraciones. Captura el Token DENUE INEGI.'], 422);
             }
 
             $rows = $this->denue_request($connection, $payload);

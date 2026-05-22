@@ -101,11 +101,11 @@ class Controller_Admin_Integrations extends Controller_Adminbase
                 'description' => trim((string) \Arr::get($val, 'description', '')),
                 'website_url' => trim((string) \Arr::get($val, 'website_url', '')),
                 'adapter_class' => trim((string) \Arr::get($val, 'adapter_class', '')),
-                'requires_install' => (int) (bool) \Arr::get($val, 'requires_install', false),
+                'requires_install' => $this->bool_value(\Arr::get($val, 'requires_install', false)),
                 'install_notes' => trim((string) \Arr::get($val, 'install_notes', '')),
                 'config_schema_json' => trim((string) \Arr::get($val, 'config_schema_json', '')),
                 'sort_order' => (int) \Arr::get($val, 'sort_order', 0),
-                'active' => (int) (bool) \Arr::get($val, 'active', true),
+                'active' => $this->bool_value(\Arr::get($val, 'active', true)),
             ];
 
             # SE CREA O ACTUALIZA
@@ -176,8 +176,8 @@ class Controller_Admin_Integrations extends Controller_Adminbase
                 'public_key' => trim((string) \Arr::get($val, 'public_key', '')),
                 'public_value' => trim((string) \Arr::get($val, 'public_value', '')),
                 'config_json' => trim((string) \Arr::get($val, 'config_json', '')),
-                'enabled' => (int) (bool) \Arr::get($val, 'enabled', false),
-                'active' => (int) (bool) \Arr::get($val, 'active', true),
+                'enabled' => $this->bool_value(\Arr::get($val, 'enabled', false)),
+                'active' => $this->bool_value(\Arr::get($val, 'active', true)),
             ];
             if ($provider_code === 'inegi_denue') {
                 $data['public_key'] = '';
@@ -356,6 +356,24 @@ class Controller_Admin_Integrations extends Controller_Adminbase
             ->current();
 
         return $provider ? (string) $provider['code'] : '';
+    }
+
+    /**
+     * BOOL VALUE
+     *
+     * NORMALIZA BOOLEANOS ENVIADOS POR VUE/JSON EVITANDO QUE "0" O "false" SEAN TRUE
+     *
+     * @access  protected
+     * @return  Int
+     */
+    protected function bool_value($value)
+    {
+        if (is_bool($value)) {
+            return $value ? 1 : 0;
+        }
+
+        $value = strtolower(trim((string) $value));
+        return in_array($value, ['1', 'true', 'on', 'yes', 'si'], true) ? 1 : 0;
     }
 
     /**

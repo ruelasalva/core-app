@@ -81,7 +81,7 @@
                         <th>Ambiente</th>
                         <th>Credencial visible</th>
                         <th>Secretos</th>
-                        <th>Activa</th>
+                        <th>Estado</th>
                         <th class="text-center">Acciones</th>
                     </tr>
                 </thead>
@@ -92,7 +92,10 @@
                         <td><span class="badge badge-light">{{ connection.environment }}</span></td>
                         <td>{{ isTokenOnly(connection.provider_id) ? 'No aplica' : (connection.public_key || '-') }}</td>
                         <td>{{ connection.has_secret ? 'Configurado' : 'Pendiente' }}</td>
-                        <td>{{ connection.enabled == 1 ? 'Si' : 'No' }}</td>
+                        <td>
+                            <span class="badge" :class="connection.enabled == 1 ? 'badge-success' : 'badge-secondary'">Habilitada: {{ connection.enabled == 1 ? 'Si' : 'No' }}</span>
+                            <span class="badge" :class="connection.active == 1 ? 'badge-success' : 'badge-secondary'">Activa: {{ connection.active == 1 ? 'Si' : 'No' }}</span>
+                        </td>
                         <td class="text-center">
                             <button class="btn btn-xs btn-outline-primary" @click="openConnection(connection)"><i class="bi bi-pencil"></i></button>
                         </td>
@@ -234,10 +237,14 @@ window.onload = function() {
             },
             openProvider(provider) {
                 this.providerForm = Object.assign({ id: 0, code: '', name: '', category: 'general', description: '', website_url: '', adapter_class: '', requires_install: false, install_notes: '', config_schema_json: '', sort_order: 0, active: true }, provider);
+                this.providerForm.requires_install = this.asBool(this.providerForm.requires_install);
+                this.providerForm.active = this.asBool(this.providerForm.active);
                 this.showModal('modal-provider');
             },
             openConnection(connection) {
                 this.connectionForm = Object.assign({ id: 0, provider_id: 0, code: '', name: '', environment: 'sandbox', public_key: '', public_value: '', secret_value: '', webhook_secret: '', config_json: '', enabled: false, active: true }, connection);
+                this.connectionForm.enabled = this.asBool(this.connectionForm.enabled);
+                this.connectionForm.active = this.asBool(this.connectionForm.active);
                 if (this.isTokenOnly(this.connectionForm.provider_id) && this.connectionForm.public_key && !this.connectionForm.has_secret) {
                     this.connectionForm.secret_value = this.connectionForm.public_key;
                 } else {
@@ -245,6 +252,9 @@ window.onload = function() {
                 }
                 this.connectionForm.webhook_secret = '';
                 this.showModal('modal-connection');
+            },
+            asBool(value) {
+                return value === true || value === 1 || value === '1' || value === 'true';
             },
             saveProvider() {
                 fetch('<?php echo Uri::create('admin/integrations/save_provider'); ?>', window.coreAppFetchOptions(this.providerForm))

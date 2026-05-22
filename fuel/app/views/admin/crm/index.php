@@ -52,7 +52,7 @@
                         <div class="card card-secondary card-outline">
                             <div class="card-header"><h3 class="card-title h6 mb-0">Buscar en DENUE</h3></div>
                             <div class="card-body">
-                                <div v-if="!options.denue_connection_ready" class="alert alert-warning py-2">Activa la conexion INEGI DENUE API en Integraciones y captura el token.</div>
+                                <div v-if="!options.denue_connection_ready" class="alert alert-warning py-2">Activa la conexion INEGI DENUE API en Integraciones y captura el Token DENUE INEGI.</div>
                                 <label>Palabra / giro</label>
                                 <input class="form-control" v-model="denueForm.keyword" placeholder="Ej. papeleria, ferreteria, toner">
                                 <div class="row">
