@@ -92,17 +92,22 @@
             </a>
         </li>
         <?php endif; ?>
-        <?php if ($menu['sales']): ?>
-        <?php $sales_open = (Uri::segment(2) == 'sales'); $sales_view = Input::get('view', 'quotes'); ?>
+        <?php if ($menu['sales'] || $menu['commissions']): ?>
+        <?php $sales_open = in_array(Uri::segment(2), ['sales', 'commissions']); $sales_view = Input::get('view', 'quotes'); ?>
         <li class="nav-item has-treeview <?php echo $sales_open ? 'menu-open' : ''; ?>">
             <a href="#" class="nav-link <?php echo $sales_open ? 'active' : ''; ?>">
                 <i class="nav-icon bi bi-receipt"></i>
                 <p>Ventas<i class="right bi bi-chevron-left"></i></p>
             </a>
             <ul class="nav nav-treeview">
-                <li class="nav-item"><a href="<?php echo Uri::create('admin/sales', [], ['view' => 'quotes']); ?>" class="nav-link <?php echo $sales_open && $sales_view == 'quotes' ? 'active' : ''; ?>"><i class="bi bi-circle nav-icon"></i><p>Cotizaciones</p></a></li>
-                <li class="nav-item"><a href="<?php echo Uri::create('admin/sales', [], ['view' => 'orders']); ?>" class="nav-link <?php echo $sales_open && $sales_view == 'orders' ? 'active' : ''; ?>"><i class="bi bi-circle nav-icon"></i><p>Pedidos</p></a></li>
-                <li class="nav-item"><a href="<?php echo Uri::create('admin/sales', [], ['view' => 'deliveries']); ?>" class="nav-link <?php echo $sales_open && $sales_view == 'deliveries' ? 'active' : ''; ?>"><i class="bi bi-circle nav-icon"></i><p>Entregas</p></a></li>
+                <?php if ($menu['sales']): ?>
+                <li class="nav-item"><a href="<?php echo Uri::create('admin/sales', [], ['view' => 'quotes']); ?>" class="nav-link <?php echo Uri::segment(2) == 'sales' && $sales_view == 'quotes' ? 'active' : ''; ?>"><i class="bi bi-circle nav-icon"></i><p>Cotizaciones</p></a></li>
+                <li class="nav-item"><a href="<?php echo Uri::create('admin/sales', [], ['view' => 'orders']); ?>" class="nav-link <?php echo Uri::segment(2) == 'sales' && $sales_view == 'orders' ? 'active' : ''; ?>"><i class="bi bi-circle nav-icon"></i><p>Pedidos</p></a></li>
+                <li class="nav-item"><a href="<?php echo Uri::create('admin/sales', [], ['view' => 'deliveries']); ?>" class="nav-link <?php echo Uri::segment(2) == 'sales' && $sales_view == 'deliveries' ? 'active' : ''; ?>"><i class="bi bi-circle nav-icon"></i><p>Entregas</p></a></li>
+                <?php endif; ?>
+                <?php if ($menu['commissions']): ?>
+                <li class="nav-item"><a href="<?php echo Uri::create('admin/commissions'); ?>" class="nav-link <?php echo Uri::segment(2) == 'commissions' ? 'active' : ''; ?>"><i class="bi bi-cash-coin nav-icon"></i><p>Vendedores y comisiones</p></a></li>
+                <?php endif; ?>
             </ul>
         </li>
         <?php endif; ?>

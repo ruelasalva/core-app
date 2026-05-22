@@ -55,6 +55,7 @@ return array (
         49 => '050_add_product_sat_fields_and_payroll_regimes',
         50 => '051_create_sat_catalog_sync_tables',
         51 => '052_enhance_bank_statement_reconciliation',
+        52 => '053_create_sales_sellers_and_commissions',
       ),
     ),
     'module' => array(    

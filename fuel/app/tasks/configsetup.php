@@ -29,6 +29,7 @@ class Configsetup
             $this->seed_calendar();
             $this->seed_dashboards();
             $this->seed_hr();
+            $this->seed_commissions();
             $this->seed_frontend();
             $this->seed_knowledge();
             $this->sync_groups();
@@ -36,6 +37,7 @@ class Configsetup
             $this->cleanup_legacy_permissions();
             $this->sync_purchase_group_permissions();
             $this->sync_sat_group_permissions();
+            $this->sync_commission_group_permissions();
 
             echo "\n [SUCCESS] Configuracion base preparada.\n";
             echo " - Empresa base\n";
@@ -62,11 +64,13 @@ class Configsetup
             echo " - Calendario y sala de juntas base\n";
             echo " - Dashboards base\n";
             echo " - Recursos Humanos y nomina base\n";
+            echo " - Vendedores y comisiones base\n";
             echo " - Frontend administrable base\n";
             echo " - Ayuda y conocimiento base\n";
             echo " - Grupos de acceso recomendados\n";
             echo " - Permisos base\n";
             echo " - Permisos recomendados de compras y SAT\n";
+            echo " - Permisos recomendados de comisiones\n";
         } catch (\Exception $e) {
             echo "\n [ERROR] ".$e->getMessage()."\n";
             \Log::error('Fallo en configsetup: '.$e->getMessage());
@@ -204,13 +208,19 @@ class Configsetup
             throw new \Exception('Primero ejecuta: php oil refine migrate');
         }
 
+        foreach (['core_sales_sellers', 'core_commission_plans', 'core_commission_rules', 'core_commission_quotas', 'core_commission_entries', 'core_commission_settlements', 'core_commission_adjustments'] as $table) {
+            if (!\DBUtil::table_exists($table)) {
+                throw new \Exception('Primero ejecuta: php oil refine migrate');
+            }
+        }
+
         foreach (['core_parties', 'core_party_addresses', 'core_party_contacts'] as $table) {
             if (!\DBUtil::table_exists($table)) {
                 throw new \Exception('Primero ejecuta: php oil refine migrate');
             }
         }
 
-        if (!\DBUtil::field_exists('core_parties', ['department_id', 'sales_user_id', 'buyer_user_id'])) {
+        if (!\DBUtil::field_exists('core_parties', ['department_id', 'sales_user_id', 'default_seller_id', 'buyer_user_id'])) {
             throw new \Exception('Primero ejecuta: php oil refine migrate');
         }
 
@@ -1814,6 +1824,62 @@ class Configsetup
 
     }
 
+    protected function seed_commissions()
+    {
+        $this->insert_if_missing('core_commission_plans', 'code', 'COMISIONES_BASE', [
+            'code' => 'COMISIONES_BASE',
+            'name' => 'Plan base de comisiones',
+            'applies_to' => 'all',
+            'valid_from' => '',
+            'valid_until' => '',
+            'description' => 'Plan inicial para reglas generales por venta, pago, producto, cliente, vendedor o cuota.',
+            'active' => 1,
+            'created_at' => time(),
+            'updated_at' => time(),
+        ]);
+
+        $plan = \DB::select('id')->from('core_commission_plans')->where('code', '=', 'COMISIONES_BASE')->execute()->current();
+        $plan_id = $plan ? (int) $plan['id'] : 0;
+
+        $this->insert_if_missing('core_commission_rules', 'code', 'COM_VENTA_GENERAL_2', [
+            'plan_id' => $plan_id,
+            'code' => 'COM_VENTA_GENERAL_2',
+            'name' => 'Comision general 2% al vender',
+            'rule_scope' => 'general',
+            'seller_id' => 0,
+            'party_id' => 0,
+            'product_id' => 0,
+            'brand_id' => 0,
+            'category_id' => 0,
+            'subcategory_id' => 0,
+            'trigger_event' => 'sale',
+            'calculation_base' => 'line_total',
+            'value_type' => 'percent',
+            'value' => 2,
+            'min_quantity' => 0,
+            'min_amount' => 0,
+            'priority' => 900,
+            'stackable' => 1,
+            'valid_from' => '',
+            'valid_until' => '',
+            'active' => 1,
+            'created_at' => time(),
+            'updated_at' => time(),
+        ]);
+
+        $this->upsert_seed('core_knowledge_articles', 'code', 'ventas_vendedores_comisiones', [
+            'code' => 'ventas_vendedores_comisiones',
+            'title' => 'Vendedores, revendedores y comisiones',
+            'category' => 'ventas',
+            'summary' => 'Como configurar vendedores internos, revendedores, reglas, cuotas y liquidaciones.',
+            'content' => '<h3>Objetivo</h3><p>Comisiones separa la operacion comercial de RH y de pagos. Un vendedor puede ser un empleado interno, un revendedor externo o una relacion futura, y la venta conserva el vendedor aplicado para poder calcular aunque despues cambie la asignacion del cliente.</p><h4>Flujo recomendado</h4><ol><li>Crea el empleado en <strong>Recursos Humanos</strong> o el tercero revendedor en <strong>Clientes y proveedores</strong>.</li><li>Entra a <strong>Ventas &gt; Vendedores y comisiones</strong>.</li><li>Crea el vendedor y relaciona empleado, usuario o tercero revendedor.</li><li>Crea un plan de comision si necesitas separar politicas por area, canal o vigencia.</li><li>Crea reglas por venta, pago, producto, marca, categoria, cliente o vendedor.</li><li>En una cotizacion selecciona vendedor o deja automatico para tomar el vendedor asignado al cliente/usuario.</li><li>Cuando exista pedido, genera comisiones por venta desde movimientos. Las reglas al pago quedan preparadas para conectarse al flujo de cobro.</li><li>Usa ajustes manuales solo con autorizacion; quedan auditados.</li><li>Liquida por vendedor y periodo cuando las comisiones esten ganadas.</li></ol><h4>Ejemplos</h4><ul><li><strong>Producto toner 5% al pago</strong>: regla por producto/categoria con evento pago y valor 5%.</li><li><strong>Vendedor 2% al vender</strong>: regla por vendedor con evento venta y valor 2%.</li><li><strong>Cuota +3%</strong>: registra cuota mensual con bono 3% para liquidar cuando el periodo se cumpla.</li></ul><h4>Reglas de seguridad</h4><ul><li>No se debe borrar una comision pagada; se corrige con ajuste auditado.</li><li>Las reglas nuevas aplican hacia adelante. Si una venta ya genero movimiento, no se duplica por tener llave de origen.</li><li>Las liquidaciones deben quedar relacionadas a pagos cuando se conecte el flujo financiero.</li></ul>',
+            'active' => 1,
+            'sort_order' => 1010,
+            'created_at' => time(),
+            'updated_at' => time(),
+        ]);
+    }
+
     protected function seed_frontend()
     {
         $this->insert_if_missing('core_frontend_themes', 'code', 'core_default', [
@@ -2773,6 +2839,7 @@ class Configsetup
             'payments' => 'Gestion de pagos, bancos, movimientos y conciliaciones',
             'purchases' => 'Gestion de compras, ordenes, facturas proveedor, contrarecibos y evidencias',
             'sales' => 'Gestion de cotizaciones, pedidos y solicitudes comerciales',
+            'commissions' => 'Gestion de vendedores, reglas, cuotas, movimientos y liquidaciones de comisiones',
             'inventory' => 'Gestion de almacenes, existencias y movimientos de inventario',
             'hr' => 'Gestion de recursos humanos, empleados y nomina',
             'billing' => 'Gestion de facturacion, conceptos y preparacion CFDI',
@@ -2906,6 +2973,56 @@ class Configsetup
                     'group_id' => $group_id,
                     'perms_id' => (int) $permission['id'],
                     'actions' => serialize($actions),
+                ])->execute();
+            }
+
+            foreach (\DB::select('id')->from('users')->where('group_id', '=', $group_id)->execute() as $user) {
+                try {
+                    \Cache::delete('auth.permissions.user_'.(int) $user['id']);
+                } catch (\Exception $e) {
+                    // Cache may not exist yet.
+                }
+            }
+        }
+    }
+
+    protected function sync_commission_group_permissions()
+    {
+        $permission = \DB::select('id', 'actions')
+            ->from('users_permissions')
+            ->where('area', '=', 'commissions')
+            ->where('permission', '=', 'access')
+            ->execute()
+            ->current();
+
+        if (!$permission) {
+            return;
+        }
+
+        $actions = !empty($permission['actions']) ? @unserialize($permission['actions']) : [];
+        if (!is_array($actions) || empty($actions)) {
+            $actions = ['view', 'create', 'edit', 'delete', 'import', 'export', 'authorize'];
+        }
+
+        foreach ([60, 80, 90, 100] as $group_id) {
+            $exists = \DB::select('id')
+                ->from('users_group_permissions')
+                ->where('group_id', '=', $group_id)
+                ->where('perms_id', '=', (int) $permission['id'])
+                ->execute()
+                ->current();
+
+            $group_actions = in_array($group_id, [90, 100], true) ? $actions : ['view', 'create', 'edit', 'export'];
+            if ($exists) {
+                \DB::update('users_group_permissions')
+                    ->set(['actions' => serialize($group_actions)])
+                    ->where('id', '=', (int) $exists['id'])
+                    ->execute();
+            } else {
+                \DB::insert('users_group_permissions')->set([
+                    'group_id' => $group_id,
+                    'perms_id' => (int) $permission['id'],
+                    'actions' => serialize($group_actions),
                 ])->execute();
             }
 

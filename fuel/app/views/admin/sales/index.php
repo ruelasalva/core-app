@@ -280,12 +280,21 @@
                     </div>
                     <h6 class="quote-section-title quote-section-partner">Datos del socio</h6>
                     <div class="quote-partner-panel">
-                        <div class="form-group">
-                            <label>Socio de negocio</label>
-                            <select class="form-control" v-model="quoteForm.party_id">
-                                <option value="">Escribe o selecciona socio...</option>
-                                <option v-for="customer in options.customers" :value="customer.value">{{ customer.label }}</option>
-                            </select>
+                        <div class="row">
+                            <div class="col-md-8">
+                                <label>Socio de negocio</label>
+                                <select class="form-control" v-model="quoteForm.party_id">
+                                    <option value="">Escribe o selecciona socio...</option>
+                                    <option v-for="customer in options.customers" :value="customer.value">{{ customer.label }}</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label>Vendedor</label>
+                                <select class="form-control" v-model="quoteForm.seller_id">
+                                    <option value="0">Automatico</option>
+                                    <option v-for="seller in options.sellers" :value="seller.value">{{ seller.label }}</option>
+                                </select>
+                            </div>
                         </div>
                         <div class="row">
                             <div class="col-md-4">
@@ -665,8 +674,8 @@ window.onload = function() {
             selected: null,
             selectedOrder: null,
             stats: { quotes: 0, orders: 0, deliveries: 0, prequote: 0, requested: 0, approved: 0, rejected: 0 },
-            options: { customers: [], products: [], brands: [], categories: [], warehouses: [] },
-            quoteForm: { party_id: '', quote_mode: 'quote', items: [], customer_notes: '', internal_notes: '', offline_uuid: '' },
+            options: { customers: [], sellers: [], products: [], brands: [], categories: [], warehouses: [] },
+            quoteForm: { party_id: '', seller_id: 0, quote_mode: 'quote', items: [], customer_notes: '', internal_notes: '', offline_uuid: '' },
             lineForm: { product_id: '', product_query: '', product_type: 'product', quantity: 1, search_open: false, search_results: [] },
             closeForm: { party_id: '' },
             deliveryForm: { order_id: 0, warehouse_id: '', items: [] },
@@ -952,6 +961,7 @@ window.onload = function() {
             prepareQuoteForm(mode) {
                 this.quoteForm = {
                     party_id: '',
+                    seller_id: 0,
                     quote_mode: mode,
                     items: [],
                     customer_notes: '',

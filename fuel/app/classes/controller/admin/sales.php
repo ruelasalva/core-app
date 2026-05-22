@@ -174,6 +174,7 @@ class Controller_Admin_Sales extends Controller_Adminbase
                 'cart_id' => 0,
                 'user_id' => $this->current_user_id(),
                 'party_id' => $party_id,
+                'seller_id' => $this->resolve_seller_id($party_id, (int) \Arr::get($val, 'seller_id', 0), $this->current_user_id()),
                 'status' => $prequote ? 'prequote' : 'requested',
                 'currency_code' => 'MXN',
                 'subtotal' => 0,
@@ -401,6 +402,7 @@ class Controller_Admin_Sales extends Controller_Adminbase
 
             # SE ACTUALIZA ENCABEZADO
             $quote->party_id = $party_id;
+            $quote->seller_id = $this->resolve_seller_id($party_id, (int) \Arr::get($val, 'seller_id', (int) $quote->seller_id), $this->current_user_id());
             $quote->status = 'requested';
             $quote->currency_code = $currency;
             $quote->subtotal = round($subtotal, 2);
@@ -648,6 +650,7 @@ class Controller_Admin_Sales extends Controller_Adminbase
                 array('q.tax_total', 'tax_total'),
                 array('q.total', 'total'),
                 array('q.party_id', 'party_id'),
+                array('q.seller_id', 'seller_id'),
                 array('q.customer_notes', 'customer_notes'),
                 array('q.internal_notes', 'internal_notes'),
                 array('q.expires_at', 'expires_at'),
@@ -655,11 +658,14 @@ class Controller_Admin_Sales extends Controller_Adminbase
                 array('p.name', 'party_name'),
                 array('p.email', 'party_email'),
                 array('p.phone', 'party_phone'),
-                array('p.rfc', 'party_rfc')
+                array('p.rfc', 'party_rfc'),
+                array('s.name', 'seller_name')
             )
             ->from(array('core_sales_quotes', 'q'))
             ->join(array('core_parties', 'p'), 'left')
-                ->on('q.party_id', '=', 'p.id');
+                ->on('q.party_id', '=', 'p.id')
+            ->join(array('core_sales_sellers', 's'), 'left')
+                ->on('q.seller_id', '=', 's.id');
         $this->apply_party_scope($rows, 'p', 'sales');
 
         $rows = $rows
@@ -851,6 +857,7 @@ class Controller_Admin_Sales extends Controller_Adminbase
         # SE ENTREGAN CLIENTES Y PRODUCTOS ACTIVOS
         return [
             'customers' => $this->select_rows('core_parties', 'id', 'name', ['party_type' => 'customer']),
+            'sellers' => \DBUtil::table_exists('core_sales_sellers') ? $this->select_rows('core_sales_sellers', 'id', 'name') : [],
             'products' => $this->product_options(['limit' => 60]),
             'brands' => $this->select_rows('core_commerce_brands', 'id', 'name'),
             'categories' => $this->select_rows('core_commerce_categories', 'id', 'name'),
@@ -1089,6 +1096,7 @@ class Controller_Admin_Sales extends Controller_Adminbase
             'folio' => $this->next_flow_folio('PED', 'core_sales_orders'),
             'source_quote_id' => (int) $quote->id,
             'party_id' => (int) $quote->party_id,
+            'seller_id' => $this->resolve_seller_id((int) $quote->party_id, (int) $quote->seller_id, $this->current_user_id()),
             'status' => 'open',
             'order_date' => date('Y-m-d'),
             'currency_code' => (string) $quote->currency_code,
@@ -1134,6 +1142,50 @@ class Controller_Admin_Sales extends Controller_Adminbase
         $this->audit_flow('create_order_from_quote', 'Pedido '.$order->folio.' creado desde cotizacion '.$quote->folio, 'sales_order', (int) $order->id, $order->to_array());
 
         return $order;
+    }
+
+    protected function resolve_seller_id($party_id, $seller_id, $user_id)
+    {
+        if (!\DBUtil::table_exists('core_sales_sellers')) {
+            return 0;
+        }
+        if ((int) $seller_id > 0) {
+            return (int) $seller_id;
+        }
+        if ((int) $party_id > 0 && \DBUtil::field_exists('core_parties', ['default_seller_id'])) {
+            $party = \DB::select('default_seller_id', 'sales_user_id')
+                ->from('core_parties')
+                ->where('id', '=', (int) $party_id)
+                ->execute()
+                ->current();
+            if ($party && (int) $party['default_seller_id'] > 0) {
+                return (int) $party['default_seller_id'];
+            }
+            if ($party && (int) $party['sales_user_id'] > 0) {
+                $seller = \DB::select('id')
+                    ->from('core_sales_sellers')
+                    ->where('user_id', '=', (int) $party['sales_user_id'])
+                    ->where('active', '=', 1)
+                    ->execute()
+                    ->current();
+                if ($seller) {
+                    return (int) $seller['id'];
+                }
+            }
+        }
+        if ((int) $user_id > 0) {
+            $seller = \DB::select('id')
+                ->from('core_sales_sellers')
+                ->where('user_id', '=', (int) $user_id)
+                ->where('active', '=', 1)
+                ->execute()
+                ->current();
+            if ($seller) {
+                return (int) $seller['id'];
+            }
+        }
+
+        return 0;
     }
 
     protected function sync_approved_quotes_to_orders()

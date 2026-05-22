@@ -7,7 +7,7 @@ class Model_Core_Party extends \Orm\Model
 
     protected static $_properties = [
         'id', 'party_type', 'code', 'name', 'legal_name', 'rfc', 'email', 'phone',
-        'department_id', 'sales_user_id', 'buyer_user_id',
+        'department_id', 'sales_user_id', 'default_seller_id', 'buyer_user_id',
         'price_list_id', 'payment_term_id', 'sat_cfdi_use_code', 'sat_tax_regime_code',
         'fiscal_operation_type_id', 'shipping_method_id', 'credit_limit', 'credit_days',
         'notes', 'onboarding_status', 'onboarding_notes', 'reviewed_by', 'reviewed_at',
