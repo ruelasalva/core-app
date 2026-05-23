@@ -28,6 +28,9 @@ class Controller_Admin_Accounting extends Controller_Adminbase
             $this->assert_schema_ready();
             return $this->json_response([
                 'accounts' => $this->accounts(),
+                'fiscal_years' => $this->fiscal_years(),
+                'periods' => $this->periods(),
+                'cost_centers' => $this->cost_centers(),
                 'entries' => $this->entries(),
                 'lines' => $this->lines((int) \Input::get('entry_id', 0)),
                 'rules' => $this->rules(),
@@ -60,10 +63,10 @@ class Controller_Admin_Accounting extends Controller_Adminbase
                 'nature' => $this->nature(\Arr::get($val, 'nature', 'debit')),
                 'currency_code' => strtoupper(substr((string) \Arr::get($val, 'currency_code', 'MXN'), 0, 3)),
                 'sat_group_code' => trim((string) \Arr::get($val, 'sat_group_code', '')),
-                'requires_party' => (int) (bool) \Arr::get($val, 'requires_party', false),
-                'requires_cost_center' => (int) (bool) \Arr::get($val, 'requires_cost_center', false),
-                'is_postable' => (int) (bool) \Arr::get($val, 'is_postable', true),
-                'active' => (int) (bool) \Arr::get($val, 'active', true),
+                'requires_party' => $this->bool_value(\Arr::get($val, 'requires_party', false)),
+                'requires_cost_center' => $this->bool_value(\Arr::get($val, 'requires_cost_center', false)),
+                'is_postable' => $this->bool_value(\Arr::get($val, 'is_postable', true)),
+                'active' => $this->bool_value(\Arr::get($val, 'active', true)),
             ];
 
             if ($id > 0) {
@@ -104,10 +107,15 @@ class Controller_Admin_Accounting extends Controller_Adminbase
         try {
             $id = (int) \Arr::get($val, 'id', 0);
             $entry_date = trim((string) \Arr::get($val, 'entry_date', date('Y-m-d')));
+            $period = $this->period_for_date($entry_date);
+            if (!$period || (int) $period['locked'] === 1 || (string) $period['status'] === 'closed' || (int) $period['allow_manual_entries'] !== 1) {
+                return $this->json_response(['error' => 'El periodo contable no esta abierto para polizas manuales.'], 422);
+            }
             $data = [
                 'entry_type' => $this->codeify(\Arr::get($val, 'entry_type', 'diario')),
                 'entry_date' => $entry_date,
-                'period' => substr($entry_date, 0, 7),
+                'period' => (string) $period['period_key'],
+                'period_id' => (int) $period['id'],
                 'status' => $this->entry_status(\Arr::get($val, 'status', 'draft')),
                 'source_module' => $this->codeify(\Arr::get($val, 'source_module', 'manual')),
                 'source_entity_type' => trim((string) \Arr::get($val, 'source_entity_type', '')),
@@ -115,7 +123,7 @@ class Controller_Admin_Accounting extends Controller_Adminbase
                 'currency_code' => strtoupper(substr((string) \Arr::get($val, 'currency_code', 'MXN'), 0, 3)),
                 'exchange_rate' => (float) \Arr::get($val, 'exchange_rate', 1),
                 'description' => trim((string) \Arr::get($val, 'description', '')),
-                'active' => (int) (bool) \Arr::get($val, 'active', true),
+                'active' => $this->bool_value(\Arr::get($val, 'active', true)),
             ];
 
             if ($id > 0) {
@@ -174,6 +182,7 @@ class Controller_Admin_Accounting extends Controller_Adminbase
                 'account_id' => $account_id,
                 'party_id' => (int) \Arr::get($val, 'party_id', 0),
                 'department_id' => (int) \Arr::get($val, 'department_id', 0),
+                'cost_center_id' => (int) \Arr::get($val, 'cost_center_id', 0),
                 'cost_center' => trim((string) \Arr::get($val, 'cost_center', '')),
                 'description' => trim((string) \Arr::get($val, 'description', '')),
                 'debit' => round($debit, 2),
@@ -181,7 +190,7 @@ class Controller_Admin_Accounting extends Controller_Adminbase
                 'currency_code' => strtoupper(substr((string) \Arr::get($val, 'currency_code', 'MXN'), 0, 3)),
                 'exchange_rate' => (float) \Arr::get($val, 'exchange_rate', 1),
                 'sort_order' => (int) \Arr::get($val, 'sort_order', 0),
-                'active' => (int) (bool) \Arr::get($val, 'active', true),
+                'active' => $this->bool_value(\Arr::get($val, 'active', true)),
             ];
 
             if ($id > 0) {
@@ -212,6 +221,10 @@ class Controller_Admin_Accounting extends Controller_Adminbase
             $entry = Model_Core_Accounting_Journal_Entry::find($id);
             if (!$entry) {
                 return $this->json_response(['error' => 'Poliza no encontrada.'], 404);
+            }
+            $period = $this->period_for_date((string) $entry->entry_date);
+            if (!$period || (int) $period['locked'] === 1 || (string) $period['status'] === 'closed') {
+                return $this->json_response(['error' => 'El periodo contable esta cerrado o bloqueado.'], 422);
             }
             $this->recalculate_entry($id);
             $entry = Model_Core_Accounting_Journal_Entry::find($id);
@@ -249,11 +262,11 @@ class Controller_Admin_Accounting extends Controller_Adminbase
                 'debit_account_id' => (int) \Arr::get($val, 'debit_account_id', 0),
                 'credit_account_id' => (int) \Arr::get($val, 'credit_account_id', 0),
                 'amount_source' => $this->codeify(\Arr::get($val, 'amount_source', 'total')),
-                'requires_party' => (int) (bool) \Arr::get($val, 'requires_party', false),
-                'auto_post' => (int) (bool) \Arr::get($val, 'auto_post', false),
+                'requires_party' => $this->bool_value(\Arr::get($val, 'requires_party', false)),
+                'auto_post' => $this->bool_value(\Arr::get($val, 'auto_post', false)),
                 'priority' => (int) \Arr::get($val, 'priority', 100),
                 'notes' => trim((string) \Arr::get($val, 'notes', '')),
-                'active' => (int) (bool) \Arr::get($val, 'active', true),
+                'active' => $this->bool_value(\Arr::get($val, 'active', true)),
             ];
 
             if ($id > 0) {
@@ -274,9 +287,151 @@ class Controller_Admin_Accounting extends Controller_Adminbase
         }
     }
 
+    public function action_save_period()
+    {
+        $this->require_access('accounting.access[edit]');
+        $val = (array) \Input::json();
+
+        try {
+            $id = (int) \Arr::get($val, 'id', 0);
+            $period_key = trim((string) \Arr::get($val, 'period_key', ''));
+            if ($period_key === '' || trim((string) \Arr::get($val, 'name', '')) === '') {
+                return $this->json_response(['error' => 'Periodo y nombre son obligatorios.'], 422);
+            }
+
+            $data = [
+                'fiscal_year_id' => (int) \Arr::get($val, 'fiscal_year_id', 0),
+                'period_key' => $period_key,
+                'name' => trim((string) \Arr::get($val, 'name', '')),
+                'start_date' => trim((string) \Arr::get($val, 'start_date', '')),
+                'end_date' => trim((string) \Arr::get($val, 'end_date', '')),
+                'status' => $this->period_status(\Arr::get($val, 'status', 'open')),
+                'allow_manual_entries' => $this->bool_value(\Arr::get($val, 'allow_manual_entries', true)),
+                'allow_operational_posting' => $this->bool_value(\Arr::get($val, 'allow_operational_posting', true)),
+                'locked' => $this->bool_value(\Arr::get($val, 'locked', false)),
+                'active' => $this->bool_value(\Arr::get($val, 'active', true)),
+            ];
+
+            if ($id > 0) {
+                $period = Model_Core_Accounting_Period::find($id);
+                if (!$period) {
+                    return $this->json_response(['error' => 'Periodo no encontrado.'], 404);
+                }
+                $old = $period->to_array();
+                $period->set($data);
+            } else {
+                $old = [];
+                $period = Model_Core_Accounting_Period::forge($data);
+            }
+            if ($data['status'] === 'closed' || (int) $data['locked'] === 1) {
+                $period->closed_by = $this->user_id;
+                $period->closed_at = time();
+            }
+            $period->save();
+
+            Helper_Core_Audit::log([
+                'module' => 'accounting',
+                'action' => $id > 0 ? 'update_period' : 'create_period',
+                'entity_type' => 'accounting_period',
+                'entity_id' => (int) $period->id,
+                'summary' => 'Periodo contable '.$period->period_key,
+                'old_values' => $old,
+                'new_values' => $period->to_array(),
+            ]);
+
+            return $this->json_response(['status' => 'ok', 'periods' => $this->periods(), 'stats' => $this->stats()]);
+        } catch (\Exception $e) {
+            \Log::error('Error guardando periodo contable: '.$e->getMessage());
+            return $this->json_response(['error' => 'No se pudo guardar el periodo.'], 400);
+        }
+    }
+
+    public function action_save_cost_center()
+    {
+        $this->require_access('accounting.access[edit]');
+        $val = (array) \Input::json();
+
+        try {
+            if (trim((string) \Arr::get($val, 'code', '')) === '' || trim((string) \Arr::get($val, 'name', '')) === '') {
+                return $this->json_response(['error' => 'Codigo y nombre son obligatorios.'], 422);
+            }
+
+            $id = (int) \Arr::get($val, 'id', 0);
+            $data = [
+                'code' => $this->codeify(\Arr::get($val, 'code', '')),
+                'name' => trim((string) \Arr::get($val, 'name', '')),
+                'center_type' => $this->cost_center_type(\Arr::get($val, 'center_type', 'department')),
+                'parent_id' => (int) \Arr::get($val, 'parent_id', 0),
+                'department_id' => (int) \Arr::get($val, 'department_id', 0),
+                'branch_id' => (int) \Arr::get($val, 'branch_id', 0),
+                'manager_user_id' => (int) \Arr::get($val, 'manager_user_id', 0),
+                'budget_amount' => round((float) \Arr::get($val, 'budget_amount', 0), 2),
+                'currency_code' => strtoupper(substr((string) \Arr::get($val, 'currency_code', 'MXN'), 0, 3)),
+                'notes' => trim((string) \Arr::get($val, 'notes', '')),
+                'active' => $this->bool_value(\Arr::get($val, 'active', true)),
+            ];
+
+            if ($id > 0) {
+                $center = Model_Core_Accounting_Cost_Center::find($id);
+                if (!$center) {
+                    return $this->json_response(['error' => 'Centro de costo no encontrado.'], 404);
+                }
+                $old = $center->to_array();
+                $center->set($data);
+            } else {
+                $old = [];
+                $center = Model_Core_Accounting_Cost_Center::forge($data);
+            }
+            $center->save();
+
+            Helper_Core_Audit::log([
+                'module' => 'accounting',
+                'action' => $id > 0 ? 'update_cost_center' : 'create_cost_center',
+                'entity_type' => 'accounting_cost_center',
+                'entity_id' => (int) $center->id,
+                'summary' => 'Centro de costo '.$center->code.' '.$center->name,
+                'old_values' => $old,
+                'new_values' => $center->to_array(),
+            ]);
+
+            return $this->json_response(['status' => 'ok', 'cost_centers' => $this->cost_centers(), 'options' => $this->options(), 'stats' => $this->stats()]);
+        } catch (\Exception $e) {
+            \Log::error('Error guardando centro de costo: '.$e->getMessage());
+            return $this->json_response(['error' => 'No se pudo guardar el centro de costo.'], 400);
+        }
+    }
+
     protected function accounts()
     {
         return \DB::select('*')->from('core_accounting_accounts')->order_by('code', 'asc')->execute()->as_array();
+    }
+
+    protected function fiscal_years()
+    {
+        return \DB::select('*')->from('core_accounting_fiscal_years')->where('active', '=', 1)->order_by('code', 'desc')->execute()->as_array();
+    }
+
+    protected function periods()
+    {
+        return \DB::select(['p.id', 'id'], ['p.fiscal_year_id', 'fiscal_year_id'], ['y.code', 'fiscal_year_code'], ['p.period_key', 'period_key'], ['p.name', 'name'], ['p.start_date', 'start_date'], ['p.end_date', 'end_date'], ['p.status', 'status'], ['p.allow_manual_entries', 'allow_manual_entries'], ['p.allow_operational_posting', 'allow_operational_posting'], ['p.locked', 'locked'], ['p.active', 'active'])
+            ->from(['core_accounting_periods', 'p'])
+            ->join(['core_accounting_fiscal_years', 'y'], 'left')->on('p.fiscal_year_id', '=', 'y.id')
+            ->where('p.active', '=', 1)
+            ->order_by('p.period_key', 'desc')
+            ->execute()
+            ->as_array();
+    }
+
+    protected function cost_centers()
+    {
+        return \DB::select(['cc.id', 'id'], ['cc.code', 'code'], ['cc.name', 'name'], ['cc.center_type', 'center_type'], ['cc.parent_id', 'parent_id'], ['cc.department_id', 'department_id'], ['d.name', 'department_name'], ['cc.branch_id', 'branch_id'], ['b.name', 'branch_name'], ['cc.manager_user_id', 'manager_user_id'], ['cc.budget_amount', 'budget_amount'], ['cc.currency_code', 'currency_code'], ['cc.notes', 'notes'], ['cc.active', 'active'])
+            ->from(['core_accounting_cost_centers', 'cc'])
+            ->join(['core_departments', 'd'], 'left')->on('cc.department_id', '=', 'd.id')
+            ->join(['core_branches', 'b'], 'left')->on('cc.branch_id', '=', 'b.id')
+            ->where('cc.active', '=', 1)
+            ->order_by('cc.code', 'asc')
+            ->execute()
+            ->as_array();
     }
 
     protected function entries()
@@ -289,10 +444,11 @@ class Controller_Admin_Accounting extends Controller_Adminbase
         if ($entry_id < 1) {
             return [];
         }
-        return \DB::select(['l.id', 'id'], ['l.entry_id', 'entry_id'], ['l.account_id', 'account_id'], ['a.code', 'account_code'], ['a.name', 'account_name'], ['l.party_id', 'party_id'], ['p.name', 'party_name'], ['l.description', 'description'], ['l.debit', 'debit'], ['l.credit', 'credit'], ['l.currency_code', 'currency_code'], ['l.sort_order', 'sort_order'])
+        return \DB::select(['l.id', 'id'], ['l.entry_id', 'entry_id'], ['l.account_id', 'account_id'], ['a.code', 'account_code'], ['a.name', 'account_name'], ['l.party_id', 'party_id'], ['p.name', 'party_name'], ['l.department_id', 'department_id'], ['l.cost_center_id', 'cost_center_id'], ['cc.code', 'cost_center_code'], ['cc.name', 'cost_center_name'], ['l.description', 'description'], ['l.debit', 'debit'], ['l.credit', 'credit'], ['l.currency_code', 'currency_code'], ['l.sort_order', 'sort_order'])
             ->from(['core_accounting_journal_lines', 'l'])
             ->join(['core_accounting_accounts', 'a'], 'left')->on('l.account_id', '=', 'a.id')
             ->join(['core_parties', 'p'], 'left')->on('l.party_id', '=', 'p.id')
+            ->join(['core_accounting_cost_centers', 'cc'], 'left')->on('l.cost_center_id', '=', 'cc.id')
             ->where('l.entry_id', '=', $entry_id)
             ->where('l.active', '=', 1)
             ->order_by('l.sort_order', 'asc')
@@ -318,6 +474,10 @@ class Controller_Admin_Accounting extends Controller_Adminbase
             'accounts' => $this->account_options(),
             'parties' => $this->select_options('core_parties', 'id', 'name'),
             'currencies' => $this->select_options('core_catalog_currencies', 'code', 'name'),
+            'departments' => $this->select_options('core_departments', 'id', 'name'),
+            'branches' => $this->select_options('core_branches', 'id', 'name'),
+            'cost_centers' => $this->cost_center_options(),
+            'fiscal_years' => $this->fiscal_year_options(),
         ];
     }
 
@@ -330,6 +490,8 @@ class Controller_Admin_Accounting extends Controller_Adminbase
             'draft' => (int) \DB::select()->from('core_accounting_journal_entries')->where('status', '=', 'draft')->where('active', '=', 1)->execute()->count(),
             'posted' => (int) \DB::select()->from('core_accounting_journal_entries')->where('status', '=', 'posted')->where('active', '=', 1)->execute()->count(),
             'rules' => (int) \DB::select()->from('core_accounting_posting_rules')->where('active', '=', 1)->execute()->count(),
+            'periods_open' => (int) \DB::select()->from('core_accounting_periods')->where('status', '=', 'open')->where('active', '=', 1)->execute()->count(),
+            'cost_centers' => (int) \DB::select()->from('core_accounting_cost_centers')->where('active', '=', 1)->execute()->count(),
         ];
     }
 
@@ -337,6 +499,24 @@ class Controller_Admin_Accounting extends Controller_Adminbase
     {
         $options = [];
         foreach (\DB::select('id', 'code', 'name')->from('core_accounting_accounts')->where('active', '=', 1)->where('is_postable', '=', 1)->order_by('code', 'asc')->execute() as $row) {
+            $options[] = ['value' => (string) $row['id'], 'label' => $row['code'].' - '.$row['name']];
+        }
+        return $options;
+    }
+
+    protected function cost_center_options()
+    {
+        $options = [];
+        foreach (\DB::select('id', 'code', 'name')->from('core_accounting_cost_centers')->where('active', '=', 1)->order_by('code', 'asc')->execute() as $row) {
+            $options[] = ['value' => (string) $row['id'], 'label' => $row['code'].' - '.$row['name']];
+        }
+        return $options;
+    }
+
+    protected function fiscal_year_options()
+    {
+        $options = [];
+        foreach (\DB::select('id', 'code', 'name')->from('core_accounting_fiscal_years')->where('active', '=', 1)->order_by('code', 'desc')->execute() as $row) {
             $options[] = ['value' => (string) $row['id'], 'label' => $row['code'].' - '.$row['name']];
         }
         return $options;
@@ -377,7 +557,7 @@ class Controller_Admin_Accounting extends Controller_Adminbase
 
     protected function assert_schema_ready()
     {
-        foreach (['core_accounting_accounts', 'core_accounting_journal_entries', 'core_accounting_journal_lines', 'core_accounting_posting_rules'] as $table) {
+        foreach (['core_accounting_accounts', 'core_accounting_journal_entries', 'core_accounting_journal_lines', 'core_accounting_posting_rules', 'core_accounting_fiscal_years', 'core_accounting_periods', 'core_accounting_cost_centers'] as $table) {
             if (!\DBUtil::table_exists($table)) {
                 throw new \RuntimeException('Falta ejecutar migraciones de contabilidad.');
             }
@@ -400,6 +580,80 @@ class Controller_Admin_Accounting extends Controller_Adminbase
     {
         $value = $this->codeify($value);
         return in_array($value, ['draft', 'posted', 'cancelled'], true) ? $value : 'draft';
+    }
+
+    protected function period_status($value)
+    {
+        $value = $this->codeify($value);
+        return in_array($value, ['open', 'soft_closed', 'closed'], true) ? $value : 'open';
+    }
+
+    protected function cost_center_type($value)
+    {
+        $value = $this->codeify($value);
+        return in_array($value, ['department', 'branch', 'project', 'sales_channel', 'other'], true) ? $value : 'department';
+    }
+
+    protected function period_for_date($date)
+    {
+        $period_key = substr((string) $date, 0, 7);
+        $period = \DB::select('*')->from('core_accounting_periods')->where('period_key', '=', $period_key)->where('active', '=', 1)->execute()->current();
+        if ($period) {
+            return $period;
+        }
+        return $this->ensure_period($period_key);
+    }
+
+    protected function ensure_period($period_key)
+    {
+        if (!preg_match('/^\d{4}-\d{2}$/', (string) $period_key)) {
+            return null;
+        }
+        $year = substr($period_key, 0, 4);
+        $year_row = \DB::select('id')->from('core_accounting_fiscal_years')->where('code', '=', $year)->execute()->current();
+        if (!$year_row) {
+            list($year_id,) = \DB::insert('core_accounting_fiscal_years')->set([
+                'code' => $year,
+                'name' => 'Ejercicio '.$year,
+                'start_date' => $year.'-01-01',
+                'end_date' => $year.'-12-31',
+                'status' => 'open',
+                'locked' => 0,
+                'active' => 1,
+                'created_at' => time(),
+                'updated_at' => time(),
+            ])->execute();
+        } else {
+            $year_id = (int) $year_row['id'];
+        }
+
+        $start = $period_key.'-01';
+        $end = date('Y-m-t', strtotime($start));
+        list($period_id,) = \DB::insert('core_accounting_periods')->set([
+            'fiscal_year_id' => (int) $year_id,
+            'period_key' => $period_key,
+            'name' => 'Periodo '.$period_key,
+            'start_date' => $start,
+            'end_date' => $end,
+            'status' => 'open',
+            'allow_manual_entries' => 1,
+            'allow_operational_posting' => 1,
+            'locked' => 0,
+            'active' => 1,
+            'created_at' => time(),
+            'updated_at' => time(),
+        ])->execute();
+
+        return \DB::select('*')->from('core_accounting_periods')->where('id', '=', (int) $period_id)->execute()->current();
+    }
+
+    protected function bool_value($value)
+    {
+        if (is_bool($value)) {
+            return $value ? 1 : 0;
+        }
+        $value = strtolower(trim((string) $value));
+        return in_array($value, ['1', 'true', 'on', 'yes', 'si'], true) ? 1 : 0;
     }
 
     protected function codeify($value)

@@ -57,6 +57,7 @@ return array (
         51 => '052_enhance_bank_statement_reconciliation',
         52 => '053_create_sales_sellers_and_commissions',
         53 => '054_create_crm_denue_prospect_tables',
+        54 => '055_strengthen_accounting_periods_cost_centers',
       ),
     ),
     'module' => array(    

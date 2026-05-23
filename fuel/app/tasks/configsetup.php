@@ -15,6 +15,7 @@ class Configsetup
             $this->seed_communications();
             $this->seed_integrations();
             $this->seed_payments();
+            $this->seed_accounting();
             $this->seed_billing();
             $this->seed_operations();
             $this->seed_sat();
@@ -48,6 +49,7 @@ class Configsetup
             echo " - Comunicaciones base\n";
             echo " - Integraciones y auditoria base\n";
             echo " - Pagos y bancos base\n";
+            echo " - Contabilidad base fuerte\n";
             echo " - Facturacion base\n";
             echo " - Reglas operativas base\n";
             echo " - SAT base\n";
@@ -1701,6 +1703,105 @@ class Configsetup
             'created_at' => time(),
             'updated_at' => time(),
         ])->execute();
+    }
+
+    protected function seed_accounting()
+    {
+        if (!\DBUtil::table_exists('core_accounting_fiscal_years') || !\DBUtil::table_exists('core_accounting_periods') || !\DBUtil::table_exists('core_accounting_cost_centers')) {
+            return;
+        }
+
+        $year = date('Y');
+        $year_id = $this->ensure_accounting_fiscal_year($year);
+        for ($month = 1; $month <= 12; $month++) {
+            $period_key = $year.'-'.str_pad((string) $month, 2, '0', STR_PAD_LEFT);
+            $this->ensure_accounting_period($year_id, $period_key);
+        }
+
+        if (\DBUtil::table_exists('core_departments')) {
+            foreach (\DB::select('id', 'name')->from('core_departments')->where('active', '=', 1)->execute() as $department) {
+                $code = $this->codeify('DEP '.$department['name']);
+                $this->upsert_seed('core_accounting_cost_centers', 'code', $code, [
+                    'code' => $code,
+                    'name' => (string) $department['name'],
+                    'center_type' => 'department',
+                    'department_id' => (int) $department['id'],
+                    'currency_code' => 'MXN',
+                    'active' => 1,
+                    'created_at' => time(),
+                    'updated_at' => time(),
+                ]);
+            }
+        }
+
+        if (\DBUtil::table_exists('core_knowledge_articles')) {
+            $this->upsert_seed('core_knowledge_articles', 'code', 'contabilidad_periodos_centros_costo', [
+                'code' => 'contabilidad_periodos_centros_costo',
+                'title' => 'Contabilidad: periodos y centros de costo',
+                'category' => 'Finanzas',
+                'summary' => 'Uso de periodos contables y centros de costo como base para CxC, CxP, tesoreria, impuestos y reportes.',
+                'content' => '<h3>Objetivo</h3><p>Los periodos contables y centros de costo son la base de control para que las polizas no se registren fuera de mes y para que gastos, compras, ventas, nomina e inventario puedan analizarse por area, sucursal o proyecto.</p><h4>Periodos</h4><ol><li>Entra a <strong>Admin &gt; Contabilidad &gt; Periodos</strong>.</li><li>Valida que el ejercicio y los meses esten abiertos.</li><li>Usa <strong>Precerrado</strong> cuando el mes ya no debe aceptar operaciones normales, pero todavia permite ajustes controlados.</li><li>Usa <strong>Cerrado/Bloqueado</strong> cuando el mes ya fue conciliado y no debe recibir polizas.</li></ol><h4>Centros de costo</h4><ol><li>Entra a <strong>Admin &gt; Contabilidad &gt; Centros de costo</strong>.</li><li>Crea centros por departamento, sucursal, proyecto o canal de venta.</li><li>Asigna presupuesto cuando aplique.</li><li>En las partidas contables selecciona centro de costo para gasto, costo o ingreso analitico.</li></ol><h4>Regla ERP</h4><p>Antes de construir CxC, CxP, tesoreria e impuestos, toda operacion relevante debe poder caer en un periodo abierto y, cuando aplique, en un centro de costo.</p>',
+                'sort_order' => 46,
+                'active' => 1,
+                'created_at' => time(),
+                'updated_at' => time(),
+            ]);
+        }
+    }
+
+    protected function ensure_accounting_fiscal_year($year)
+    {
+        $exists = \DB::select('id')->from('core_accounting_fiscal_years')->where('code', '=', (string) $year)->execute()->current();
+        if ($exists) {
+            return (int) $exists['id'];
+        }
+
+        list($id,) = \DB::insert('core_accounting_fiscal_years')->set([
+            'code' => (string) $year,
+            'name' => 'Ejercicio '.$year,
+            'start_date' => $year.'-01-01',
+            'end_date' => $year.'-12-31',
+            'status' => 'open',
+            'locked' => 0,
+            'active' => 1,
+            'created_at' => time(),
+            'updated_at' => time(),
+        ])->execute();
+
+        return (int) $id;
+    }
+
+    protected function ensure_accounting_period($year_id, $period_key)
+    {
+        if (\DB::select('id')->from('core_accounting_periods')->where('period_key', '=', $period_key)->execute()->current()) {
+            return;
+        }
+
+        $start = $period_key.'-01';
+        \DB::insert('core_accounting_periods')->set([
+            'fiscal_year_id' => (int) $year_id,
+            'period_key' => $period_key,
+            'name' => 'Periodo '.$period_key,
+            'start_date' => $start,
+            'end_date' => date('Y-m-t', strtotime($start)),
+            'status' => 'open',
+            'allow_manual_entries' => 1,
+            'allow_operational_posting' => 1,
+            'locked' => 0,
+            'active' => 1,
+            'created_at' => time(),
+            'updated_at' => time(),
+        ])->execute();
+    }
+
+    protected function codeify($value)
+    {
+        $value = strtolower(trim((string) $value));
+        if (function_exists('iconv')) {
+            $value = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $value);
+        }
+        $value = preg_replace('/[^a-z0-9]+/', '_', $value);
+        return trim($value, '_');
     }
 
     protected function normalize_denue_connection_credentials()
