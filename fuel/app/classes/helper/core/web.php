@@ -34,7 +34,7 @@ class Helper_Core_Web
     public static function frontend_body_end()
     {
         # SE RENDERIZAN NOSCRIPT, PIXELES Y SCRIPTS GENERICOS
-        return self::render_integrations(['tag_manager', 'pixel', 'script'], 'body');
+        return self::render_integrations(['tag_manager', 'pixel', 'script', 'contact', 'messenger'], 'body');
     }
 
     /**
@@ -294,6 +294,10 @@ class Helper_Core_Web
                 return self::render_google_tag_manager($item, $position);
             case 'meta_pixel':
                 return self::render_meta_pixel($item);
+            case 'whatsapp_click_chat':
+                return self::render_whatsapp_click_chat($item);
+            case 'meta_messenger':
+                return self::render_meta_messenger($item);
             default:
                 return self::render_custom_script($item);
         }
@@ -363,6 +367,65 @@ class Helper_Core_Web
         $id = e($id);
         return '<script>!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version="2.0";n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,"script","https://connect.facebook.net/en_US/fbevents.js");fbq("init","'.$id.'");fbq("track","PageView");</script>'
             .'<noscript><img height="1" width="1" style="display:none" src="https://www.facebook.com/tr?id='.$id.'&ev=PageView&noscript=1"></noscript>';
+    }
+
+    /**
+     * RENDER WHATSAPP CLICK CHAT
+     *
+     * GENERA BOTON FLOTANTE OFICIAL WA.ME SIN API NI COOKIES DE TERCEROS.
+     *
+     * @access  protected
+     * @return  String
+     */
+    protected static function render_whatsapp_click_chat(Model_Core_Web_Integration $item)
+    {
+        # SE REQUIERE NUMERO EN FORMATO INTERNACIONAL SIN SIGNOS
+        $phone = preg_replace('/\D+/', '', (string) ($item->public_key ?: $item->public_value));
+        if ($phone === '') {
+            return '';
+        }
+
+        # SETTINGS_JSON PERMITE PERSONALIZAR TEXTO Y POSICION SIN TOCAR TEMPLATE
+        $settings = json_decode((string) $item->settings_json, true);
+        $settings = is_array($settings) ? $settings : [];
+        $label = trim((string) \Arr::get($settings, 'label', 'WhatsApp'));
+        $message = trim((string) \Arr::get($settings, 'message', 'Hola, quiero informacion.'));
+        $side = \Arr::get($settings, 'side', 'right') === 'left' ? 'left' : 'right';
+        $bottom = max(16, min(160, (int) \Arr::get($settings, 'bottom', 24)));
+        $url = 'https://wa.me/'.$phone;
+        if ($message !== '') {
+            $url .= '?text='.rawurlencode($message);
+        }
+
+        return '<style>.core-contact-float{position:fixed;'.$side.':22px;bottom:'.$bottom.'px;z-index:9990;display:inline-flex;align-items:center;gap:9px;padding:11px 15px;border-radius:999px;background:#25d366;color:#102014;font-weight:800;box-shadow:0 16px 34px rgba(15,23,42,.18);border:1px solid rgba(0,0,0,.08)}.core-contact-float:hover{color:#102014;filter:brightness(.98);transform:translateY(-1px)}.core-contact-float i{font-size:1.25rem}@media(max-width:560px){.core-contact-float{'.$side.':16px;bottom:18px;padding:12px}.core-contact-float span{display:none}}</style>'
+            .'<a class="core-contact-float" href="'.e($url).'" target="_blank" rel="noopener noreferrer" aria-label="'.e($label).'"><i class="bi bi-whatsapp"></i><span>'.e($label).'</span></a>';
+    }
+
+    /**
+     * RENDER META MESSENGER
+     *
+     * GENERA CUSTOMER CHAT PLUGIN DE META SOLO CON CONSENTIMIENTO DE MARKETING.
+     *
+     * @access  protected
+     * @return  String
+     */
+    protected static function render_meta_messenger(Model_Core_Web_Integration $item)
+    {
+        # SE REQUIERE PAGE ID DE FACEBOOK
+        $page_id = preg_replace('/[^0-9]/', '', (string) $item->public_key);
+        if ($page_id === '') {
+            return '';
+        }
+
+        # SETTINGS_JSON CONTROLA LOCALES Y ATRIBUCION
+        $settings = json_decode((string) $item->settings_json, true);
+        $settings = is_array($settings) ? $settings : [];
+        $locale = preg_replace('/[^a-zA-Z_]/', '', (string) \Arr::get($settings, 'locale', 'es_LA'));
+        $attribution = trim((string) \Arr::get($settings, 'attribution', 'biz_inbox'));
+        $version = preg_replace('/[^v0-9.]/', '', (string) \Arr::get($settings, 'version', 'v20.0'));
+
+        return '<div id="fb-root"></div><div id="fb-customer-chat" class="fb-customerchat" attribution="'.e($attribution).'" page_id="'.e($page_id).'"></div>'
+            .'<script>window.fbAsyncInit=function(){FB.init({xfbml:true,version:"'.e($version).'"});};(function(d,s,id){var js,fjs=d.getElementsByTagName(s)[0];if(d.getElementById(id)){return;}js=d.createElement(s);js.id=id;js.src="https://connect.facebook.net/'.e($locale).'/sdk/xfbml.customerchat.js";fjs.parentNode.insertBefore(js,fjs);}(document,"script","facebook-jssdk"));</script>';
     }
 
     /**

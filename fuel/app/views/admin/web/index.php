@@ -171,6 +171,8 @@
                                     <option value="pixel">Pixel</option>
                                     <option value="captcha">Captcha</option>
                                     <option value="map">Mapa</option>
+                                    <option value="contact">Contacto flotante</option>
+                                    <option value="messenger">Messenger</option>
                                     <option value="script">Script</option>
                                 </select>
                             </div>
@@ -318,12 +320,15 @@ window.onload = function() {
             },
             editIntegration(integration) {
                 this.integrationForm = Object.assign(this.emptyIntegration(), integration, {
-                    enabled: integration.enabled == 1,
-                    load_in_frontend: integration.load_in_frontend == 1,
-                    load_in_admin: integration.load_in_admin == 1,
-                    requires_consent: integration.requires_consent == 1
+                    enabled: this.asBool(integration.enabled),
+                    load_in_frontend: this.asBool(integration.load_in_frontend),
+                    load_in_admin: this.asBool(integration.load_in_admin),
+                    requires_consent: this.asBool(integration.requires_consent)
                 });
                 this.showModal('modal-integration');
+            },
+            asBool(value) {
+                return value === true || value === 1 || value === '1' || value === 'true';
             },
             saveIntegration() {
                 fetch('<?php echo Uri::create('admin/web/save_integration'); ?>', {

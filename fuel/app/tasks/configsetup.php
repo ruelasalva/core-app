@@ -364,6 +364,8 @@ class Configsetup
             ['meta_pixel', 'Meta Pixel', 'Meta', 'pixel', 'marketing', 30],
             ['google_recaptcha', 'Google reCAPTCHA', 'Google', 'captcha', 'necessary', 40],
             ['google_maps', 'Google Maps', 'Google', 'map', 'necessary', 50],
+            ['whatsapp_click_chat', 'WhatsApp contacto flotante', 'WhatsApp', 'contact', 'necessary', 60],
+            ['meta_messenger', 'Meta Messenger chat', 'Meta', 'messenger', 'marketing', 70],
         ];
 
         foreach ($integrations as $integration) {
@@ -376,7 +378,7 @@ class Configsetup
                 'public_key' => '',
                 'public_value' => '',
                 'secret_value' => '',
-                'settings_json' => '',
+                'settings_json' => $this->default_web_integration_settings($integration[0]),
                 'enabled' => 0,
                 'load_in_frontend' => 1,
                 'load_in_admin' => 0,
@@ -1842,6 +1844,18 @@ class Configsetup
         }
     }
 
+    protected function default_web_integration_settings($code)
+    {
+        switch ($code) {
+            case 'whatsapp_click_chat':
+                return '{"label":"WhatsApp","message":"Hola, quiero informacion.","side":"right","bottom":24}';
+            case 'meta_messenger':
+                return '{"locale":"es_LA","version":"v20.0","attribution":"biz_inbox","notes":"Requiere Page ID y dominio autorizado en Meta."}';
+            default:
+                return '';
+        }
+    }
+
     protected function seed_hr()
     {
         if (\DBUtil::table_exists('core_backends')) {
@@ -2507,8 +2521,8 @@ class Configsetup
             'code' => 'frontend_integraciones_web',
             'title' => 'Integraciones web en frontend',
             'category' => 'Frontend',
-            'summary' => 'Como se cargan analytics, pixeles, tags y captcha desde el modulo Web sin pegarlos manualmente en plantillas.',
-            'content' => '<h3>Objetivo</h3><p>El frontend no debe tener codigos de analytics, pixeles, tags o captcha pegados manualmente en las vistas. Todo debe venir del modulo <strong>Web</strong> y cargarse solo cuando la integracion este activa, configurada y permitida por consentimiento.</p><h4>Regla general</h4><ul><li><strong>Analytics</strong> y <strong>Tag Manager</strong> se cargan en el head si estan activos y el visitante acepto la categoria requerida.</li><li><strong>Pixeles</strong> y scripts publicos se cargan al inicio/cierre del body segun corresponda.</li><li><strong>reCAPTCHA</strong> solo aparece en registro si existe integracion activa con llave publica y secreto guardado.</li><li>Si no hay datos capturados o la integracion esta inactiva, el frontend no carga nada.</li></ul><h4>Como configurarlo</h4><ol><li>Entra a <strong>Admin &gt; Web</strong>.</li><li>Abre la integracion correspondiente: Google Analytics, Google Tag Manager, Meta Pixel o Google reCAPTCHA.</li><li>Captura la llave publica o ID en <strong>Llave publica / ID</strong>.</li><li>Para reCAPTCHA captura tambien el secreto en <strong>Valor secreto</strong>.</li><li>Activa <strong>Frontend</strong> y define si requiere consentimiento.</li><li>Guarda y prueba el sitio publico.</li></ol><h4>Privacidad</h4><p>Las integraciones con categorias <code>analytics</code>, <code>marketing</code> o <code>personalization</code> no deben cargarse hasta que el visitante acepte esa categoria en cookies. Las necesarias pueden cargarse sin consentimiento adicional cuando sean indispensables para seguridad, como captcha.</p><h4>Productos y tags</h4><p>Los productos pueden tener tags comerciales para navegacion y filtros. Eso no significa que carguen pixeles por si solos. Si mas adelante se requieren eventos de ecommerce, deben emitirse desde un helper o servicio de tracking que respete consentimiento y configuracion Web.</p>',
+            'summary' => 'Como se cargan analytics, pixeles, tags, captcha, WhatsApp y Messenger desde el modulo Web sin pegarlos manualmente en plantillas.',
+            'content' => '<h3>Objetivo</h3><p>El frontend no debe tener codigos de analytics, pixeles, tags, captcha o botones de contacto pegados manualmente en las vistas. Todo debe venir del modulo <strong>Web</strong> y cargarse solo cuando la integracion este activa, configurada y permitida por consentimiento.</p><h4>Regla general</h4><ul><li><strong>Analytics</strong> y <strong>Tag Manager</strong> se cargan en el head si estan activos y el visitante acepto la categoria requerida.</li><li><strong>Pixeles</strong>, Messenger y scripts publicos se cargan al inicio/cierre del body segun corresponda.</li><li><strong>WhatsApp contacto flotante</strong> usa enlace oficial <code>wa.me</code>, no requiere API, no guarda conversaciones en Core-App y puede cargarse como necesario.</li><li><strong>Meta Messenger chat</strong> carga SDK de Meta y debe usar consentimiento de marketing.</li><li><strong>reCAPTCHA</strong> solo aparece en registro si existe integracion activa con llave publica y secreto guardado.</li><li>Si no hay datos capturados o la integracion esta inactiva, el frontend no carga nada.</li></ul><h4>Como configurar WhatsApp publico</h4><ol><li>Entra a <strong>Admin &gt; Web</strong>.</li><li>Abre <strong>WhatsApp contacto flotante</strong>.</li><li>Captura el numero en <strong>Llave publica / ID</strong> con formato internacional sin signos, por ejemplo <code>5213312345678</code>.</li><li>En JSON puedes ajustar <code>label</code>, <code>message</code>, <code>side</code> y <code>bottom</code>.</li><li>Activa <strong>Frontend</strong> y <strong>Activo</strong>.</li></ol><h4>Como configurar Messenger</h4><ol><li>Abre <strong>Meta Messenger chat</strong>.</li><li>Captura el <strong>Page ID</strong> de Facebook en <strong>Llave publica / ID</strong>.</li><li>Autoriza el dominio publico del sitio desde la configuracion de Meta/Facebook Page.</li><li>Conserva categoria <code>marketing</code> y consentimiento requerido.</li></ol><h4>WhatsApp API futura</h4><p>Para contestar desde el admin, automatizar con IA o recibir mensajes entrantes, no basta el enlace <code>wa.me</code>. Se requiere WhatsApp Business Platform/Cloud API o un proveedor oficial, con webhooks, token, numero registrado, plantillas aprobadas y costos por mensaje. Esa etapa debe ir en <strong>Integraciones</strong> y <strong>Comunicaciones/CRM</strong>, no en Web.</p><h4>Privacidad</h4><p>Las integraciones con categorias <code>analytics</code>, <code>marketing</code> o <code>personalization</code> no deben cargarse hasta que el visitante acepte esa categoria en cookies. Las necesarias pueden cargarse sin consentimiento adicional cuando sean indispensables para seguridad o contacto basico sin rastreo.</p><h4>Productos y tags</h4><p>Los productos pueden tener tags comerciales para navegacion y filtros. Eso no significa que carguen pixeles por si solos. Si mas adelante se requieren eventos de ecommerce, deben emitirse desde un helper o servicio de tracking que respete consentimiento y configuracion Web.</p>',
             'sort_order' => 14,
             'active' => 1,
             'created_at' => time(),

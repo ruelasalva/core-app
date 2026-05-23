@@ -105,10 +105,10 @@ class Controller_Admin_Web extends Controller_Adminbase
                 'public_key' => trim((string) \Arr::get($val, 'public_key', '')),
                 'public_value' => trim((string) \Arr::get($val, 'public_value', '')),
                 'settings_json' => trim((string) \Arr::get($val, 'settings_json', '')),
-                'enabled' => (int) (bool) \Arr::get($val, 'enabled', false),
-                'load_in_frontend' => (int) (bool) \Arr::get($val, 'load_in_frontend', true),
-                'load_in_admin' => (int) (bool) \Arr::get($val, 'load_in_admin', false),
-                'requires_consent' => (int) (bool) \Arr::get($val, 'requires_consent', true),
+                'enabled' => $this->bool_value(\Arr::get($val, 'enabled', false)),
+                'load_in_frontend' => $this->bool_value(\Arr::get($val, 'load_in_frontend', true)),
+                'load_in_admin' => $this->bool_value(\Arr::get($val, 'load_in_admin', false)),
+                'requires_consent' => $this->bool_value(\Arr::get($val, 'requires_consent', true)),
                 'consent_category' => trim((string) \Arr::get($val, 'consent_category', 'analytics')),
                 'sort_order' => (int) \Arr::get($val, 'sort_order', 0),
             ];
@@ -235,5 +235,23 @@ class Controller_Admin_Web extends Controller_Adminbase
         }
         $value = preg_replace('/[^a-z0-9]+/', '_', $value);
         return trim($value, '_');
+    }
+
+    /**
+     * BOOL VALUE
+     *
+     * NORMALIZA BOOLEANOS ENVIADOS POR VUE/JSON EVITANDO QUE "0" O "false" SEAN TRUE
+     *
+     * @access  protected
+     * @return  Int
+     */
+    protected function bool_value($value)
+    {
+        if (is_bool($value)) {
+            return $value ? 1 : 0;
+        }
+
+        $value = strtolower(trim((string) $value));
+        return in_array($value, ['1', 'true', 'on', 'yes', 'si'], true) ? 1 : 0;
     }
 }
