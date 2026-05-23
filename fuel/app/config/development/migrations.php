@@ -59,6 +59,7 @@ return array (
         53 => '054_create_crm_denue_prospect_tables',
         54 => '055_strengthen_accounting_periods_cost_centers',
         55 => '056_create_accounts_receivable_tables',
+        56 => '057_create_accounts_payable_tables',
       ),
     ),
     'module' => array(    

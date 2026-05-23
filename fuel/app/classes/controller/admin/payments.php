@@ -59,6 +59,7 @@ class Controller_Admin_Payments extends Controller_Adminbase
             return $this->json_response([
                 'payments' => $this->get_payments(),
                 'receivables' => $this->get_receivables(),
+                'payables' => $this->get_payables(),
                 'movements' => $this->get_movements(),
                 'reconciliations' => $this->get_reconciliations(),
                 'statement_imports' => $this->get_statement_imports(),
@@ -140,6 +141,8 @@ class Controller_Admin_Payments extends Controller_Adminbase
                 if ($invoice && (string) $invoice->sat_payment_method_code === 'PPD' && (string) $payment->fiscal_mode === 'fiscal_required') {
                     $this->create_payment_complement_document($payment, $invoice);
                 }
+            } elseif ($id === 0 && $allocation_entity_type === 'purchase_invoice' && $allocation_entity_id > 0) {
+                $this->apply_payment_to_purchase_invoice($payment, $allocation_entity_id);
             }
 
             # SE AUDITA CAMBIO
@@ -153,7 +156,7 @@ class Controller_Admin_Payments extends Controller_Adminbase
                 'new_values' => $payment->to_array(),
             ]);
 
-            return $this->json_response(['status' => 'ok', 'payments' => $this->get_payments(), 'receivables' => $this->get_receivables(), 'stats' => $this->get_stats()]);
+            return $this->json_response(['status' => 'ok', 'payments' => $this->get_payments(), 'receivables' => $this->get_receivables(), 'payables' => $this->get_payables(), 'stats' => $this->get_stats()]);
         } catch (\Exception $e) {
             \Log::error('Error guardando pago: '.$e->getMessage());
             return $this->json_response(['error' => 'No se pudo guardar el pago.'], 400);
@@ -453,6 +456,7 @@ class Controller_Admin_Payments extends Controller_Adminbase
                 'message' => 'Movimiento conciliado.',
                 'payments' => $this->get_payments(),
                 'receivables' => $this->get_receivables(),
+                'payables' => $this->get_payables(),
                 'movements' => $this->get_movements(),
                 'suggestions' => $this->get_reconciliation_suggestions(),
                 'stats' => $this->get_stats(),
@@ -545,6 +549,48 @@ class Controller_Admin_Payments extends Controller_Adminbase
             ->as_array();
     }
 
+    /**
+     * GET PAYABLES
+     *
+     * LISTA FACTURAS DE PROVEEDOR CON SALDO PARA PAGO.
+     *
+     * @access  protected
+     * @return  Array
+     */
+    protected function get_payables()
+    {
+        if (!\DBUtil::table_exists('core_purchase_invoices')) {
+            return [];
+        }
+
+        $query = \DB::select(
+                ['i.id', 'id'],
+                ['i.folio', 'folio'],
+                ['i.uuid', 'uuid'],
+                ['i.party_id', 'party_id'],
+                ['p.name', 'party_name'],
+                ['i.invoice_date', 'invoice_date'],
+                ['i.due_date', 'due_date'],
+                ['i.currency_code', 'currency_code'],
+                ['i.total', 'total'],
+                ['i.balance_due', 'balance_due'],
+                ['i.status', 'status'],
+                ['i.validation_status', 'validation_status']
+            )
+            ->from(['core_purchase_invoices', 'i'])
+            ->join(['core_parties', 'p'], 'left')->on('i.party_id', '=', 'p.id')
+            ->where('i.active', '=', 1)
+            ->where('i.balance_due', '>', 0);
+        $this->apply_party_scope($query, 'p', 'purchases');
+
+        return $query
+            ->order_by('i.due_date', 'asc')
+            ->order_by('i.id', 'desc')
+            ->limit(200)
+            ->execute()
+            ->as_array();
+    }
+
     protected function get_reconciliations()
     {
         $items = [];
@@ -625,16 +671,24 @@ class Controller_Admin_Payments extends Controller_Adminbase
     protected function get_stats()
     {
         $receivable_rows = $this->get_receivables();
+        $payable_rows = $this->get_payables();
         $receivables = count($receivable_rows);
+        $payables = count($payable_rows);
         $receivable_total = 0;
+        $payable_total = 0;
         foreach ($receivable_rows as $row) {
             $receivable_total += (float) $row['balance_due'];
+        }
+        foreach ($payable_rows as $row) {
+            $payable_total += (float) $row['balance_due'];
         }
 
         return [
             'payments' => (int) \DB::count_records('core_payments'),
             'receivables' => $receivables,
             'receivable_total' => $receivable_total,
+            'payables' => $payables,
+            'payable_total' => $payable_total,
             'pending' => (int) \DB::select()->from('core_payments')->where('status', '=', 'pending')->execute()->count(),
             'rep_pending' => \DBUtil::field_exists('core_payments', ['rep_status']) ? (int) \DB::select()->from('core_payments')->where('rep_status', '=', 'pending')->execute()->count() : 0,
             'movements' => (int) \DB::count_records('core_bank_movements'),

@@ -127,7 +127,7 @@
             </a>
         </li>
         <?php endif; ?>
-        <?php if ($menu['billing'] || $menu['receivables'] || $menu['payments'] || $menu['accounting']): ?>
+        <?php if ($menu['billing'] || $menu['receivables'] || $menu['payables'] || $menu['payments'] || $menu['accounting']): ?>
         <li class="nav-header">FINANZAS</li>
         <?php endif; ?>
         <?php if ($menu['billing']): ?>
@@ -143,6 +143,14 @@
             <a href="<?php echo Uri::create('admin/receivables'); ?>" class="nav-link <?php echo (Uri::segment(2) == 'receivables') ? 'active' : ''; ?>">
                 <i class="nav-icon bi bi-wallet2"></i>
                 <p>Cuentas por cobrar</p>
+            </a>
+        </li>
+        <?php endif; ?>
+        <?php if ($menu['payables']): ?>
+        <li class="nav-item">
+            <a href="<?php echo Uri::create('admin/payables'); ?>" class="nav-link <?php echo (Uri::segment(2) == 'payables') ? 'active' : ''; ?>">
+                <i class="nav-icon bi bi-receipt-cutoff"></i>
+                <p>Cuentas por pagar</p>
             </a>
         </li>
         <?php endif; ?>

@@ -17,6 +17,7 @@ class Configsetup
             $this->seed_payments();
             $this->seed_accounting();
             $this->seed_receivables();
+            $this->seed_payables();
             $this->seed_billing();
             $this->seed_operations();
             $this->seed_sat();
@@ -53,6 +54,7 @@ class Configsetup
             echo " - Pagos y bancos base\n";
             echo " - Contabilidad base fuerte\n";
             echo " - Cuentas por cobrar base\n";
+            echo " - Cuentas por pagar base\n";
             echo " - Facturacion base\n";
             echo " - Reglas operativas base\n";
             echo " - SAT base\n";
@@ -1791,6 +1793,45 @@ class Configsetup
         }
     }
 
+    protected function seed_payables()
+    {
+        if (!\DBUtil::table_exists('core_ap_supplier_statuses') || !\DBUtil::table_exists('core_parties')) {
+            return;
+        }
+
+        foreach (\DB::select('id', 'credit_limit', 'credit_days')->from('core_parties')->where('active', '=', 1)->where('party_type', 'in', ['supplier', 'both'])->execute() as $party) {
+            if (\DB::select('id')->from('core_ap_supplier_statuses')->where('party_id', '=', (int) $party['id'])->execute()->current()) {
+                continue;
+            }
+            \DB::insert('core_ap_supplier_statuses')->set([
+                'party_id' => (int) $party['id'],
+                'payment_status' => 'normal',
+                'payment_priority' => 'normal',
+                'credit_limit' => (float) $party['credit_limit'],
+                'credit_days' => (int) $party['credit_days'],
+                'current_balance' => 0,
+                'overdue_balance' => 0,
+                'active' => 1,
+                'created_at' => time(),
+                'updated_at' => time(),
+            ])->execute();
+        }
+
+        if (\DBUtil::table_exists('core_knowledge_articles')) {
+            $this->upsert_seed('core_knowledge_articles', 'code', 'cuentas_por_pagar_programacion', [
+                'code' => 'cuentas_por_pagar_programacion',
+                'title' => 'Cuentas por pagar y programacion de pagos',
+                'category' => 'Finanzas',
+                'summary' => 'Control de facturas de proveedor, vencimientos, prioridad de pago y programacion sin duplicar bancos.',
+                'content' => '<h3>Objetivo</h3><p>Cuentas por pagar concentra deuda con proveedores, vencimientos y programacion. Compras registra facturas de proveedor y Bancos/Pagos aplica el dinero real.</p><h4>Flujo recomendado</h4><ol><li>Registra factura de proveedor desde <strong>Compras</strong> o desde auditoria SAT cuando aplique.</li><li>Si la factura tiene saldo, aparece en <strong>Finanzas &gt; Cuentas por pagar</strong>.</li><li>Revisa proveedor, saldo vencido, prioridad y proxima fecha de pago.</li><li>Programa o autoriza pagos desde CxP: esto no mueve bancos todavia.</li><li>Cuando se pague realmente, registra el pago desde <strong>Bancos y pagos</strong> o aplicalo por conciliacion bancaria.</li></ol><h4>Regla ERP</h4><p>CxP no duplica pagos ni conciliaciones. Su funcion es controlar riesgo, flujo de efectivo, programacion y autorizacion. El movimiento bancario y la aplicacion real quedan en Pagos/Bancos con asignacion a <code>purchase_invoice</code>.</p>',
+                'sort_order' => 48,
+                'active' => 1,
+                'created_at' => time(),
+                'updated_at' => time(),
+            ]);
+        }
+    }
+
     protected function ensure_accounting_fiscal_year($year)
     {
         $exists = \DB::select('id')->from('core_accounting_fiscal_years')->where('code', '=', (string) $year)->execute()->current();
@@ -3055,6 +3096,7 @@ class Configsetup
             'integrations' => 'Gestion de proveedores externos, pasarelas, conexiones y webhooks',
             'payments' => 'Gestion de pagos, bancos, movimientos y conciliaciones',
             'receivables' => 'Gestion de cuentas por cobrar, cartera vencida y cobranza',
+            'payables' => 'Gestion de cuentas por pagar, vencimientos y programacion de pagos',
             'purchases' => 'Gestion de compras, ordenes, facturas proveedor, contrarecibos y evidencias',
             'sales' => 'Gestion de cotizaciones, pedidos y solicitudes comerciales',
             'commissions' => 'Gestion de vendedores, reglas, cuotas, movimientos y liquidaciones de comisiones',
@@ -3157,7 +3199,7 @@ class Configsetup
 
     protected function sync_finance_group_permissions()
     {
-        foreach (['receivables', 'payments', 'accounting', 'billing'] as $area) {
+        foreach (['receivables', 'payables', 'payments', 'accounting', 'billing'] as $area) {
             $permission = \DB::select('id', 'actions')
                 ->from('users_permissions')
                 ->where('area', '=', $area)

@@ -1,7 +1,7 @@
 <div id="app-payments">
     <div class="row">
         <div class="col-lg-3 col-6"><div class="small-box bg-info"><div class="inner"><h3>{{ stats.receivables || 0 }}</h3><p>Cuentas por cobrar</p></div><div class="icon"><i class="bi bi-file-earmark-text"></i></div></div></div>
-        <div class="col-lg-3 col-6"><div class="small-box bg-warning"><div class="inner"><h3>{{ stats.pending || 0 }}</h3><p>Pendientes</p></div><div class="icon"><i class="bi bi-hourglass-split"></i></div></div></div>
+        <div class="col-lg-3 col-6"><div class="small-box bg-warning"><div class="inner"><h3>{{ stats.payables || 0 }}</h3><p>Cuentas por pagar</p></div><div class="icon"><i class="bi bi-receipt-cutoff"></i></div></div></div>
         <div class="col-lg-3 col-6"><div class="small-box bg-success"><div class="inner"><h3>{{ stats.movements || 0 }}</h3><p>Movimientos</p></div><div class="icon"><i class="bi bi-bank"></i></div></div></div>
         <div class="col-lg-3 col-6"><div class="small-box bg-secondary"><div class="inner"><h3>{{ stats.reconciliation_suggestions || 0 }}</h3><p>Sugerencias</p></div><div class="icon"><i class="bi bi-shuffle"></i></div></div></div>
     </div>
@@ -81,6 +81,30 @@
                         </td>
                     </tr>
                     <tr v-if="suggestions.length === 0"><td colspan="7" class="text-center text-muted">Sin sugerencias pendientes</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card card-danger card-outline">
+        <div class="card-header">
+            <h3 class="card-title mb-0">Cuentas por pagar</h3>
+        </div>
+        <div class="card-body table-responsive">
+            <table class="table table-bordered table-hover">
+                <thead><tr><th>Factura proveedor</th><th>Proveedor</th><th>Factura</th><th>Vence</th><th>Total</th><th>Saldo</th><th>Validacion</th><th class="text-center">Acciones</th></tr></thead>
+                <tbody>
+                    <tr v-for="invoice in payables" :key="invoice.id">
+                        <td><strong>{{ invoice.folio }}</strong><div class="text-muted small">{{ invoice.uuid || '' }}</div></td>
+                        <td>{{ invoice.party_name || label(options.parties, invoice.party_id) || '-' }}</td>
+                        <td>{{ invoice.invoice_date || '-' }}</td>
+                        <td>{{ invoice.due_date || '-' }}</td>
+                        <td>{{ invoice.currency_code }} {{ money(invoice.total) }}</td>
+                        <td><strong>{{ invoice.currency_code }} {{ money(invoice.balance_due) }}</strong></td>
+                        <td><span class="badge badge-light">{{ invoice.validation_status }}</span></td>
+                        <td class="text-center"><button class="btn btn-xs btn-outline-primary" @click="openPayablePayment(invoice)">Registrar pago</button></td>
+                    </tr>
+                    <tr v-if="payables.length === 0"><td colspan="8" class="text-center text-muted">Sin facturas pendientes de pago</td></tr>
                 </tbody>
             </table>
         </div>
@@ -177,7 +201,7 @@
                 <div class="col-md-4"><div class="form-group"><label>Estado REP</label><select class="form-control" v-model="paymentForm.rep_status"><option value="not_required">No requerido</option><option value="pending">Pendiente</option><option value="prepared">Preparado</option><option value="stamped">Timbrado</option><option value="cancelled">Cancelado</option></select></div></div>
                 <div class="col-md-4"><div class="form-group"><label>Referencia</label><input class="form-control" v-model="paymentForm.reference"></div></div>
                 <div class="col-md-4"><div class="form-group"><label>ID externo</label><input class="form-control" v-model="paymentForm.external_id"></div></div>
-                <div class="col-md-12" v-if="paymentForm.allocation_entity_id"><div class="alert alert-info py-2 mb-2">Este cobro se aplicara a la factura {{ paymentForm.reference }}. Si la factura es PPD puedes elegir si solo afecta el sistema o si crea REP fiscal pendiente.</div></div>
+                <div class="col-md-12" v-if="paymentForm.allocation_entity_id"><div class="alert alert-info py-2 mb-2">Este movimiento se aplicara al documento {{ paymentForm.reference }}. CxC/CxP controla saldos; Bancos y Pagos registra el flujo real.</div></div>
                 <div class="col-md-12"><div class="form-group"><label>Notas</label><textarea class="form-control" rows="2" v-model="paymentForm.notes"></textarea></div></div>
             </div></div>
             <div class="modal-footer"><button class="btn btn-secondary" @click="hideModal('modal-payment')">Cerrar</button><button class="btn btn-primary" @click="savePayment">Guardar</button></div>
@@ -205,7 +229,7 @@
 window.onload = function() {
     new Vue({
         el: '#app-payments',
-        data: { error: '', message: '', payments: [], receivables: [], movements: [], reconciliations: [], statement_imports: [], suggestions: [], options: { parties: [], bank_accounts: [], currencies: [], sat_payment_forms: [], integrations: [] }, stats: {}, paymentForm: {}, movementForm: {}, statementForm: { bank_account_id: 0, file: null } },
+        data: { error: '', message: '', payments: [], receivables: [], payables: [], movements: [], reconciliations: [], statement_imports: [], suggestions: [], options: { parties: [], bank_accounts: [], currencies: [], sat_payment_forms: [], integrations: [] }, stats: {}, paymentForm: {}, movementForm: {}, statementForm: { bank_account_id: 0, file: null } },
         mounted() { this.loadData(); },
         methods: {
             loadData() {
@@ -213,6 +237,7 @@ window.onload = function() {
                     if (data.error) { this.error = data.error; return; }
                     this.payments = data.payments || [];
                     this.receivables = data.receivables || [];
+                    this.payables = data.payables || [];
                     this.movements = data.movements || [];
                     this.reconciliations = data.reconciliations || [];
                     this.statement_imports = data.statement_imports || [];
@@ -250,6 +275,31 @@ window.onload = function() {
                 };
                 this.showModal('modal-payment');
             },
+            openPayablePayment(invoice) {
+                this.paymentForm = {
+                    id: 0,
+                    payment_type: 'sent',
+                    party_id: invoice.party_id || 0,
+                    bank_account_id: 0,
+                    integration_connection_id: 0,
+                    payment_date: new Date().toISOString().slice(0, 10),
+                    currency_code: invoice.currency_code || 'MXN',
+                    exchange_rate: 1,
+                    amount: invoice.balance_due || invoice.total || 0,
+                    sat_payment_form_code: '03',
+                    fiscal_document_id: 0,
+                    fiscal_mode: 'system_only',
+                    rep_status: 'not_required',
+                    reference: invoice.folio || '',
+                    external_id: invoice.uuid || '',
+                    status: 'confirmed',
+                    notes: 'Pago a proveedor aplicado desde Bancos y Pagos.',
+                    allocation_entity_type: 'purchase_invoice',
+                    allocation_entity_id: invoice.id,
+                    active: true
+                };
+                this.showModal('modal-payment');
+            },
             openMovement(movement) {
                 this.movementForm = Object.assign({ id: 0, bank_account_id: 0, movement_date: new Date().toISOString().slice(0, 10), movement_type: 'deposit', amount: 0, balance_after: 0, currency_code: 'MXN', reference: '', description: '', source: 'manual', statement_import_id: 0, checksum: '', source_row_json: '', payment_id: 0, reconciled: false, active: true }, movement);
                 this.showModal('modal-movement');
@@ -259,6 +309,7 @@ window.onload = function() {
                     if (data.error) { this.error = data.error; return; }
                     this.payments = data.payments || [];
                     this.receivables = data.receivables || this.receivables;
+                    this.payables = data.payables || this.payables;
                     this.stats = data.stats || this.stats;
                     this.hideModal('modal-payment');
                 });
@@ -312,6 +363,7 @@ window.onload = function() {
                     this.message = data.message || 'Movimiento conciliado.';
                     this.payments = data.payments || this.payments;
                     this.receivables = data.receivables || this.receivables;
+                    this.payables = data.payables || this.payables;
                     this.movements = data.movements || this.movements;
                     this.suggestions = data.suggestions || [];
                     this.stats = data.stats || this.stats;
