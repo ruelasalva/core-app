@@ -127,11 +127,22 @@
             </a>
         </li>
         <?php endif; ?>
+        <?php if ($menu['billing'] || $menu['receivables'] || $menu['payments'] || $menu['accounting']): ?>
+        <li class="nav-header">FINANZAS</li>
+        <?php endif; ?>
         <?php if ($menu['billing']): ?>
         <li class="nav-item">
             <a href="<?php echo Uri::create('admin/billing'); ?>" class="nav-link <?php echo (Uri::segment(2) == 'billing') ? 'active' : ''; ?>">
                 <i class="nav-icon bi bi-receipt-cutoff"></i>
                 <p>Facturaci&oacute;n CFDI</p>
+            </a>
+        </li>
+        <?php endif; ?>
+        <?php if ($menu['receivables']): ?>
+        <li class="nav-item">
+            <a href="<?php echo Uri::create('admin/receivables'); ?>" class="nav-link <?php echo (Uri::segment(2) == 'receivables') ? 'active' : ''; ?>">
+                <i class="nav-icon bi bi-wallet2"></i>
+                <p>Cuentas por cobrar</p>
             </a>
         </li>
         <?php endif; ?>

@@ -16,6 +16,7 @@ class Configsetup
             $this->seed_integrations();
             $this->seed_payments();
             $this->seed_accounting();
+            $this->seed_receivables();
             $this->seed_billing();
             $this->seed_operations();
             $this->seed_sat();
@@ -36,6 +37,7 @@ class Configsetup
             $this->sync_groups();
             $this->sync_permissions();
             $this->cleanup_legacy_permissions();
+            $this->sync_finance_group_permissions();
             $this->sync_purchase_group_permissions();
             $this->sync_sat_group_permissions();
             $this->sync_commission_group_permissions();
@@ -50,6 +52,7 @@ class Configsetup
             echo " - Integraciones y auditoria base\n";
             echo " - Pagos y bancos base\n";
             echo " - Contabilidad base fuerte\n";
+            echo " - Cuentas por cobrar base\n";
             echo " - Facturacion base\n";
             echo " - Reglas operativas base\n";
             echo " - SAT base\n";
@@ -71,6 +74,7 @@ class Configsetup
             echo " - Ayuda y conocimiento base\n";
             echo " - Grupos de acceso recomendados\n";
             echo " - Permisos base\n";
+            echo " - Permisos recomendados de finanzas\n";
             echo " - Permisos recomendados de compras y SAT\n";
             echo " - Permisos recomendados de comisiones\n";
         } catch (\Exception $e) {
@@ -1749,6 +1753,44 @@ class Configsetup
         }
     }
 
+    protected function seed_receivables()
+    {
+        if (!\DBUtil::table_exists('core_ar_customer_statuses') || !\DBUtil::table_exists('core_parties')) {
+            return;
+        }
+
+        foreach (\DB::select('id', 'credit_limit', 'credit_days')->from('core_parties')->where('active', '=', 1)->where('party_type', 'in', ['customer', 'both'])->execute() as $party) {
+            if (\DB::select('id')->from('core_ar_customer_statuses')->where('party_id', '=', (int) $party['id'])->execute()->current()) {
+                continue;
+            }
+            \DB::insert('core_ar_customer_statuses')->set([
+                'party_id' => (int) $party['id'],
+                'credit_status' => 'normal',
+                'credit_limit' => (float) $party['credit_limit'],
+                'credit_days' => (int) $party['credit_days'],
+                'current_balance' => 0,
+                'overdue_balance' => 0,
+                'active' => 1,
+                'created_at' => time(),
+                'updated_at' => time(),
+            ])->execute();
+        }
+
+        if (\DBUtil::table_exists('core_knowledge_articles')) {
+            $this->upsert_seed('core_knowledge_articles', 'code', 'cuentas_por_cobrar_cobranza', [
+                'code' => 'cuentas_por_cobrar_cobranza',
+                'title' => 'Cuentas por cobrar y cobranza',
+                'category' => 'Finanzas',
+                'summary' => 'Control de cartera, saldos vencidos, limites de credito y gestiones de cobranza.',
+                'content' => '<h3>Objetivo</h3><p>Cuentas por cobrar controla la cartera de clientes sin duplicar facturas ni pagos. Facturacion genera documentos, Pagos registra cobros y CxC concentra saldos, vencimientos, credito y seguimiento.</p><h4>Flujo recomendado</h4><ol><li>Factura una venta desde <strong>Facturacion CFDI</strong>.</li><li>Si la factura tiene saldo, aparece en <strong>Finanzas &gt; Cuentas por cobrar</strong>.</li><li>Revisa el cliente, limite de credito, saldo vencido y disponible.</li><li>Registra gestiones: llamada, correo, WhatsApp, visita, promesa o nota.</li><li>Cuando el cliente pague, registra o concilia el cobro desde <strong>Bancos y pagos</strong>.</li></ol><h4>Estados de credito</h4><ul><li><strong>Normal</strong>: cliente sin restriccion.</li><li><strong>Observacion</strong>: requiere seguimiento.</li><li><strong>Retener</strong>: revisar antes de vender o surtir.</li><li><strong>Bloqueado</strong>: no debe recibir credito nuevo sin autorizacion.</li></ul><h4>Regla ERP</h4><p>CxC no debe emitir facturas ni crear pagos directamente. Su funcion es controlar riesgo, cobranza y seguimiento. Los cobros reales viven en Pagos/Bancos y la afectacion contable debe pasar por reglas de contabilidad.</p>',
+                'sort_order' => 47,
+                'active' => 1,
+                'created_at' => time(),
+                'updated_at' => time(),
+            ]);
+        }
+    }
+
     protected function ensure_accounting_fiscal_year($year)
     {
         $exists = \DB::select('id')->from('core_accounting_fiscal_years')->where('code', '=', (string) $year)->execute()->current();
@@ -3012,6 +3054,7 @@ class Configsetup
             'communications' => 'Gestion de correos, eventos y notificaciones',
             'integrations' => 'Gestion de proveedores externos, pasarelas, conexiones y webhooks',
             'payments' => 'Gestion de pagos, bancos, movimientos y conciliaciones',
+            'receivables' => 'Gestion de cuentas por cobrar, cartera vencida y cobranza',
             'purchases' => 'Gestion de compras, ordenes, facturas proveedor, contrarecibos y evidencias',
             'sales' => 'Gestion de cotizaciones, pedidos y solicitudes comerciales',
             'commissions' => 'Gestion de vendedores, reglas, cuotas, movimientos y liquidaciones de comisiones',
@@ -3107,6 +3150,57 @@ class Configsetup
                     \Cache::delete('auth.permissions.user_'.(int) $user['id']);
                 } catch (\Exception $e) {
                     // Cache may not exist yet.
+                }
+            }
+        }
+    }
+
+    protected function sync_finance_group_permissions()
+    {
+        foreach (['receivables', 'payments', 'accounting', 'billing'] as $area) {
+            $permission = \DB::select('id', 'actions')
+                ->from('users_permissions')
+                ->where('area', '=', $area)
+                ->where('permission', '=', 'access')
+                ->execute()
+                ->current();
+
+            if (!$permission) {
+                continue;
+            }
+
+            $actions = !empty($permission['actions']) ? @unserialize($permission['actions']) : [];
+            if (!is_array($actions) || empty($actions)) {
+                $actions = ['view', 'create', 'edit', 'delete', 'import', 'export', 'authorize'];
+            }
+
+            foreach ([80, 90, 100] as $group_id) {
+                $exists = \DB::select('id')
+                    ->from('users_group_permissions')
+                    ->where('group_id', '=', $group_id)
+                    ->where('perms_id', '=', (int) $permission['id'])
+                    ->execute()
+                    ->current();
+
+                if ($exists) {
+                    \DB::update('users_group_permissions')
+                        ->set(['actions' => serialize($actions)])
+                        ->where('id', '=', (int) $exists['id'])
+                        ->execute();
+                } else {
+                    \DB::insert('users_group_permissions')->set([
+                        'group_id' => $group_id,
+                        'perms_id' => (int) $permission['id'],
+                        'actions' => serialize($actions),
+                    ])->execute();
+                }
+
+                foreach (\DB::select('id')->from('users')->where('group_id', '=', $group_id)->execute() as $user) {
+                    try {
+                        \Cache::delete('auth.permissions.user_'.(int) $user['id']);
+                    } catch (\Exception $e) {
+                        // Cache may not exist yet.
+                    }
                 }
             }
         }

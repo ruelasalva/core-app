@@ -58,6 +58,7 @@ return array (
         52 => '053_create_sales_sellers_and_commissions',
         53 => '054_create_crm_denue_prospect_tables',
         54 => '055_strengthen_accounting_periods_cost_centers',
+        55 => '056_create_accounts_receivable_tables',
       ),
     ),
     'module' => array(    
