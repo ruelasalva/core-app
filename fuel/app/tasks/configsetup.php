@@ -18,6 +18,7 @@ class Configsetup
             $this->seed_accounting();
             $this->seed_receivables();
             $this->seed_payables();
+            $this->seed_treasury();
             $this->seed_billing();
             $this->seed_operations();
             $this->seed_sat();
@@ -55,6 +56,7 @@ class Configsetup
             echo " - Contabilidad base fuerte\n";
             echo " - Cuentas por cobrar base\n";
             echo " - Cuentas por pagar base\n";
+            echo " - Tesoreria base\n";
             echo " - Facturacion base\n";
             echo " - Reglas operativas base\n";
             echo " - SAT base\n";
@@ -1832,6 +1834,27 @@ class Configsetup
         }
     }
 
+    protected function seed_treasury()
+    {
+        if (!\DBUtil::table_exists('core_treasury_cashflow_items')) {
+            return;
+        }
+
+        if (\DBUtil::table_exists('core_knowledge_articles')) {
+            $this->upsert_seed('core_knowledge_articles', 'code', 'tesoreria_flujo_efectivo', [
+                'code' => 'tesoreria_flujo_efectivo',
+                'title' => 'Tesoreria y flujo de efectivo',
+                'category' => 'Finanzas',
+                'summary' => 'Posicion bancaria, entradas, salidas y proyeccion de caja sin duplicar bancos, CxC ni CxP.',
+                'content' => '<h3>Objetivo</h3><p>Tesoreria permite ver la posicion bancaria y proyectar flujo de efectivo usando documentos ya existentes. No reemplaza Bancos/Pagos, Cuentas por cobrar ni Cuentas por pagar.</p><h4>Fuentes de informacion</h4><ul><li><strong>Bancos y pagos</strong>: movimientos bancarios reales y conciliacion.</li><li><strong>Cuentas por cobrar</strong>: facturas de cliente pendientes como entradas futuras.</li><li><strong>Cuentas por pagar</strong>: facturas de proveedor pendientes como salidas futuras.</li><li><strong>Proyecciones manuales</strong>: escenarios o compromisos que todavia no tienen documento formal.</li></ul><h4>Regla ERP</h4><p>Una proyeccion manual no crea pagos, cobros ni movimientos bancarios. Sirve para planeacion de flujo. Cuando el dinero exista realmente, debe registrarse desde <strong>Bancos y pagos</strong>.</p><h4>Uso recomendado</h4><ol><li>Revisa posicion por cuenta bancaria.</li><li>Consulta flujo proyectado a 60 dias.</li><li>Agrega entradas o salidas manuales para escenarios aun no documentados.</li><li>Cuando se concrete el movimiento, registralo en Bancos/Pagos y cancela o completa la proyeccion manual.</li></ol>',
+                'sort_order' => 49,
+                'active' => 1,
+                'created_at' => time(),
+                'updated_at' => time(),
+            ]);
+        }
+    }
+
     protected function ensure_accounting_fiscal_year($year)
     {
         $exists = \DB::select('id')->from('core_accounting_fiscal_years')->where('code', '=', (string) $year)->execute()->current();
@@ -3097,6 +3120,7 @@ class Configsetup
             'payments' => 'Gestion de pagos, bancos, movimientos y conciliaciones',
             'receivables' => 'Gestion de cuentas por cobrar, cartera vencida y cobranza',
             'payables' => 'Gestion de cuentas por pagar, vencimientos y programacion de pagos',
+            'treasury' => 'Gestion de tesoreria, posicion bancaria y flujo de efectivo',
             'purchases' => 'Gestion de compras, ordenes, facturas proveedor, contrarecibos y evidencias',
             'sales' => 'Gestion de cotizaciones, pedidos y solicitudes comerciales',
             'commissions' => 'Gestion de vendedores, reglas, cuotas, movimientos y liquidaciones de comisiones',
@@ -3199,7 +3223,7 @@ class Configsetup
 
     protected function sync_finance_group_permissions()
     {
-        foreach (['receivables', 'payables', 'payments', 'accounting', 'billing'] as $area) {
+        foreach (['receivables', 'payables', 'treasury', 'payments', 'accounting', 'billing'] as $area) {
             $permission = \DB::select('id', 'actions')
                 ->from('users_permissions')
                 ->where('area', '=', $area)

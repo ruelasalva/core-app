@@ -62,6 +62,7 @@ class Controller_Adminbase extends Controller_Template
             'payments' => $this->is_super_admin || \Auth::has_access('payments.access[view]'),
             'receivables' => $this->is_super_admin || \Auth::has_access('receivables.access[view]'),
             'payables' => $this->is_super_admin || \Auth::has_access('payables.access[view]'),
+            'treasury' => $this->is_super_admin || \Auth::has_access('treasury.access[view]'),
             'accounting' => $this->is_super_admin || \Auth::has_access('accounting.access[view]'),
             'hr' => $this->is_super_admin || \Auth::has_access('hr.access[view]'),
             'purchases' => $this->is_super_admin || \Auth::has_access('purchases.access[view]'),

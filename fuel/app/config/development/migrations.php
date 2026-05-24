@@ -60,6 +60,7 @@ return array (
         54 => '055_strengthen_accounting_periods_cost_centers',
         55 => '056_create_accounts_receivable_tables',
         56 => '057_create_accounts_payable_tables',
+        57 => '058_create_treasury_cashflow_tables',
       ),
     ),
     'module' => array(    
