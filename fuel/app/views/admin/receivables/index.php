@@ -146,6 +146,9 @@ window.onload = function() {
             },
             openAction: function(action) {
                 this.actionForm = Object.assign({ id: 0, party_id: 0, invoice_id: 0, action_type: 'call', status: 'pending', priority: 'normal', assigned_user_id: 0, action_date: new Date().toISOString().slice(0, 10), next_action_date: '', promise_date: '', promise_amount: 0, result: '', notes: '', active: true }, action);
+                this.actionForm.party_id = String(this.actionForm.party_id || 0);
+                this.actionForm.invoice_id = String(this.actionForm.invoice_id || 0);
+                this.actionForm.assigned_user_id = String(this.actionForm.assigned_user_id || 0);
                 this.showModal('modal-action');
             },
             openCredit: function(customer) {

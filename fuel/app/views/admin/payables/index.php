@@ -149,6 +149,9 @@ window.onload = function() {
             },
             openAction(action) {
                 this.actionForm = Object.assign({ id: 0, party_id: 0, purchase_invoice_id: 0, action_type: 'schedule', status: 'pending', priority: 'normal', assigned_user_id: 0, action_date: new Date().toISOString().slice(0, 10), scheduled_payment_date: '', planned_amount: 0, result: '', notes: '', active: true }, action);
+                this.actionForm.party_id = String(this.actionForm.party_id || 0);
+                this.actionForm.purchase_invoice_id = String(this.actionForm.purchase_invoice_id || 0);
+                this.actionForm.assigned_user_id = String(this.actionForm.assigned_user_id || 0);
                 this.showModal('modal-action');
             },
             openSupplier(supplier) {

@@ -107,6 +107,8 @@ class Controller_Admin_Payables extends Controller_Adminbase
                 'planned_amount' => round((float) \Arr::get($val, 'planned_amount', 0), 2),
                 'result' => trim((string) \Arr::get($val, 'result', '')),
                 'notes' => trim((string) \Arr::get($val, 'notes', '')),
+                'completed_by' => 0,
+                'completed_at' => 0,
                 'active' => $this->bool_value(\Arr::get($val, 'active', true)),
             ];
 

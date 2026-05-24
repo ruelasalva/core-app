@@ -108,6 +108,8 @@ class Controller_Admin_Receivables extends Controller_Adminbase
                 'promise_amount' => round((float) \Arr::get($val, 'promise_amount', 0), 2),
                 'result' => trim((string) \Arr::get($val, 'result', '')),
                 'notes' => trim((string) \Arr::get($val, 'notes', '')),
+                'completed_by' => 0,
+                'completed_at' => 0,
                 'active' => $this->bool_value(\Arr::get($val, 'active', true)),
             ];
 

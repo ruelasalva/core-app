@@ -248,6 +248,7 @@ window.onload = function() {
             },
             openPayment(payment) {
                 this.paymentForm = Object.assign({ id: 0, payment_type: 'received', party_id: 0, bank_account_id: 0, integration_connection_id: 0, fiscal_document_id: 0, fiscal_mode: 'system_only', rep_status: 'not_required', payment_date: new Date().toISOString().slice(0, 10), currency_code: 'MXN', exchange_rate: 1, amount: 0, sat_payment_form_code: '99', reference: '', external_id: '', status: 'pending', notes: '', allocation_entity_type: '', allocation_entity_id: 0, active: true }, payment);
+                this.normalizePaymentForm();
                 this.showModal('modal-payment');
             },
             openReceivablePayment(invoice) {
@@ -273,6 +274,7 @@ window.onload = function() {
                     allocation_entity_id: invoice.id,
                     active: true
                 };
+                this.normalizePaymentForm();
                 this.showModal('modal-payment');
             },
             openPayablePayment(invoice) {
@@ -298,7 +300,15 @@ window.onload = function() {
                     allocation_entity_id: invoice.id,
                     active: true
                 };
+                this.normalizePaymentForm();
                 this.showModal('modal-payment');
+            },
+            normalizePaymentForm() {
+                this.paymentForm.party_id = String(this.paymentForm.party_id || 0);
+                this.paymentForm.bank_account_id = String(this.paymentForm.bank_account_id || 0);
+                this.paymentForm.integration_connection_id = String(this.paymentForm.integration_connection_id || 0);
+                this.paymentForm.fiscal_document_id = String(this.paymentForm.fiscal_document_id || 0);
+                this.paymentForm.allocation_entity_id = String(this.paymentForm.allocation_entity_id || 0);
             },
             openMovement(movement) {
                 this.movementForm = Object.assign({ id: 0, bank_account_id: 0, movement_date: new Date().toISOString().slice(0, 10), movement_type: 'deposit', amount: 0, balance_after: 0, currency_code: 'MXN', reference: '', description: '', source: 'manual', statement_import_id: 0, checksum: '', source_row_json: '', payment_id: 0, reconciled: false, active: true }, movement);
