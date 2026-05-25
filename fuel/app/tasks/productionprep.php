@@ -11,6 +11,7 @@ namespace Fuel\Tasks;
  * Uso:
  * - php oil r productionprep all
  * - php oil r productionprep clean
+ * - php oil r productionprep sat_audit
  * - php oil r productionprep frontend
  */
 class Productionprep
@@ -32,12 +33,16 @@ class Productionprep
         $mode = strtolower(trim((string) $mode)) ?: 'all';
 
         try {
-            if (!in_array($mode, ['all', 'clean', 'frontend'], true)) {
-                throw new \InvalidArgumentException('Modo no valido. Usa all, clean o frontend.');
+            if (!in_array($mode, ['all', 'clean', 'sat_audit', 'frontend'], true)) {
+                throw new \InvalidArgumentException('Modo no valido. Usa all, clean, sat_audit o frontend.');
             }
 
             if ($mode === 'all' || $mode === 'clean') {
                 $this->clean_operational_data();
+            }
+
+            if ($mode === 'sat_audit') {
+                $this->clean_sat_audit_data();
             }
 
             if ($mode === 'all' || $mode === 'frontend') {
@@ -90,6 +95,7 @@ class Productionprep
             'core_billing_recurring_items',
             'core_billing_recurring_profiles',
             'core_billing_invoices',
+            'core_fiscal_documents',
             'core_sales_delivery_items',
             'core_sales_deliveries',
             'core_sales_order_items',
@@ -104,6 +110,17 @@ class Productionprep
             'core_purchase_order_items',
             'core_purchase_orders',
             'core_purchase_invoices',
+            'core_sat_payment_details',
+            'core_sat_cfdi_details',
+            'core_sat_cfdi_relations',
+            'core_sat_cfdi_events',
+            'core_sat_packages',
+            'core_sat_sync_requests',
+            'core_sat_cfdi',
+            'core_sat_catalog_sync_logs',
+            'core_sat_credentials',
+            'core_sat_config',
+            'core_audit_logs',
             'core_inventory_movements',
             'core_inventory_stock_balances',
             'core_accounting_journal_lines',
@@ -157,6 +174,47 @@ class Productionprep
         \DB::query('SET FOREIGN_KEY_CHECKS=1')->execute();
 
         echo "\n - Datos operativos limpiados.\n";
+    }
+
+    /**
+     * CLEAN SAT AUDIT DATA
+     *
+     * Limpia CFDI importados, solicitudes SAT, credenciales fiscales y auditoria
+     * funcional para poder cargar la informacion de una empresa nueva.
+     *
+     * @access  protected
+     * @return  void
+     */
+    protected function clean_sat_audit_data()
+    {
+        $tables = [
+            'core_purchase_cfdi_line_mappings',
+            'core_sat_payment_details',
+            'core_sat_cfdi_details',
+            'core_sat_cfdi_relations',
+            'core_sat_cfdi_events',
+            'core_sat_packages',
+            'core_sat_sync_requests',
+            'core_sat_cfdi',
+            'core_fiscal_documents',
+            'core_sat_catalog_sync_logs',
+            'core_sat_credentials',
+            'core_sat_config',
+            'core_audit_logs',
+        ];
+
+        \DB::query('SET FOREIGN_KEY_CHECKS=0')->execute();
+        foreach ($tables as $table) {
+            if (!$this->table_exists($table)) {
+                continue;
+            }
+
+            \DB::query('DELETE FROM `'.$table.'`')->execute();
+            $this->reset_increment($table);
+        }
+        \DB::query('SET FOREIGN_KEY_CHECKS=1')->execute();
+
+        echo "\n - Datos SAT/CFDI y auditoria limpiados.\n";
     }
 
     /**
