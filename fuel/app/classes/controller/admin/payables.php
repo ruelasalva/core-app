@@ -61,6 +61,7 @@ class Controller_Admin_Payables extends Controller_Adminbase
                 'suppliers' => $this->suppliers(),
                 'documents' => $this->documents($filters),
                 'actions' => $this->actions($filters),
+                'aging' => $this->aging($filters),
                 'options' => $this->options($filters),
                 'stats' => $this->stats($filters),
                 'period_filters' => $filters,
@@ -153,6 +154,7 @@ class Controller_Admin_Payables extends Controller_Adminbase
                 'suppliers' => $this->suppliers(),
                 'documents' => $this->documents($this->period_filters()),
                 'actions' => $this->actions($this->period_filters()),
+                'aging' => $this->aging($this->period_filters()),
                 'stats' => $this->stats($this->period_filters()),
             ]);
         } catch (\Exception $e) {
@@ -215,10 +217,73 @@ class Controller_Admin_Payables extends Controller_Adminbase
                 'new_values' => $status->to_array(),
             ]);
 
-            return $this->json_response(['status' => 'ok', 'suppliers' => $this->suppliers(), 'stats' => $this->stats()]);
+            $filters = $this->period_filters();
+            return $this->json_response([
+                'status' => 'ok',
+                'suppliers' => $this->suppliers(),
+                'documents' => $this->documents($filters),
+                'actions' => $this->actions($filters),
+                'aging' => $this->aging($filters),
+                'stats' => $this->stats($filters),
+            ]);
         } catch (\Exception $e) {
             \Log::error('Error guardando estado de proveedor: '.$e->getMessage());
             return $this->json_response(['error' => 'No se pudo guardar estado de proveedor.'], 400);
+        }
+    }
+
+    /**
+     * SYNC STATUSES
+     *
+     * ACTUALIZA SALDOS Y CONTROL BASE DE PROVEEDORES CON DEUDA ABIERTA
+     *
+     * @access  public
+     * @return  Response
+     */
+    public function action_sync_statuses()
+    {
+        # VALIDAR PERMISO PARA EDITAR
+        $this->require_access('payables.access[edit]');
+
+        try {
+            # SE SINCRONIZAN PROVEEDORES CON FACTURAS ABIERTAS
+            $rows = \DB::select('party_id')
+                ->from('core_purchase_invoices')
+                ->where('active', '=', 1)
+                ->where('balance_due', '>', 0)
+                ->group_by('party_id')
+                ->execute();
+
+            $count = 0;
+            foreach ($rows as $row) {
+                $this->sync_supplier_status((int) $row['party_id']);
+                $count++;
+            }
+
+            # SE AUDITA LA SINCRONIZACION
+            Helper_Core_Audit::log([
+                'module' => 'payables',
+                'action' => 'sync_supplier_statuses',
+                'entity_type' => 'ap_supplier_status',
+                'entity_id' => 0,
+                'summary' => 'Sincronizacion de saldos CxP: '.$count.' proveedores',
+                'old_values' => [],
+                'new_values' => ['suppliers' => $count],
+            ]);
+
+            $filters = $this->period_filters();
+            return $this->json_response([
+                'status' => 'ok',
+                'message' => 'Saldos sincronizados: '.$count.' proveedores.',
+                'suppliers' => $this->suppliers(),
+                'documents' => $this->documents($filters),
+                'actions' => $this->actions($filters),
+                'aging' => $this->aging($filters),
+                'stats' => $this->stats($filters),
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error sincronizando saldos CxP: '.$e->getMessage());
+            return $this->json_response(['error' => 'No se pudieron sincronizar saldos.'], 400);
         }
     }
 
@@ -255,12 +320,18 @@ class Controller_Admin_Payables extends Controller_Adminbase
     protected function documents(array $filters = [])
     {
         $filters = $filters ?: $this->period_filters();
-        return \DB::select(['i.id', 'id'], ['i.folio', 'folio'], ['i.party_id', 'party_id'], ['p.name', 'party_name'], ['i.uuid', 'uuid'], ['i.invoice_date', 'invoice_date'], ['i.due_date', 'due_date'], ['i.currency_code', 'currency_code'], ['i.total', 'total'], ['i.balance_due', 'balance_due'], ['i.status', 'status'], ['i.validation_status', 'validation_status'], ['i.sat_status', 'sat_status'])
+        return \DB::select(
+                ['i.id', 'id'], ['i.folio', 'folio'], ['i.party_id', 'party_id'], ['p.name', 'party_name'],
+                ['i.uuid', 'uuid'], ['i.invoice_date', 'invoice_date'], ['i.due_date', 'due_date'],
+                ['i.currency_code', 'currency_code'], ['i.total', 'total'], ['i.balance_due', 'balance_due'],
+                ['i.status', 'status'], ['i.validation_status', 'validation_status'], ['i.sat_status', 'sat_status'],
+                [\DB::expr("CASE WHEN i.due_date <> '' AND i.due_date < CURDATE() THEN DATEDIFF(CURDATE(), i.due_date) ELSE 0 END"), 'days_overdue'],
+                [\DB::expr("CASE WHEN i.due_date = '' THEN 'sin_fecha' WHEN i.due_date >= CURDATE() THEN 'por_vencer' WHEN DATEDIFF(CURDATE(), i.due_date) <= 30 THEN '1_30' WHEN DATEDIFF(CURDATE(), i.due_date) <= 60 THEN '31_60' WHEN DATEDIFF(CURDATE(), i.due_date) <= 90 THEN '61_90' ELSE '90_mas' END"), 'aging_bucket']
+            )
             ->from(['core_purchase_invoices', 'i'])
             ->join(['core_parties', 'p'], 'left')->on('i.party_id', '=', 'p.id')
             ->where('i.active', '=', 1)
             ->where('i.balance_due', '>', 0)
-            ->where('i.due_date', '>=', $filters['start_date'])
             ->where('i.due_date', '<=', $filters['end_date'])
             ->order_by('i.due_date', 'asc')
             ->order_by('i.id', 'desc')
@@ -300,6 +371,7 @@ class Controller_Admin_Payables extends Controller_Adminbase
     {
         $documents = $this->documents($filters);
         $actions = $this->actions($filters);
+        $aging = $this->aging($filters);
         $total = 0;
         $overdue = 0;
         $pending = 0;
@@ -318,8 +390,46 @@ class Controller_Admin_Payables extends Controller_Adminbase
             'documents' => count($documents),
             'balance_due' => round($total, 2),
             'overdue_balance' => round($overdue, 2),
+            'not_due_balance' => round((float) (isset($aging['por_vencer']['amount']) ? $aging['por_vencer']['amount'] : 0), 2),
+            'aging_90_plus' => round((float) (isset($aging['90_mas']['amount']) ? $aging['90_mas']['amount'] : 0), 2),
             'actions_pending' => $pending,
         ];
+    }
+
+    protected function aging(array $filters = [])
+    {
+        $filters = $filters ?: $this->period_filters();
+        $base = [
+            'por_vencer' => ['label' => 'Por vencer', 'documents' => 0, 'amount' => 0],
+            '1_30' => ['label' => '1-30 dias', 'documents' => 0, 'amount' => 0],
+            '31_60' => ['label' => '31-60 dias', 'documents' => 0, 'amount' => 0],
+            '61_90' => ['label' => '61-90 dias', 'documents' => 0, 'amount' => 0],
+            '90_mas' => ['label' => '90+ dias', 'documents' => 0, 'amount' => 0],
+            'sin_fecha' => ['label' => 'Sin vencimiento', 'documents' => 0, 'amount' => 0],
+        ];
+
+        $rows = \DB::select(
+                [\DB::expr("CASE WHEN due_date = '' THEN 'sin_fecha' WHEN due_date >= CURDATE() THEN 'por_vencer' WHEN DATEDIFF(CURDATE(), due_date) <= 30 THEN '1_30' WHEN DATEDIFF(CURDATE(), due_date) <= 60 THEN '31_60' WHEN DATEDIFF(CURDATE(), due_date) <= 90 THEN '61_90' ELSE '90_mas' END"), 'bucket'],
+                [\DB::expr('COUNT(id)'), 'documents'],
+                [\DB::expr('COALESCE(SUM(balance_due),0)'), 'amount']
+            )
+            ->from('core_purchase_invoices')
+            ->where('active', '=', 1)
+            ->where('balance_due', '>', 0)
+            ->where('due_date', '<=', $filters['end_date'])
+            ->group_by('bucket')
+            ->execute();
+
+        foreach ($rows as $row) {
+            $bucket = (string) $row['bucket'];
+            if (!isset($base[$bucket])) {
+                continue;
+            }
+            $base[$bucket]['documents'] = (int) $row['documents'];
+            $base[$bucket]['amount'] = round((float) $row['amount'], 2);
+        }
+
+        return $base;
     }
 
     protected function supplier_options()
