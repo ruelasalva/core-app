@@ -340,9 +340,16 @@ $section_settings = function ($json) {
             </div>
             <div class="download-grid">
                 <?php foreach ($downloads as $download): ?>
-                <a class="download-item" href="<?php echo e($media_url(\Arr::get($download, 'url', '#'))); ?>" target="_blank">
+                <?php
+                    $download_url = \Arr::get($download, 'url', '#');
+                    $download_label = \Arr::get($download, 'label', 'Ver documento');
+                    $download_description = \Arr::get($download, 'description', '');
+                    $download_href = (strpos($download_url, '#') === 0) ? $download_url : $media_url($download_url);
+                    $download_target = (strpos($download_url, '#') === 0 || strpos($download_url, '/') === 0) ? '' : ' target="_blank"';
+                ?>
+                <a class="download-item" href="<?php echo e($download_href); ?>"<?php echo $download_target; ?>>
                     <strong><?php echo e(\Arr::get($download, 'title', 'Descarga')); ?></strong>
-                    <span>Ver documento</span>
+                    <span><?php echo e($download_description ?: $download_label); ?></span>
                 </a>
                 <?php endforeach; ?>
             </div>
