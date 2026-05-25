@@ -61,6 +61,7 @@ return array (
         55 => '056_create_accounts_receivable_tables',
         56 => '057_create_accounts_payable_tables',
         57 => '058_create_treasury_cashflow_tables',
+        58 => '059_create_budget_control_tables',
       ),
     ),
     'module' => array(    

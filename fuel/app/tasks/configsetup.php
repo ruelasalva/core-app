@@ -19,6 +19,7 @@ class Configsetup
             $this->seed_receivables();
             $this->seed_payables();
             $this->seed_treasury();
+            $this->seed_budgets();
             $this->seed_billing();
             $this->seed_operations();
             $this->seed_sat();
@@ -57,6 +58,7 @@ class Configsetup
             echo " - Cuentas por cobrar base\n";
             echo " - Cuentas por pagar base\n";
             echo " - Tesoreria base\n";
+            echo " - Presupuestos base\n";
             echo " - Facturacion base\n";
             echo " - Reglas operativas base\n";
             echo " - SAT base\n";
@@ -1855,6 +1857,27 @@ class Configsetup
         }
     }
 
+    protected function seed_budgets()
+    {
+        if (!\DBUtil::table_exists('core_budget_plans') || !\DBUtil::table_exists('core_budget_lines')) {
+            return;
+        }
+
+        if (\DBUtil::table_exists('core_knowledge_articles')) {
+            $this->upsert_seed('core_knowledge_articles', 'code', 'presupuestos_control_presupuestal', [
+                'code' => 'presupuestos_control_presupuestal',
+                'title' => 'Presupuestos y control presupuestal',
+                'category' => 'Finanzas',
+                'summary' => 'Planes presupuestales por ejercicio, departamento, cuenta y centro de costo.',
+                'content' => '<h3>Objetivo</h3><p>Presupuestos permite definir limites planeados y compararlos contra el ejercido contable. No crea pagos, facturas ni polizas por si mismo.</p><h4>Como se estructura</h4><ul><li><strong>Plan</strong>: presupuesto general por ejercicio, departamento o centro de costo.</li><li><strong>Partidas</strong>: importes por periodo, cuenta contable, departamento y centro de costo.</li><li><strong>Ejercido</strong>: se calcula desde polizas contables que coincidan con periodo y filtros de la partida.</li></ul><h4>Uso recomendado</h4><ol><li>Crea un presupuesto anual o mensual.</li><li>Agrega partidas por cuenta de gasto, departamento y centro de costo.</li><li>Ajusta alerta y bloqueo segun politica interna.</li><li>Cuando Contabilidad tenga polizas reales, revisa ejercido, disponible y porcentaje usado.</li></ol><h4>Regla ERP</h4><p>El control presupuestal debe alimentar decisiones de Compras, Tesoreria y Autorizaciones. La primera version es consultiva; la etapa siguiente podra validar compras contra presupuesto antes de autorizar.</p>',
+                'sort_order' => 50,
+                'active' => 1,
+                'created_at' => time(),
+                'updated_at' => time(),
+            ]);
+        }
+    }
+
     protected function ensure_accounting_fiscal_year($year)
     {
         $exists = \DB::select('id')->from('core_accounting_fiscal_years')->where('code', '=', (string) $year)->execute()->current();
@@ -3121,6 +3144,7 @@ class Configsetup
             'receivables' => 'Gestion de cuentas por cobrar, cartera vencida y cobranza',
             'payables' => 'Gestion de cuentas por pagar, vencimientos y programacion de pagos',
             'treasury' => 'Gestion de tesoreria, posicion bancaria y flujo de efectivo',
+            'budgets' => 'Gestion de presupuestos y control presupuestal',
             'purchases' => 'Gestion de compras, ordenes, facturas proveedor, contrarecibos y evidencias',
             'sales' => 'Gestion de cotizaciones, pedidos y solicitudes comerciales',
             'commissions' => 'Gestion de vendedores, reglas, cuotas, movimientos y liquidaciones de comisiones',
@@ -3223,7 +3247,7 @@ class Configsetup
 
     protected function sync_finance_group_permissions()
     {
-        foreach (['receivables', 'payables', 'treasury', 'payments', 'accounting', 'billing'] as $area) {
+        foreach (['receivables', 'payables', 'treasury', 'budgets', 'payments', 'accounting', 'billing'] as $area) {
             $permission = \DB::select('id', 'actions')
                 ->from('users_permissions')
                 ->where('area', '=', $area)

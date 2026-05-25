@@ -127,7 +127,7 @@
             </a>
         </li>
         <?php endif; ?>
-        <?php if ($menu['billing'] || $menu['receivables'] || $menu['payables'] || $menu['payments'] || $menu['treasury'] || $menu['accounting']): ?>
+        <?php if ($menu['billing'] || $menu['receivables'] || $menu['payables'] || $menu['payments'] || $menu['treasury'] || $menu['budgets'] || $menu['accounting']): ?>
         <li class="nav-header">FINANZAS</li>
         <?php endif; ?>
         <?php if ($menu['billing']): ?>
@@ -167,6 +167,14 @@
             <a href="<?php echo Uri::create('admin/treasury'); ?>" class="nav-link <?php echo (Uri::segment(2) == 'treasury') ? 'active' : ''; ?>">
                 <i class="nav-icon bi bi-graph-up-arrow"></i>
                 <p>Tesorer&iacute;a</p>
+            </a>
+        </li>
+        <?php endif; ?>
+        <?php if ($menu['budgets']): ?>
+        <li class="nav-item">
+            <a href="<?php echo Uri::create('admin/budgets'); ?>" class="nav-link <?php echo (Uri::segment(2) == 'budgets') ? 'active' : ''; ?>">
+                <i class="nav-icon bi bi-clipboard-data"></i>
+                <p>Presupuestos</p>
             </a>
         </li>
         <?php endif; ?>
