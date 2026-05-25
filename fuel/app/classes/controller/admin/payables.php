@@ -54,14 +54,16 @@ class Controller_Admin_Payables extends Controller_Adminbase
         try {
             # SE VALIDA ESTRUCTURA
             $this->assert_schema_ready();
+            $filters = $this->period_filters();
 
             # SE REGRESA INFORMACION PARA VUE
             return $this->json_response([
                 'suppliers' => $this->suppliers(),
-                'documents' => $this->documents(),
-                'actions' => $this->actions(),
-                'options' => $this->options(),
-                'stats' => $this->stats(),
+                'documents' => $this->documents($filters),
+                'actions' => $this->actions($filters),
+                'options' => $this->options($filters),
+                'stats' => $this->stats($filters),
+                'period_filters' => $filters,
             ]);
         } catch (\Exception $e) {
             \Log::error('Error cargando cuentas por pagar: '.$e->getMessage());
@@ -149,9 +151,9 @@ class Controller_Admin_Payables extends Controller_Adminbase
             return $this->json_response([
                 'status' => 'ok',
                 'suppliers' => $this->suppliers(),
-                'documents' => $this->documents(),
-                'actions' => $this->actions(),
-                'stats' => $this->stats(),
+                'documents' => $this->documents($this->period_filters()),
+                'actions' => $this->actions($this->period_filters()),
+                'stats' => $this->stats($this->period_filters()),
             ]);
         } catch (\Exception $e) {
             \Log::error('Error guardando programacion de pago: '.$e->getMessage());
@@ -250,13 +252,16 @@ class Controller_Admin_Payables extends Controller_Adminbase
         return $rows;
     }
 
-    protected function documents()
+    protected function documents(array $filters = [])
     {
+        $filters = $filters ?: $this->period_filters();
         return \DB::select(['i.id', 'id'], ['i.folio', 'folio'], ['i.party_id', 'party_id'], ['p.name', 'party_name'], ['i.uuid', 'uuid'], ['i.invoice_date', 'invoice_date'], ['i.due_date', 'due_date'], ['i.currency_code', 'currency_code'], ['i.total', 'total'], ['i.balance_due', 'balance_due'], ['i.status', 'status'], ['i.validation_status', 'validation_status'], ['i.sat_status', 'sat_status'])
             ->from(['core_purchase_invoices', 'i'])
             ->join(['core_parties', 'p'], 'left')->on('i.party_id', '=', 'p.id')
             ->where('i.active', '=', 1)
             ->where('i.balance_due', '>', 0)
+            ->where('i.due_date', '>=', $filters['start_date'])
+            ->where('i.due_date', '<=', $filters['end_date'])
             ->order_by('i.due_date', 'asc')
             ->order_by('i.id', 'desc')
             ->limit(300)
@@ -264,14 +269,17 @@ class Controller_Admin_Payables extends Controller_Adminbase
             ->as_array();
     }
 
-    protected function actions()
+    protected function actions(array $filters = [])
     {
+        $filters = $filters ?: $this->period_filters();
         return \DB::select(['a.id', 'id'], ['a.folio', 'folio'], ['a.party_id', 'party_id'], ['p.name', 'party_name'], ['a.purchase_invoice_id', 'purchase_invoice_id'], ['i.folio', 'invoice_folio'], ['a.action_type', 'action_type'], ['a.status', 'status'], ['a.priority', 'priority'], ['a.action_date', 'action_date'], ['a.scheduled_payment_date', 'scheduled_payment_date'], ['a.planned_amount', 'planned_amount'], ['a.result', 'result'], ['a.notes', 'notes'], ['u.username', 'assigned_user_name'])
             ->from(['core_ap_payment_actions', 'a'])
             ->join(['core_parties', 'p'], 'left')->on('a.party_id', '=', 'p.id')
             ->join(['core_purchase_invoices', 'i'], 'left')->on('a.purchase_invoice_id', '=', 'i.id')
             ->join(['users', 'u'], 'left')->on('a.assigned_user_id', '=', 'u.id')
             ->where('a.active', '=', 1)
+            ->where('a.action_date', '>=', $filters['start_date'])
+            ->where('a.action_date', '<=', $filters['end_date'])
             ->order_by('a.action_date', 'desc')
             ->order_by('a.id', 'desc')
             ->limit(200)
@@ -279,31 +287,38 @@ class Controller_Admin_Payables extends Controller_Adminbase
             ->as_array();
     }
 
-    protected function options()
+    protected function options(array $filters = [])
     {
         return [
             'suppliers' => $this->supplier_options(),
-            'documents' => $this->document_options(),
+            'documents' => $this->document_options($filters),
             'users' => $this->user_options(),
         ];
     }
 
-    protected function stats()
+    protected function stats(array $filters = [])
     {
-        $documents = $this->documents();
+        $documents = $this->documents($filters);
+        $actions = $this->actions($filters);
         $total = 0;
         $overdue = 0;
+        $pending = 0;
         foreach ($documents as $document) {
             $total += (float) $document['balance_due'];
             if (!empty($document['due_date']) && $document['due_date'] < date('Y-m-d')) {
                 $overdue += (float) $document['balance_due'];
             }
         }
+        foreach ($actions as $action) {
+            if ($action['status'] !== 'done') {
+                $pending++;
+            }
+        }
         return [
             'documents' => count($documents),
             'balance_due' => round($total, 2),
             'overdue_balance' => round($overdue, 2),
-            'actions_pending' => (int) \DB::select()->from('core_ap_payment_actions')->where('status', '!=', 'done')->where('active', '=', 1)->execute()->count(),
+            'actions_pending' => $pending,
         ];
     }
 
@@ -316,10 +331,10 @@ class Controller_Admin_Payables extends Controller_Adminbase
         return $items;
     }
 
-    protected function document_options()
+    protected function document_options(array $filters = [])
     {
         $items = [];
-        foreach ($this->documents() as $row) {
+        foreach ($this->documents($filters) as $row) {
             $items[] = ['value' => (string) $row['id'], 'label' => $row['folio'].' - '.$row['party_name'].' - $'.number_format((float) $row['balance_due'], 2)];
         }
         return $items;

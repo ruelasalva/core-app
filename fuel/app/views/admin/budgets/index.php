@@ -8,6 +8,16 @@
 
     <div v-if="error" class="alert alert-danger">{{ error }}</div>
 
+    <div class="card card-light mb-3">
+        <div class="card-body py-2">
+            <div class="row align-items-end">
+                <div class="col-md-3"><label>Desde</label><input type="date" class="form-control" v-model="periodFilters.start_date"></div>
+                <div class="col-md-3"><label>Hasta</label><input type="date" class="form-control" v-model="periodFilters.end_date"></div>
+                <div class="col-md-3"><button class="btn btn-primary" @click="loadData(selectedPlan ? selectedPlan.id : 0)"><i class="bi bi-funnel"></i> Consultar</button></div>
+            </div>
+        </div>
+    </div>
+
     <div class="card card-primary card-outline">
         <div class="card-header d-flex align-items-center">
             <h3 class="card-title mb-0">Planes presupuestales</h3>
@@ -114,17 +124,22 @@
 window.onload = function() {
     new Vue({
         el: '#app-budgets',
-        data: { error: '', plans: [], lines: [], summary: {}, options: { fiscal_years: [], departments: [], cost_centers: [], accounts: [], currencies: [] }, stats: {}, selectedPlan: null, planForm: {}, lineForm: {} },
+        data: { error: '', plans: [], lines: [], summary: {}, periodFilters: { start_date: '', end_date: '' }, options: { fiscal_years: [], departments: [], cost_centers: [], accounts: [], currencies: [] }, stats: {}, selectedPlan: null, planForm: {}, lineForm: {} },
         mounted() { this.loadData(); },
         methods: {
             loadData(planId) {
                 var url = '<?php echo Uri::create('admin/budgets/data'); ?>';
-                if (planId) url += '?plan_id=' + encodeURIComponent(planId);
+                var params = [];
+                if (planId) params.push('plan_id=' + encodeURIComponent(planId));
+                if (this.periodFilters.start_date) params.push('start_date=' + encodeURIComponent(this.periodFilters.start_date));
+                if (this.periodFilters.end_date) params.push('end_date=' + encodeURIComponent(this.periodFilters.end_date));
+                if (params.length) url += '?' + params.join('&');
                 fetch(url).then(res => res.json()).then(data => {
                     if (data.error) { this.error = data.error; return; }
                     this.plans = data.plans || [];
                     this.lines = data.lines || [];
                     this.summary = data.summary || {};
+                    this.periodFilters = data.period_filters || this.periodFilters;
                     this.options = data.options || this.options;
                     this.stats = data.stats || {};
                     if (!this.selectedPlan && this.plans.length) this.selectedPlan = this.plans[0];

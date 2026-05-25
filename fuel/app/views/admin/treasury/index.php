@@ -1,12 +1,22 @@
 <div id="app-treasury">
     <div class="row">
         <div class="col-lg-3 col-6"><div class="small-box bg-success"><div class="inner"><h3>{{ money(stats.cash_position) }}</h3><p>Posicion bancaria</p></div><div class="icon"><i class="bi bi-bank"></i></div></div></div>
-        <div class="col-lg-3 col-6"><div class="small-box bg-info"><div class="inner"><h3>{{ money(stats.inflow_30) }}</h3><p>Entradas 30 dias</p></div><div class="icon"><i class="bi bi-arrow-down-circle"></i></div></div></div>
-        <div class="col-lg-3 col-6"><div class="small-box bg-danger"><div class="inner"><h3>{{ money(stats.outflow_30) }}</h3><p>Salidas 30 dias</p></div><div class="icon"><i class="bi bi-arrow-up-circle"></i></div></div></div>
-        <div class="col-lg-3 col-6"><div class="small-box" :class="Number(stats.net_30) >= 0 ? 'bg-primary' : 'bg-warning'"><div class="inner"><h3>{{ money(stats.net_30) }}</h3><p>Neto 30 dias</p></div><div class="icon"><i class="bi bi-graph-up-arrow"></i></div></div></div>
+        <div class="col-lg-3 col-6"><div class="small-box bg-info"><div class="inner"><h3>{{ money(stats.inflow_30) }}</h3><p>Entradas periodo</p></div><div class="icon"><i class="bi bi-arrow-down-circle"></i></div></div></div>
+        <div class="col-lg-3 col-6"><div class="small-box bg-danger"><div class="inner"><h3>{{ money(stats.outflow_30) }}</h3><p>Salidas periodo</p></div><div class="icon"><i class="bi bi-arrow-up-circle"></i></div></div></div>
+        <div class="col-lg-3 col-6"><div class="small-box" :class="Number(stats.net_30) >= 0 ? 'bg-primary' : 'bg-warning'"><div class="inner"><h3>{{ money(stats.net_30) }}</h3><p>Neto periodo</p></div><div class="icon"><i class="bi bi-graph-up-arrow"></i></div></div></div>
     </div>
 
     <div v-if="error" class="alert alert-danger">{{ error }}</div>
+
+    <div class="card card-light mb-3">
+        <div class="card-body py-2">
+            <div class="row align-items-end">
+                <div class="col-md-3"><label>Desde</label><input type="date" class="form-control" v-model="periodFilters.start_date"></div>
+                <div class="col-md-3"><label>Hasta</label><input type="date" class="form-control" v-model="periodFilters.end_date"></div>
+                <div class="col-md-3"><button class="btn btn-success" @click="loadData"><i class="bi bi-funnel"></i> Consultar</button></div>
+            </div>
+        </div>
+    </div>
 
     <div class="card card-success card-outline">
         <div class="card-header d-flex align-items-center">
@@ -108,15 +118,21 @@
 window.onload = function() {
     new Vue({
         el: '#app-treasury',
-        data: { error: '', tab: 'forecast', bank_accounts: [], forecast: [], manual_items: [], options: { bank_accounts: [], parties: [], currencies: [] }, stats: {}, itemForm: {} },
+        data: { error: '', tab: 'forecast', bank_accounts: [], forecast: [], manual_items: [], periodFilters: { start_date: '', end_date: '' }, options: { bank_accounts: [], parties: [], currencies: [] }, stats: {}, itemForm: {} },
         mounted() { this.loadData(); },
         methods: {
             loadData() {
-                fetch('<?php echo Uri::create('admin/treasury/data'); ?>').then(res => res.json()).then(data => {
+                var url = '<?php echo Uri::create('admin/treasury/data'); ?>';
+                var params = [];
+                if (this.periodFilters.start_date) params.push('start_date=' + encodeURIComponent(this.periodFilters.start_date));
+                if (this.periodFilters.end_date) params.push('end_date=' + encodeURIComponent(this.periodFilters.end_date));
+                if (params.length) url += '?' + params.join('&');
+                fetch(url).then(res => res.json()).then(data => {
                     if (data.error) { this.error = data.error; return; }
                     this.bank_accounts = data.bank_accounts || [];
                     this.forecast = data.forecast || [];
                     this.manual_items = data.manual_items || [];
+                    this.periodFilters = data.period_filters || this.periodFilters;
                     this.options = data.options || this.options;
                     this.stats = data.stats || {};
                 });

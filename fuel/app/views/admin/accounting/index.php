@@ -171,6 +171,23 @@
             </div>
 
             <div v-show="tab === 'reports'">
+                <div class="card card-light mb-3">
+                    <div class="card-body py-2">
+                        <div class="row align-items-end">
+                            <div class="col-md-3">
+                                <label>Desde</label>
+                                <input type="date" class="form-control" v-model="reportFilters.start_date">
+                            </div>
+                            <div class="col-md-3">
+                                <label>Hasta</label>
+                                <input type="date" class="form-control" v-model="reportFilters.end_date">
+                            </div>
+                            <div class="col-md-3">
+                                <button class="btn btn-primary" @click="loadReports"><i class="bi bi-funnel"></i> Consultar</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
                 <div class="row">
                     <div class="col-md-6">
                         <div class="card card-info card-outline">
@@ -377,7 +394,7 @@
 window.onload = function() {
     new Vue({
         el: '#app-accounting',
-        data: { tab: 'entries', error: '', accounts: [], fiscalYears: [], periods: [], costCenters: [], entries: [], lines: [], rules: [], trialBalance: [], generalLedger: [], incomeStatement: {}, balanceSheet: {}, ledgerAccountId: 0, options: { accounts: [], parties: [], currencies: [], departments: [], branches: [], cost_centers: [], fiscal_years: [] }, stats: {}, selectedEntry: null, accountForm: {}, entryForm: {}, lineForm: {}, periodForm: {}, costCenterForm: {}, ruleForm: {} },
+        data: { tab: 'entries', error: '', accounts: [], fiscalYears: [], periods: [], costCenters: [], entries: [], lines: [], rules: [], trialBalance: [], generalLedger: [], incomeStatement: {}, balanceSheet: {}, ledgerAccountId: 0, reportFilters: { start_date: '', end_date: '' }, options: { accounts: [], parties: [], currencies: [], departments: [], branches: [], cost_centers: [], fiscal_years: [] }, stats: {}, selectedEntry: null, accountForm: {}, entryForm: {}, lineForm: {}, periodForm: {}, costCenterForm: {}, ruleForm: {} },
         mounted: function() { this.load(); },
         methods: {
             load: function(entryId) {
@@ -385,6 +402,8 @@ window.onload = function() {
                 var params = [];
                 if (entryId) params.push('entry_id=' + encodeURIComponent(entryId));
                 if (this.ledgerAccountId && this.ledgerAccountId != 0) params.push('account_id=' + encodeURIComponent(this.ledgerAccountId));
+                if (this.reportFilters.start_date) params.push('start_date=' + encodeURIComponent(this.reportFilters.start_date));
+                if (this.reportFilters.end_date) params.push('end_date=' + encodeURIComponent(this.reportFilters.end_date));
                 if (params.length) url += '?' + params.join('&');
                 fetch(url).then(function(r) { return r.json(); }).then(data => {
                     if (data.error) { this.error = data.error; return; }
@@ -399,12 +418,14 @@ window.onload = function() {
                     this.generalLedger = data.general_ledger || [];
                     this.incomeStatement = data.income_statement || {};
                     this.balanceSheet = data.balance_sheet || {};
+                    this.reportFilters = data.report_filters || this.reportFilters;
                     this.options = data.options || this.options;
                     this.stats = data.stats || {};
                     if ((!this.ledgerAccountId || this.ledgerAccountId == 0) && this.options.accounts && this.options.accounts.length) this.ledgerAccountId = this.options.accounts[0].value;
                 });
             },
             loadLedger: function() { this.load(this.selectedEntry ? this.selectedEntry.id : 0); },
+            loadReports: function() { this.load(this.selectedEntry ? this.selectedEntry.id : 0); },
             selectEntry: function(entry) { this.selectedEntry = entry; this.load(entry.id); },
             openAccount: function(account) { this.accountForm = Object.assign({ id: 0, code: '', name: '', account_type: 'asset', parent_id: 0, level: 1, nature: 'debit', currency_code: 'MXN', sat_group_code: '', requires_party: false, requires_cost_center: false, is_postable: true, active: true }, account); this.normalizeBooleans(this.accountForm, ['requires_party', 'requires_cost_center', 'is_postable', 'active']); this.showModal('modal-account'); },
             openEntry: function(entry) { this.entryForm = Object.assign({ id: 0, entry_type: 'diario', entry_date: new Date().toISOString().slice(0, 10), status: 'draft', source_module: 'manual', source_entity_type: '', source_entity_id: 0, currency_code: 'MXN', exchange_rate: 1, description: '', active: true }, entry); this.showModal('modal-entry'); },

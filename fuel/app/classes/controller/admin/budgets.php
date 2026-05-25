@@ -57,12 +57,14 @@ class Controller_Admin_Budgets extends Controller_Adminbase
 
             # SE REGRESA INFORMACION PARA VUE
             $plan_id = (int) \Input::get('plan_id', 0);
+            $filters = $this->period_filters();
             return $this->json_response([
                 'plans' => $this->plans(),
-                'lines' => $this->lines($plan_id),
-                'summary' => $this->summary($plan_id),
+                'lines' => $this->lines($plan_id, $filters),
+                'summary' => $this->summary($plan_id, $filters),
                 'options' => $this->options(),
                 'stats' => $this->stats(),
+                'period_filters' => $filters,
             ]);
         } catch (\Exception $e) {
             \Log::error('Error cargando presupuestos: '.$e->getMessage());
@@ -230,8 +232,9 @@ class Controller_Admin_Budgets extends Controller_Adminbase
             ->as_array();
     }
 
-    protected function lines($plan_id)
+    protected function lines($plan_id, array $filters = [])
     {
+        $filters = $filters ?: $this->period_filters();
         if ($plan_id < 1) {
             $plan = \DB::select('id')->from('core_budget_plans')->where('active', '=', 1)->order_by('id', 'desc')->execute()->current();
             $plan_id = $plan ? (int) $plan['id'] : 0;
@@ -248,12 +251,14 @@ class Controller_Admin_Budgets extends Controller_Adminbase
             ->join(['core_accounting_cost_centers', 'cc'], 'left')->on('l.cost_center_id', '=', 'cc.id')
             ->where('l.plan_id', '=', $plan_id)
             ->where('l.active', '=', 1)
+            ->where('l.period_start', '<=', $filters['end_date'])
+            ->where('l.period_end', '>=', $filters['start_date'])
             ->order_by('l.period_start', 'asc')
             ->order_by('l.id', 'asc')
             ->execute();
 
         foreach ($rows as $row) {
-            $actual = $this->actual_amount($row);
+            $actual = $this->actual_amount($row, $filters);
             $row['actual_amount'] = $actual;
             $row['available_amount'] = round((float) $row['amount'] - $actual, 2);
             $row['used_percent'] = (float) $row['amount'] > 0 ? round(($actual / (float) $row['amount']) * 100, 2) : 0;
@@ -262,9 +267,9 @@ class Controller_Admin_Budgets extends Controller_Adminbase
         return $items;
     }
 
-    protected function summary($plan_id)
+    protected function summary($plan_id, array $filters = [])
     {
-        $lines = $this->lines($plan_id);
+        $lines = $this->lines($plan_id, $filters);
         $budget = 0;
         $actual = 0;
         foreach ($lines as $line) {
@@ -299,11 +304,15 @@ class Controller_Admin_Budgets extends Controller_Adminbase
         return ['plans' => $active, 'approved' => $approved, 'total_amount' => round($total, 2), 'lines' => (int) \DB::count_records('core_budget_lines')];
     }
 
-    protected function actual_amount(array $line)
+    protected function actual_amount(array $line, array $filters = [])
     {
         if (!\DBUtil::table_exists('core_accounting_journal_lines') || !\DBUtil::table_exists('core_accounting_journal_entries')) {
             return 0;
         }
+
+        $filters = $filters ?: $this->period_filters();
+        $period_start = max((string) $line['period_start'], $filters['start_date']);
+        $period_end = min((string) $line['period_end'], $filters['end_date']);
 
         $query = \DB::select([\DB::expr('COALESCE(SUM(l.debit - l.credit),0)'), 'actual'])
             ->from(['core_accounting_journal_lines', 'l'])
@@ -311,8 +320,8 @@ class Controller_Admin_Budgets extends Controller_Adminbase
             ->where('l.active', '=', 1)
             ->where('e.active', '=', 1)
             ->where('e.status', '!=', 'cancelled')
-            ->where('e.entry_date', '>=', (string) $line['period_start'])
-            ->where('e.entry_date', '<=', (string) $line['period_end']);
+            ->where('e.entry_date', '>=', $period_start)
+            ->where('e.entry_date', '<=', $period_end);
 
         foreach (['account_id', 'department_id', 'cost_center_id'] as $field) {
             if ((int) $line[$field] > 0) {

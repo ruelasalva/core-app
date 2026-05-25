@@ -118,6 +118,55 @@ class Controller_Adminbase extends Controller_Template
         );
     }
 
+    /**
+     * PERIOD FILTERS
+     *
+     * GENERA EL RANGO BASE PARA VISTAS GENERALES Y REPORTES.
+     *
+     * @access  protected
+     * @return  Array
+     */
+    protected function period_filters($start_key = 'start_date', $end_key = 'end_date')
+    {
+        # POR DEFECTO SE TRABAJA EL MES ACTUAL
+        $default_start = date('Y-m-01');
+        $default_end = date('Y-m-t');
+        $start = trim((string) \Input::get($start_key, $default_start));
+        $end = trim((string) \Input::get($end_key, $default_end));
+
+        # VALIDAR FORMATO DE FECHA
+        if (!$this->valid_date($start)) {
+            $start = $default_start;
+        }
+        if (!$this->valid_date($end)) {
+            $end = $default_end;
+        }
+        if ($start > $end) {
+            $start = $default_start;
+            $end = $default_end;
+        }
+
+        return ['start_date' => $start, 'end_date' => $end];
+    }
+
+    /**
+     * VALID DATE
+     *
+     * VALIDA UNA FECHA EN FORMATO YYYY-MM-DD.
+     *
+     * @access  protected
+     * @return  Boolean
+     */
+    protected function valid_date($date)
+    {
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) $date)) {
+            return false;
+        }
+
+        $parts = explode('-', (string) $date);
+        return checkdate((int) $parts[1], (int) $parts[2], (int) $parts[0]);
+    }
+
     protected function can_view_all_operational()
     {
         return $this->is_super_admin || in_array($this->user_group, [80, 90, 100], true);

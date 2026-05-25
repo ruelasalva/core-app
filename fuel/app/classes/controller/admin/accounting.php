@@ -26,6 +26,7 @@ class Controller_Admin_Accounting extends Controller_Adminbase
     {
         try {
             $this->assert_schema_ready();
+            $filters = $this->period_filters();
             return $this->json_response([
                 'accounts' => $this->accounts(),
                 'fiscal_years' => $this->fiscal_years(),
@@ -34,10 +35,11 @@ class Controller_Admin_Accounting extends Controller_Adminbase
                 'entries' => $this->entries(),
                 'lines' => $this->lines((int) \Input::get('entry_id', 0)),
                 'rules' => $this->rules(),
-                'trial_balance' => $this->trial_balance(),
-                'general_ledger' => $this->general_ledger((int) \Input::get('account_id', 0)),
-                'income_statement' => $this->income_statement(),
-                'balance_sheet' => $this->balance_sheet(),
+                'trial_balance' => $this->trial_balance($filters['start_date'], $filters['end_date']),
+                'general_ledger' => $this->general_ledger((int) \Input::get('account_id', 0), $filters['start_date'], $filters['end_date']),
+                'income_statement' => $this->income_statement($filters['start_date'], $filters['end_date']),
+                'balance_sheet' => $this->balance_sheet($filters['end_date']),
+                'report_filters' => $filters,
                 'options' => $this->options(),
                 'stats' => $this->stats(),
             ]);
@@ -472,17 +474,18 @@ class Controller_Admin_Accounting extends Controller_Adminbase
             ->as_array();
     }
 
-    protected function trial_balance()
+    protected function trial_balance($start_date, $end_date)
     {
         $items = [];
+        $posted_case = "e.status = 'posted' AND e.entry_date >= '".$start_date."' AND e.entry_date <= '".$end_date."'";
         $rows = \DB::select(
                 ['a.id', 'account_id'], ['a.code', 'account_code'], ['a.name', 'account_name'], ['a.account_type', 'account_type'], ['a.nature', 'nature'],
-                [\DB::expr('COALESCE(SUM(CASE WHEN e.id IS NOT NULL THEN l.debit ELSE 0 END),0)'), 'debit'],
-                [\DB::expr('COALESCE(SUM(CASE WHEN e.id IS NOT NULL THEN l.credit ELSE 0 END),0)'), 'credit']
+                [\DB::expr('COALESCE(SUM(CASE WHEN '.$posted_case.' THEN l.debit ELSE 0 END),0)'), 'debit'],
+                [\DB::expr('COALESCE(SUM(CASE WHEN '.$posted_case.' THEN l.credit ELSE 0 END),0)'), 'credit']
             )
             ->from(['core_accounting_accounts', 'a'])
             ->join(['core_accounting_journal_lines', 'l'], 'left')->on('l.account_id', '=', 'a.id')->on('l.active', '=', \DB::expr('1'))
-            ->join(['core_accounting_journal_entries', 'e'], 'left')->on('l.entry_id', '=', 'e.id')->on('e.active', '=', \DB::expr('1'))->on('e.status', '=', \DB::expr("'posted'"))
+            ->join(['core_accounting_journal_entries', 'e'], 'left')->on('l.entry_id', '=', 'e.id')->on('e.active', '=', \DB::expr('1'))
             ->where('a.active', '=', 1)
             ->group_by('a.id')
             ->order_by('a.code', 'asc')
@@ -501,7 +504,7 @@ class Controller_Admin_Accounting extends Controller_Adminbase
         return $items;
     }
 
-    protected function general_ledger($account_id)
+    protected function general_ledger($account_id, $start_date, $end_date)
     {
         if ($account_id < 1) {
             $row = \DB::select('id')->from('core_accounting_accounts')->where('active', '=', 1)->where('is_postable', '=', 1)->order_by('code', 'asc')->execute()->current();
@@ -521,6 +524,8 @@ class Controller_Admin_Accounting extends Controller_Adminbase
             ->where('l.active', '=', 1)
             ->where('e.active', '=', 1)
             ->where('e.status', '=', 'posted')
+            ->where('e.entry_date', '>=', $start_date)
+            ->where('e.entry_date', '<=', $end_date)
             ->order_by('e.entry_date', 'asc')
             ->order_by('e.id', 'asc')
             ->order_by('l.id', 'asc')
@@ -535,9 +540,9 @@ class Controller_Admin_Accounting extends Controller_Adminbase
         return $items;
     }
 
-    protected function income_statement()
+    protected function income_statement($start_date, $end_date)
     {
-        $rows = $this->account_type_totals(['income', 'expense', 'cost']);
+        $rows = $this->account_type_totals(['income', 'expense', 'cost'], $start_date, $end_date);
         $income = (float) \Arr::get($rows, 'income', 0);
         $expense = (float) \Arr::get($rows, 'expense', 0);
         $cost = (float) \Arr::get($rows, 'cost', 0);
@@ -550,9 +555,9 @@ class Controller_Admin_Accounting extends Controller_Adminbase
         ];
     }
 
-    protected function balance_sheet()
+    protected function balance_sheet($end_date)
     {
-        $rows = $this->account_type_totals(['asset', 'liability', 'equity']);
+        $rows = $this->account_type_totals(['asset', 'liability', 'equity'], '', $end_date);
         $asset = (float) \Arr::get($rows, 'asset', 0);
         $liability = (float) \Arr::get($rows, 'liability', 0);
         $equity = (float) \Arr::get($rows, 'equity', 0);
@@ -565,13 +570,17 @@ class Controller_Admin_Accounting extends Controller_Adminbase
         ];
     }
 
-    protected function account_type_totals(array $types)
+    protected function account_type_totals(array $types, $start_date = '', $end_date = '')
     {
         $totals = [];
-        $rows = \DB::select(['a.account_type', 'account_type'], ['a.nature', 'nature'], [\DB::expr('COALESCE(SUM(CASE WHEN e.id IS NOT NULL THEN l.debit ELSE 0 END),0)'), 'debit'], [\DB::expr('COALESCE(SUM(CASE WHEN e.id IS NOT NULL THEN l.credit ELSE 0 END),0)'), 'credit'])
+        $posted_case = "e.status = 'posted' AND e.entry_date <= '".$end_date."'";
+        if ($start_date !== '') {
+            $posted_case .= " AND e.entry_date >= '".$start_date."'";
+        }
+        $rows = \DB::select(['a.account_type', 'account_type'], ['a.nature', 'nature'], [\DB::expr('COALESCE(SUM(CASE WHEN '.$posted_case.' THEN l.debit ELSE 0 END),0)'), 'debit'], [\DB::expr('COALESCE(SUM(CASE WHEN '.$posted_case.' THEN l.credit ELSE 0 END),0)'), 'credit'])
             ->from(['core_accounting_accounts', 'a'])
             ->join(['core_accounting_journal_lines', 'l'], 'left')->on('l.account_id', '=', 'a.id')->on('l.active', '=', \DB::expr('1'))
-            ->join(['core_accounting_journal_entries', 'e'], 'left')->on('l.entry_id', '=', 'e.id')->on('e.active', '=', \DB::expr('1'))->on('e.status', '=', \DB::expr("'posted'"))
+            ->join(['core_accounting_journal_entries', 'e'], 'left')->on('l.entry_id', '=', 'e.id')->on('e.active', '=', \DB::expr('1'))
             ->where('a.active', '=', 1)
             ->where('a.account_type', 'in', $types)
             ->group_by('a.account_type')

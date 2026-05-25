@@ -8,6 +8,16 @@
 
     <div v-if="error" class="alert alert-danger">{{ error }}</div>
 
+    <div class="card card-light mb-3">
+        <div class="card-body py-2">
+            <div class="row align-items-end">
+                <div class="col-md-3"><label>Desde</label><input type="date" class="form-control" v-model="periodFilters.start_date"></div>
+                <div class="col-md-3"><label>Hasta</label><input type="date" class="form-control" v-model="periodFilters.end_date"></div>
+                <div class="col-md-3"><button class="btn btn-primary" @click="loadData"><i class="bi bi-funnel"></i> Consultar</button></div>
+            </div>
+        </div>
+    </div>
+
     <div class="card card-primary card-outline">
         <div class="card-header p-2">
             <ul class="nav nav-pills">
@@ -134,15 +144,21 @@
 window.onload = function() {
     new Vue({
         el: '#app-payables',
-        data: { error: '', tab: 'suppliers', suppliers: [], documents: [], actions: [], options: { suppliers: [], documents: [], users: [] }, stats: {}, actionForm: {}, supplierForm: {} },
+        data: { error: '', tab: 'suppliers', suppliers: [], documents: [], actions: [], periodFilters: { start_date: '', end_date: '' }, options: { suppliers: [], documents: [], users: [] }, stats: {}, actionForm: {}, supplierForm: {} },
         mounted() { this.loadData(); },
         methods: {
             loadData() {
-                fetch('<?php echo Uri::create('admin/payables/data'); ?>').then(res => res.json()).then(data => {
+                var url = '<?php echo Uri::create('admin/payables/data'); ?>';
+                var params = [];
+                if (this.periodFilters.start_date) params.push('start_date=' + encodeURIComponent(this.periodFilters.start_date));
+                if (this.periodFilters.end_date) params.push('end_date=' + encodeURIComponent(this.periodFilters.end_date));
+                if (params.length) url += '?' + params.join('&');
+                fetch(url).then(res => res.json()).then(data => {
                     if (data.error) { this.error = data.error; return; }
                     this.suppliers = data.suppliers || [];
                     this.documents = data.documents || [];
                     this.actions = data.actions || [];
+                    this.periodFilters = data.period_filters || this.periodFilters;
                     this.options = data.options || this.options;
                     this.stats = data.stats || {};
                 });

@@ -54,14 +54,16 @@ class Controller_Admin_Treasury extends Controller_Adminbase
         try {
             # SE VALIDA ESTRUCTURA
             $this->assert_schema_ready();
+            $filters = $this->period_filters();
 
             # SE REGRESA INFORMACION PARA VUE
             return $this->json_response([
                 'bank_accounts' => $this->bank_accounts(),
-                'forecast' => $this->forecast(),
-                'manual_items' => $this->manual_items(),
+                'forecast' => $this->forecast($filters),
+                'manual_items' => $this->manual_items($filters),
                 'options' => $this->options(),
-                'stats' => $this->stats(),
+                'stats' => $this->stats($filters),
+                'period_filters' => $filters,
             ]);
         } catch (\Exception $e) {
             \Log::error('Error cargando tesoreria: '.$e->getMessage());
@@ -143,9 +145,9 @@ class Controller_Admin_Treasury extends Controller_Adminbase
             return $this->json_response([
                 'status' => 'ok',
                 'bank_accounts' => $this->bank_accounts(),
-                'forecast' => $this->forecast(),
-                'manual_items' => $this->manual_items(),
-                'stats' => $this->stats(),
+                'forecast' => $this->forecast($this->period_filters()),
+                'manual_items' => $this->manual_items($this->period_filters()),
+                'stats' => $this->stats($this->period_filters()),
             ]);
         } catch (\Exception $e) {
             \Log::error('Error guardando proyeccion de tesoreria: '.$e->getMessage());
@@ -170,10 +172,10 @@ class Controller_Admin_Treasury extends Controller_Adminbase
         return $items;
     }
 
-    protected function forecast()
+    protected function forecast(array $filters = [])
     {
         $items = [];
-        $end = date('Y-m-d', strtotime('+60 days'));
+        $filters = $filters ?: $this->period_filters();
 
         if (\DBUtil::table_exists('core_billing_invoices')) {
             foreach (\DB::select(['i.id', 'id'], ['i.folio', 'folio'], ['i.party_id', 'party_id'], ['p.name', 'party_name'], ['i.due_date', 'planned_date'], ['i.currency_code', 'currency_code'], ['i.balance_due', 'amount'])
@@ -183,7 +185,8 @@ class Controller_Admin_Treasury extends Controller_Adminbase
                 ->where('i.active', '=', 1)
                 ->where('i.balance_due', '>', 0)
                 ->where('i.due_date', '!=', '')
-                ->where('i.due_date', '<=', $end)
+                ->where('i.due_date', '>=', $filters['start_date'])
+                ->where('i.due_date', '<=', $filters['end_date'])
                 ->execute() as $row) {
                 $items[] = $this->forecast_row('inflow', 'CxC', 'billing_invoice', $row);
             }
@@ -196,13 +199,14 @@ class Controller_Admin_Treasury extends Controller_Adminbase
                 ->where('i.active', '=', 1)
                 ->where('i.balance_due', '>', 0)
                 ->where('i.due_date', '!=', '')
-                ->where('i.due_date', '<=', $end)
+                ->where('i.due_date', '>=', $filters['start_date'])
+                ->where('i.due_date', '<=', $filters['end_date'])
                 ->execute() as $row) {
                 $items[] = $this->forecast_row('outflow', 'CxP', 'purchase_invoice', $row);
             }
         }
 
-        foreach ($this->manual_items() as $row) {
+        foreach ($this->manual_items($filters) as $row) {
             if ($row['status'] !== 'cancelled') {
                 $items[] = $this->forecast_row($row['flow_type'], 'Manual', 'treasury_cashflow_item', [
                     'id' => $row['id'],
@@ -232,13 +236,16 @@ class Controller_Admin_Treasury extends Controller_Adminbase
         return array_slice($items, 0, 300);
     }
 
-    protected function manual_items()
+    protected function manual_items(array $filters = [])
     {
         $items = [];
+        $filters = $filters ?: $this->period_filters();
         $rows = \DB::select(['t.id', 'id'], ['t.folio', 'folio'], ['t.flow_type', 'flow_type'], ['t.party_id', 'party_id'], ['p.name', 'party_name'], ['t.bank_account_id', 'bank_account_id'], ['t.planned_date', 'planned_date'], ['t.currency_code', 'currency_code'], ['t.amount', 'amount'], ['t.probability', 'probability'], ['t.status', 'status'], ['t.reference', 'reference'], ['t.notes', 'notes'], ['t.active', 'active'])
             ->from(['core_treasury_cashflow_items', 't'])
             ->join(['core_parties', 'p'], 'left')->on('t.party_id', '=', 'p.id')
             ->where('t.active', '=', 1)
+            ->where('t.planned_date', '>=', $filters['start_date'])
+            ->where('t.planned_date', '<=', $filters['end_date'])
             ->order_by('t.planned_date', 'asc')
             ->order_by('t.id', 'desc')
             ->limit(200)
@@ -258,17 +265,13 @@ class Controller_Admin_Treasury extends Controller_Adminbase
         ];
     }
 
-    protected function stats()
+    protected function stats(array $filters = [])
     {
-        $forecast = $this->forecast();
-        $today = date('Y-m-d');
-        $limit = date('Y-m-d', strtotime('+30 days'));
+        $filters = $filters ?: $this->period_filters();
+        $forecast = $this->forecast($filters);
         $inflow = 0;
         $outflow = 0;
         foreach ($forecast as $row) {
-            if ($row['planned_date'] < $today || $row['planned_date'] > $limit) {
-                continue;
-            }
             if ($row['flow_type'] === 'outflow') {
                 $outflow += (float) $row['weighted_amount'];
             } else {
