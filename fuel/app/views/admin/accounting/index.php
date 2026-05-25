@@ -16,6 +16,7 @@
                 <li class="nav-item"><a href="#" class="nav-link" :class="{active: tab === 'periods'}" @click.prevent="tab = 'periods'">Periodos</a></li>
                 <li class="nav-item"><a href="#" class="nav-link" :class="{active: tab === 'cost_centers'}" @click.prevent="tab = 'cost_centers'">Centros de costo</a></li>
                 <li class="nav-item"><a href="#" class="nav-link" :class="{active: tab === 'rules'}" @click.prevent="tab = 'rules'">Reglas</a></li>
+                <li class="nav-item"><a href="#" class="nav-link" :class="{active: tab === 'reports'}" @click.prevent="tab = 'reports'">Reportes</a></li>
             </ul>
         </div>
         <div class="card-body">
@@ -168,6 +169,91 @@
                     </table>
                 </div>
             </div>
+
+            <div v-show="tab === 'reports'">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card card-info card-outline">
+                            <div class="card-header"><h3 class="card-title h6 mb-0">Estado de resultados</h3></div>
+                            <div class="card-body p-0">
+                                <table class="table table-sm mb-0">
+                                    <tbody>
+                                        <tr><th>Ingresos</th><td class="text-right">{{ money(incomeStatement.income) }}</td></tr>
+                                        <tr><th>Costo</th><td class="text-right">{{ money(incomeStatement.cost) }}</td></tr>
+                                        <tr><th>Utilidad bruta</th><td class="text-right">{{ money(incomeStatement.gross_profit) }}</td></tr>
+                                        <tr><th>Gastos</th><td class="text-right">{{ money(incomeStatement.expense) }}</td></tr>
+                                        <tr><th>Utilidad neta</th><td class="text-right font-weight-bold">{{ money(incomeStatement.net_income) }}</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card card-success card-outline">
+                            <div class="card-header"><h3 class="card-title h6 mb-0">Balance general</h3></div>
+                            <div class="card-body p-0">
+                                <table class="table table-sm mb-0">
+                                    <tbody>
+                                        <tr><th>Activo</th><td class="text-right">{{ money(balanceSheet.asset) }}</td></tr>
+                                        <tr><th>Pasivo</th><td class="text-right">{{ money(balanceSheet.liability) }}</td></tr>
+                                        <tr><th>Capital</th><td class="text-right">{{ money(balanceSheet.equity) }}</td></tr>
+                                        <tr><th>Pasivo + Capital</th><td class="text-right">{{ money(balanceSheet.liability_equity) }}</td></tr>
+                                        <tr><th>Diferencia</th><td class="text-right font-weight-bold" :class="Number(balanceSheet.difference) !== 0 ? 'text-danger' : ''">{{ money(balanceSheet.difference) }}</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card card-primary card-outline">
+                    <div class="card-header"><h3 class="card-title h6 mb-0">Balanza de comprobacion</h3></div>
+                    <div class="card-body table-responsive">
+                        <table class="table table-bordered table-hover">
+                            <thead><tr><th>Cuenta</th><th>Tipo</th><th>Debe</th><th>Haber</th><th>Saldo deudor</th><th>Saldo acreedor</th></tr></thead>
+                            <tbody>
+                                <tr v-for="row in trialBalance" :key="row.account_id">
+                                    <td><strong>{{ row.account_code }}</strong> - {{ row.account_name }}</td>
+                                    <td>{{ accountTypeLabel(row.account_type) }}</td>
+                                    <td>{{ money(row.debit) }}</td>
+                                    <td>{{ money(row.credit) }}</td>
+                                    <td>{{ money(row.debit_balance) }}</td>
+                                    <td>{{ money(row.credit_balance) }}</td>
+                                </tr>
+                                <tr v-if="trialBalance.length === 0"><td colspan="6" class="text-center text-muted">Sin cuentas.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="card card-secondary card-outline">
+                    <div class="card-header d-flex align-items-center">
+                        <h3 class="card-title h6 mb-0">Mayor auxiliar</h3>
+                        <select class="form-control form-control-sm ml-auto" style="max-width: 360px;" v-model="ledgerAccountId" @change="loadLedger">
+                            <option value="0">Selecciona cuenta</option>
+                            <option v-for="a in options.accounts" :value="a.value">{{ a.label }}</option>
+                        </select>
+                    </div>
+                    <div class="card-body table-responsive">
+                        <table class="table table-bordered table-hover">
+                            <thead><tr><th>Fecha</th><th>Poliza</th><th>Tipo</th><th>Tercero</th><th>Descripcion</th><th>Debe</th><th>Haber</th><th>Saldo</th></tr></thead>
+                            <tbody>
+                                <tr v-for="row in generalLedger" :key="row.entry_id + '-' + row.description + '-' + row.debit + '-' + row.credit">
+                                    <td>{{ row.entry_date }}</td>
+                                    <td><strong>{{ row.folio }}</strong></td>
+                                    <td>{{ row.entry_type }}</td>
+                                    <td>{{ row.party_name || '-' }}</td>
+                                    <td>{{ row.description }}</td>
+                                    <td>{{ money(row.debit) }}</td>
+                                    <td>{{ money(row.credit) }}</td>
+                                    <td>{{ money(row.running_balance) }}</td>
+                                </tr>
+                                <tr v-if="generalLedger.length === 0"><td colspan="8" class="text-center text-muted">Sin movimientos contabilizados para la cuenta.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -291,12 +377,15 @@
 window.onload = function() {
     new Vue({
         el: '#app-accounting',
-        data: { tab: 'entries', error: '', accounts: [], fiscalYears: [], periods: [], costCenters: [], entries: [], lines: [], rules: [], options: { accounts: [], parties: [], currencies: [], departments: [], branches: [], cost_centers: [], fiscal_years: [] }, stats: {}, selectedEntry: null, accountForm: {}, entryForm: {}, lineForm: {}, periodForm: {}, costCenterForm: {}, ruleForm: {} },
+        data: { tab: 'entries', error: '', accounts: [], fiscalYears: [], periods: [], costCenters: [], entries: [], lines: [], rules: [], trialBalance: [], generalLedger: [], incomeStatement: {}, balanceSheet: {}, ledgerAccountId: 0, options: { accounts: [], parties: [], currencies: [], departments: [], branches: [], cost_centers: [], fiscal_years: [] }, stats: {}, selectedEntry: null, accountForm: {}, entryForm: {}, lineForm: {}, periodForm: {}, costCenterForm: {}, ruleForm: {} },
         mounted: function() { this.load(); },
         methods: {
             load: function(entryId) {
                 var url = '<?php echo Uri::create('admin/accounting/data'); ?>';
-                if (entryId) url += '?entry_id=' + entryId;
+                var params = [];
+                if (entryId) params.push('entry_id=' + encodeURIComponent(entryId));
+                if (this.ledgerAccountId && this.ledgerAccountId != 0) params.push('account_id=' + encodeURIComponent(this.ledgerAccountId));
+                if (params.length) url += '?' + params.join('&');
                 fetch(url).then(function(r) { return r.json(); }).then(data => {
                     if (data.error) { this.error = data.error; return; }
                     this.accounts = data.accounts || [];
@@ -306,10 +395,16 @@ window.onload = function() {
                     this.entries = data.entries || [];
                     this.lines = data.lines || [];
                     this.rules = data.rules || [];
+                    this.trialBalance = data.trial_balance || [];
+                    this.generalLedger = data.general_ledger || [];
+                    this.incomeStatement = data.income_statement || {};
+                    this.balanceSheet = data.balance_sheet || {};
                     this.options = data.options || this.options;
                     this.stats = data.stats || {};
+                    if ((!this.ledgerAccountId || this.ledgerAccountId == 0) && this.options.accounts && this.options.accounts.length) this.ledgerAccountId = this.options.accounts[0].value;
                 });
             },
+            loadLedger: function() { this.load(this.selectedEntry ? this.selectedEntry.id : 0); },
             selectEntry: function(entry) { this.selectedEntry = entry; this.load(entry.id); },
             openAccount: function(account) { this.accountForm = Object.assign({ id: 0, code: '', name: '', account_type: 'asset', parent_id: 0, level: 1, nature: 'debit', currency_code: 'MXN', sat_group_code: '', requires_party: false, requires_cost_center: false, is_postable: true, active: true }, account); this.normalizeBooleans(this.accountForm, ['requires_party', 'requires_cost_center', 'is_postable', 'active']); this.showModal('modal-account'); },
             openEntry: function(entry) { this.entryForm = Object.assign({ id: 0, entry_type: 'diario', entry_date: new Date().toISOString().slice(0, 10), status: 'draft', source_module: 'manual', source_entity_type: '', source_entity_id: 0, currency_code: 'MXN', exchange_rate: 1, description: '', active: true }, entry); this.showModal('modal-entry'); },

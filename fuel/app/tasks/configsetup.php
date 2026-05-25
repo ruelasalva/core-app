@@ -1756,6 +1756,18 @@ class Configsetup
                 'created_at' => time(),
                 'updated_at' => time(),
             ]);
+
+            $this->upsert_seed('core_knowledge_articles', 'code', 'contabilidad_reportes_base', [
+                'code' => 'contabilidad_reportes_base',
+                'title' => 'Contabilidad: reportes base',
+                'category' => 'Finanzas',
+                'summary' => 'Balanza de comprobacion, mayor auxiliar, estado de resultados y balance general calculados desde polizas contabilizadas.',
+                'content' => '<h3>Objetivo</h3><p>Los reportes contables convierten las polizas contabilizadas en informacion de supervision. La captura vive en polizas y partidas; los reportes solo leen informacion validada.</p><h4>Reportes incluidos</h4><ul><li><strong>Balanza de comprobacion</strong>: muestra debe, haber y saldos por cuenta.</li><li><strong>Mayor auxiliar</strong>: muestra movimientos y saldo acumulado de una cuenta.</li><li><strong>Estado de resultados</strong>: resume ingresos, costos, gastos y utilidad.</li><li><strong>Balance general</strong>: resume activo, pasivo, capital y diferencia.</li></ul><h4>Regla ERP</h4><p>Solo las polizas con estado <strong>Contabilizada</strong> deben alimentar reportes financieros. Las polizas en borrador sirven para preparacion y revision, pero no son cifras oficiales.</p>',
+                'sort_order' => 47,
+                'active' => 1,
+                'created_at' => time(),
+                'updated_at' => time(),
+            ]);
         }
     }
 

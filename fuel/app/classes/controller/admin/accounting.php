@@ -34,6 +34,10 @@ class Controller_Admin_Accounting extends Controller_Adminbase
                 'entries' => $this->entries(),
                 'lines' => $this->lines((int) \Input::get('entry_id', 0)),
                 'rules' => $this->rules(),
+                'trial_balance' => $this->trial_balance(),
+                'general_ledger' => $this->general_ledger((int) \Input::get('account_id', 0)),
+                'income_statement' => $this->income_statement(),
+                'balance_sheet' => $this->balance_sheet(),
                 'options' => $this->options(),
                 'stats' => $this->stats(),
             ]);
@@ -466,6 +470,121 @@ class Controller_Admin_Accounting extends Controller_Adminbase
             ->order_by('r.priority', 'asc')
             ->execute()
             ->as_array();
+    }
+
+    protected function trial_balance()
+    {
+        $items = [];
+        $rows = \DB::select(
+                ['a.id', 'account_id'], ['a.code', 'account_code'], ['a.name', 'account_name'], ['a.account_type', 'account_type'], ['a.nature', 'nature'],
+                [\DB::expr('COALESCE(SUM(CASE WHEN e.id IS NOT NULL THEN l.debit ELSE 0 END),0)'), 'debit'],
+                [\DB::expr('COALESCE(SUM(CASE WHEN e.id IS NOT NULL THEN l.credit ELSE 0 END),0)'), 'credit']
+            )
+            ->from(['core_accounting_accounts', 'a'])
+            ->join(['core_accounting_journal_lines', 'l'], 'left')->on('l.account_id', '=', 'a.id')->on('l.active', '=', \DB::expr('1'))
+            ->join(['core_accounting_journal_entries', 'e'], 'left')->on('l.entry_id', '=', 'e.id')->on('e.active', '=', \DB::expr('1'))->on('e.status', '=', \DB::expr("'posted'"))
+            ->where('a.active', '=', 1)
+            ->group_by('a.id')
+            ->order_by('a.code', 'asc')
+            ->execute();
+
+        foreach ($rows as $row) {
+            $debit = (float) $row['debit'];
+            $credit = (float) $row['credit'];
+            $balance = $debit - $credit;
+            $row['debit'] = round($debit, 2);
+            $row['credit'] = round($credit, 2);
+            $row['debit_balance'] = $balance > 0 ? round($balance, 2) : 0;
+            $row['credit_balance'] = $balance < 0 ? round(abs($balance), 2) : 0;
+            $items[] = $row;
+        }
+        return $items;
+    }
+
+    protected function general_ledger($account_id)
+    {
+        if ($account_id < 1) {
+            $row = \DB::select('id')->from('core_accounting_accounts')->where('active', '=', 1)->where('is_postable', '=', 1)->order_by('code', 'asc')->execute()->current();
+            $account_id = $row ? (int) $row['id'] : 0;
+        }
+        if ($account_id < 1) {
+            return [];
+        }
+
+        $balance = 0;
+        $items = [];
+        $rows = \DB::select(['e.id', 'entry_id'], ['e.folio', 'folio'], ['e.entry_date', 'entry_date'], ['e.entry_type', 'entry_type'], ['e.source_module', 'source_module'], ['l.description', 'description'], ['l.party_id', 'party_id'], ['p.name', 'party_name'], ['l.debit', 'debit'], ['l.credit', 'credit'])
+            ->from(['core_accounting_journal_lines', 'l'])
+            ->join(['core_accounting_journal_entries', 'e'], 'inner')->on('l.entry_id', '=', 'e.id')
+            ->join(['core_parties', 'p'], 'left')->on('l.party_id', '=', 'p.id')
+            ->where('l.account_id', '=', $account_id)
+            ->where('l.active', '=', 1)
+            ->where('e.active', '=', 1)
+            ->where('e.status', '=', 'posted')
+            ->order_by('e.entry_date', 'asc')
+            ->order_by('e.id', 'asc')
+            ->order_by('l.id', 'asc')
+            ->limit(500)
+            ->execute();
+
+        foreach ($rows as $row) {
+            $balance += (float) $row['debit'] - (float) $row['credit'];
+            $row['running_balance'] = round($balance, 2);
+            $items[] = $row;
+        }
+        return $items;
+    }
+
+    protected function income_statement()
+    {
+        $rows = $this->account_type_totals(['income', 'expense', 'cost']);
+        $income = (float) \Arr::get($rows, 'income', 0);
+        $expense = (float) \Arr::get($rows, 'expense', 0);
+        $cost = (float) \Arr::get($rows, 'cost', 0);
+        return [
+            'income' => round($income, 2),
+            'cost' => round($cost, 2),
+            'gross_profit' => round($income - $cost, 2),
+            'expense' => round($expense, 2),
+            'net_income' => round($income - $cost - $expense, 2),
+        ];
+    }
+
+    protected function balance_sheet()
+    {
+        $rows = $this->account_type_totals(['asset', 'liability', 'equity']);
+        $asset = (float) \Arr::get($rows, 'asset', 0);
+        $liability = (float) \Arr::get($rows, 'liability', 0);
+        $equity = (float) \Arr::get($rows, 'equity', 0);
+        return [
+            'asset' => round($asset, 2),
+            'liability' => round($liability, 2),
+            'equity' => round($equity, 2),
+            'liability_equity' => round($liability + $equity, 2),
+            'difference' => round($asset - ($liability + $equity), 2),
+        ];
+    }
+
+    protected function account_type_totals(array $types)
+    {
+        $totals = [];
+        $rows = \DB::select(['a.account_type', 'account_type'], ['a.nature', 'nature'], [\DB::expr('COALESCE(SUM(CASE WHEN e.id IS NOT NULL THEN l.debit ELSE 0 END),0)'), 'debit'], [\DB::expr('COALESCE(SUM(CASE WHEN e.id IS NOT NULL THEN l.credit ELSE 0 END),0)'), 'credit'])
+            ->from(['core_accounting_accounts', 'a'])
+            ->join(['core_accounting_journal_lines', 'l'], 'left')->on('l.account_id', '=', 'a.id')->on('l.active', '=', \DB::expr('1'))
+            ->join(['core_accounting_journal_entries', 'e'], 'left')->on('l.entry_id', '=', 'e.id')->on('e.active', '=', \DB::expr('1'))->on('e.status', '=', \DB::expr("'posted'"))
+            ->where('a.active', '=', 1)
+            ->where('a.account_type', 'in', $types)
+            ->group_by('a.account_type')
+            ->group_by('a.nature')
+            ->execute();
+
+        foreach ($rows as $row) {
+            $debit = (float) $row['debit'];
+            $credit = (float) $row['credit'];
+            $amount = (string) $row['nature'] === 'credit' ? $credit - $debit : $debit - $credit;
+            $totals[$row['account_type']] = (float) \Arr::get($totals, $row['account_type'], 0) + $amount;
+        }
+        return $totals;
     }
 
     protected function options()
