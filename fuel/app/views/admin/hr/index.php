@@ -3,7 +3,7 @@
         <div class="col-lg-3 col-6"><div class="small-box bg-info"><div class="inner"><h3>{{ stats.employees || 0 }}</h3><p>Empleados</p></div><div class="icon"><i class="bi bi-person-badge"></i></div></div></div>
         <div class="col-lg-3 col-6"><div class="small-box bg-success"><div class="inner"><h3>{{ stats.active_payroll || 0 }}</h3><p>En nomina</p></div><div class="icon"><i class="bi bi-cash-stack"></i></div></div></div>
         <div class="col-lg-3 col-6"><div class="small-box bg-warning"><div class="inner"><h3>{{ stats.periods_open || 0 }}</h3><p>Periodos abiertos</p></div><div class="icon"><i class="bi bi-calendar-range"></i></div></div></div>
-        <div class="col-lg-3 col-6"><div class="small-box bg-primary"><div class="inner"><h3>{{ money(stats.net_pending || 0) }}</h3><p>Neto pendiente</p></div><div class="icon"><i class="bi bi-bank"></i></div></div></div>
+        <div class="col-lg-3 col-6"><div class="small-box bg-primary"><div class="inner"><h3>{{ stats.sellers || 0 }}</h3><p>Vendedores</p></div><div class="icon"><i class="bi bi-graph-up-arrow"></i></div></div></div>
     </div>
 
     <div v-if="error" class="alert alert-danger">{{ error }}</div>
@@ -26,7 +26,7 @@
                 </div>
                 <div class="table-responsive">
                     <table id="employees-table" class="table table-bordered table-hover table-sm">
-                        <thead><tr><th>No.</th><th>Nombre</th><th>RFC</th><th>CURP</th><th>NSS</th><th>Departamento</th><th>Puesto</th><th>Salario diario</th><th>Nomina</th><th></th></tr></thead>
+                        <thead><tr><th>No.</th><th>Nombre</th><th>RFC</th><th>CURP</th><th>NSS</th><th>Departamento</th><th>Puesto</th><th>Compensacion</th><th>Salario diario</th><th>Vendedor</th><th>Nomina</th><th></th></tr></thead>
                         <tbody>
                             <tr v-for="employee in employees" :key="employee.id">
                                 <td><strong>{{ employee.employee_number }}</strong></td>
@@ -36,11 +36,13 @@
                                 <td>{{ employee.nss || '-' }}</td>
                                 <td>{{ employee.department_name || '-' }}</td>
                                 <td>{{ employee.position || '-' }}</td>
+                                <td><span class="badge badge-light">{{ compensationLabel(employee.compensation_type) }}</span></td>
                                 <td>{{ money(employee.salary_daily) }}</td>
+                                <td><span class="badge" :class="employee.is_seller == 1 && employee.seller_active == 1 ? 'badge-success' : 'badge-secondary'">{{ employee.is_seller == 1 && employee.seller_active == 1 ? 'Si' : 'No' }}</span></td>
                                 <td><span class="badge" :class="employee.payroll_status === 'active' ? 'badge-success' : 'badge-secondary'">{{ payrollStatusLabel(employee.payroll_status) }}</span></td>
                                 <td><button class="btn btn-xs btn-outline-primary" @click="openEmployee(employee)"><i class="bi bi-pencil"></i></button></td>
                             </tr>
-                            <tr v-if="employees.length === 0"><td colspan="10" class="text-center text-muted">Sin empleados registrados.</td></tr>
+                            <tr v-if="employees.length === 0"><td colspan="12" class="text-center text-muted">Sin empleados registrados.</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -147,13 +149,26 @@
                 <div class="col-md-3 mt-2"><label>Alta</label><input type="date" class="form-control" v-model="employeeForm.hire_date"></div>
                 <div class="col-md-3 mt-2"><label>Baja</label><input type="date" class="form-control" v-model="employeeForm.termination_date"></div>
                 <div class="col-md-3 mt-2"><label>Estado nomina</label><select class="form-control" v-model="employeeForm.payroll_status"><option value="active">Activo</option><option value="inactive">Inactivo</option><option value="suspended">Suspendido</option><option value="terminated">Baja</option></select></div>
+                <div class="col-md-3 mt-2"><label>Tipo de compensacion</label><select class="form-control" v-model="employeeForm.compensation_type" @change="applyCompensationType"><option value="salary">Sueldo</option><option value="commission_only">Solo comisiones</option><option value="mixed">Sueldo + comisiones</option></select></div>
                 <div class="col-md-3 mt-2"><label>Frecuencia</label><select class="form-control" v-model="employeeForm.payment_frequency"><option value="semanal">Semanal</option><option value="quincenal">Quincenal</option><option value="mensual">Mensual</option></select></div>
-                <div class="col-md-3 mt-2"><label>Salario diario</label><input type="number" step="0.01" class="form-control" v-model.number="employeeForm.salary_daily"></div>
-                <div class="col-md-3 mt-2"><label>Salario integrado</label><input type="number" step="0.01" class="form-control" v-model.number="employeeForm.salary_integrated"></div>
+                <div class="col-md-3 mt-2"><label>Salario diario</label><input type="number" step="0.01" class="form-control" v-model.number="employeeForm.salary_daily" :disabled="employeeForm.compensation_type === 'commission_only'"></div>
+                <div class="col-md-3 mt-2"><label>Salario integrado</label><input type="number" step="0.01" class="form-control" v-model.number="employeeForm.salary_integrated" :disabled="employeeForm.compensation_type === 'commission_only'"></div>
                 <div class="col-md-3 mt-2"><label>Regimen SAT nomina</label><select class="form-control" v-model="employeeForm.sat_regime_code"><option v-for="r in options.sat_payroll_regimes" :value="r.value">{{ r.label }}</option></select></div>
                 <div class="col-md-3 mt-2"><label>Contrato</label><select class="form-control" v-model="employeeForm.contract_type"><option value="indefinido">Indefinido</option><option value="determinado">Determinado</option><option value="obra">Obra</option><option value="prueba">Prueba</option></select></div>
                 <div class="col-md-3 mt-2"><label>Jornada</label><select class="form-control" v-model="employeeForm.work_shift"><option value="diurna">Diurna</option><option value="nocturna">Nocturna</option><option value="mixta">Mixta</option></select></div>
                 <div class="col-md-3 mt-2"><label>Riesgo</label><input class="form-control" v-model="employeeForm.risk_class"></div>
+                <div class="col-md-12 mt-3">
+                    <div class="card card-light mb-0">
+                        <div class="card-header py-2"><label class="mb-0"><input type="checkbox" v-model="employeeForm.is_seller"> Tambien es vendedor y genera comisiones</label></div>
+                        <div class="card-body row py-2" v-if="employeeForm.is_seller">
+                            <div class="col-md-4"><label>Plan de comision</label><select class="form-control" v-model="employeeForm.seller_plan_id"><option value="0">Sin plan</option><option v-for="p in options.commission_plans" :value="p.value">{{ p.label }}</option></select></div>
+                            <div class="col-md-2"><label>% venta</label><input type="number" step="0.01" class="form-control" v-model.number="employeeForm.base_commission_percent"></div>
+                            <div class="col-md-2"><label>% pago</label><input type="number" step="0.01" class="form-control" v-model.number="employeeForm.payment_commission_percent"></div>
+                            <div class="col-md-2"><label>% cuota</label><input type="number" step="0.01" class="form-control" v-model.number="employeeForm.quota_commission_percent"></div>
+                            <div class="col-md-2 d-flex align-items-end"><span class="badge badge-info">Empleado comisionista</span></div>
+                        </div>
+                    </div>
+                </div>
                 <div class="col-md-12 mt-3"><label><input type="checkbox" v-model="employeeForm.active"> Activo en RH</label></div>
             </div></div>
             <div class="modal-footer"><button class="btn btn-secondary" @click="hideModal('modal-employee')">Cerrar</button><button class="btn btn-primary" @click="saveEmployee">Guardar</button></div>
@@ -232,11 +247,11 @@ window.onload = function() {
                 });
             },
             selectRun: function(run) { this.selectedRun = run; this.load(run.id); },
-            openEmployee: function(item) { this.employeeForm = Object.assign({ id: 0, user_id: 0, party_id: 0, department_id: 0, branch_id: 0, employee_number: '', full_name: '', email: '', rfc: '', curp: '', nss: '', position: '', hire_date: '', termination_date: '', payroll_status: 'active', salary_daily: 0, salary_integrated: 0, payment_frequency: 'quincenal', bank_account_id: 0, sat_regime_code: '02', contract_type: 'indefinido', work_shift: 'diurna', risk_class: '', active: true }, item); this.showModal('modal-employee'); },
+            openEmployee: function(item) { this.employeeForm = Object.assign({ id: 0, user_id: 0, party_id: 0, department_id: 0, branch_id: 0, employee_number: '', full_name: '', email: '', rfc: '', curp: '', nss: '', position: '', hire_date: '', termination_date: '', payroll_status: 'active', compensation_type: 'salary', salary_daily: 0, salary_integrated: 0, payment_frequency: 'quincenal', bank_account_id: 0, sat_regime_code: '02', contract_type: 'indefinido', work_shift: 'diurna', risk_class: '', is_seller: false, seller_plan_id: 0, base_commission_percent: 0, payment_commission_percent: 0, quota_commission_percent: 0, active: true }, item); this.employeeForm.is_seller = Number(this.employeeForm.is_seller || 0) === 1; this.showModal('modal-employee'); },
             openPeriod: function(item) { this.periodForm = Object.assign({ id: 0, name: '', period_type: 'quincenal', date_from: '', date_to: '', payment_date: '', status: 'open', notes: '', active: true }, item); this.showModal('modal-period'); },
             openRun: function(item) { this.runForm = Object.assign({ id: 0, period_id: 0, department_id: 0, run_type: 'ordinary', status: 'draft', currency_code: 'MXN', payment_batch_id: 0, accounting_entry_id: 0, active: true }, item); this.showModal('modal-run'); },
             openItem: function(item) { this.itemForm = Object.assign({ id: 0, run_id: this.selectedRun ? this.selectedRun.id : 0, employee_id: 0, cfdi_id: 0, fiscal_document_id: 0, payment_id: 0, days_paid: 15, perception_total: 0, deduction_total: 0, sat_status: 'pending', payment_status: 'pending', notes: '', active: true }, item); this.showModal('modal-item'); },
-            saveEmployee: function() { this.post('save_employee', this.employeeForm, 'modal-employee'); },
+            saveEmployee: function() { this.applyCompensationType(); this.post('save_employee', this.employeeForm, 'modal-employee'); },
             savePeriod: function() { this.post('save_period', this.periodForm, 'modal-period'); },
             saveRun: function() { this.post('save_run', this.runForm, 'modal-run'); },
             saveItem: function() { this.post('save_item', this.itemForm, 'modal-item', this.itemForm.run_id); },
@@ -257,6 +272,8 @@ window.onload = function() {
                 });
             },
             payrollStatusLabel: function(v) { return ({active:'Activo', inactive:'Inactivo', suspended:'Suspendido', terminated:'Baja'})[v] || v; },
+            compensationLabel: function(v) { return ({salary:'Sueldo', commission_only:'Solo comisiones', mixed:'Sueldo + comisiones'})[v] || v || 'Sueldo'; },
+            applyCompensationType: function() { if (this.employeeForm.compensation_type === 'commission_only') { this.employeeForm.salary_daily = 0; this.employeeForm.salary_integrated = 0; this.employeeForm.is_seller = true; } },
             periodStatusLabel: function(v) { return ({open:'Abierto', closed:'Cerrado', cancelled:'Cancelado'})[v] || v; },
             runStatusLabel: function(v) { return ({draft:'Borrador', calculated:'Calculada', stamped:'Timbrada', paid:'Pagada', cancelled:'Cancelada'})[v] || v; },
             money: function(v) { return Number(v || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); },

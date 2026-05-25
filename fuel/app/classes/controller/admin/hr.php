@@ -98,6 +98,7 @@ class Controller_Admin_Hr extends Controller_Adminbase
                 'hire_date' => trim((string) \Arr::get($val, 'hire_date', '')),
                 'termination_date' => trim((string) \Arr::get($val, 'termination_date', '')),
                 'payroll_status' => $this->codeify(\Arr::get($val, 'payroll_status', 'active')),
+                'compensation_type' => $this->compensation_type(\Arr::get($val, 'compensation_type', 'salary')),
                 'salary_daily' => max(0, (float) \Arr::get($val, 'salary_daily', 0)),
                 'salary_integrated' => max(0, (float) \Arr::get($val, 'salary_integrated', 0)),
                 'payment_frequency' => $this->codeify(\Arr::get($val, 'payment_frequency', 'quincenal')),
@@ -111,6 +112,11 @@ class Controller_Admin_Hr extends Controller_Adminbase
 
             if ($data['email'] !== '' && !filter_var($data['email'], FILTER_VALIDATE_EMAIL)) {
                 return $this->json_response(['error' => 'El correo del empleado no es valido.'], 422);
+            }
+
+            if ($data['compensation_type'] === 'commission_only') {
+                $data['salary_daily'] = 0;
+                $data['salary_integrated'] = 0;
             }
 
             if ($id > 0) {
@@ -128,6 +134,7 @@ class Controller_Admin_Hr extends Controller_Adminbase
                 $employee = \Model_Core_Employee::forge($data);
             }
             $employee->save();
+            $this->sync_seller_from_employee($employee, $val);
             $this->audit($id > 0 ? 'update_employee' : 'create_employee', 'employee', $employee, $old);
 
             return $this->action_data();
@@ -308,11 +315,12 @@ class Controller_Admin_Hr extends Controller_Adminbase
 
     protected function employees()
     {
-        $rows = \DB::select(['e.id', 'id'], ['e.user_id', 'user_id'], ['u.username', 'username'], ['e.party_id', 'party_id'], ['e.department_id', 'department_id'], ['d.name', 'department_name'], ['e.branch_id', 'branch_id'], ['b.name', 'branch_name'], ['e.employee_number', 'employee_number'], ['e.full_name', 'full_name'], ['e.email', 'email'], ['e.rfc', 'rfc'], ['e.curp', 'curp'], ['e.nss', 'nss'], ['e.position', 'position'], ['e.hire_date', 'hire_date'], ['e.termination_date', 'termination_date'], ['e.payroll_status', 'payroll_status'], ['e.salary_daily', 'salary_daily'], ['e.salary_integrated', 'salary_integrated'], ['e.payment_frequency', 'payment_frequency'], ['e.bank_account_id', 'bank_account_id'], ['e.sat_regime_code', 'sat_regime_code'], ['e.contract_type', 'contract_type'], ['e.work_shift', 'work_shift'], ['e.risk_class', 'risk_class'], ['e.active', 'active'])
+        $rows = \DB::select(['e.id', 'id'], ['e.user_id', 'user_id'], ['u.username', 'username'], ['e.party_id', 'party_id'], ['e.department_id', 'department_id'], ['d.name', 'department_name'], ['e.branch_id', 'branch_id'], ['b.name', 'branch_name'], ['e.employee_number', 'employee_number'], ['e.full_name', 'full_name'], ['e.email', 'email'], ['e.rfc', 'rfc'], ['e.curp', 'curp'], ['e.nss', 'nss'], ['e.position', 'position'], ['e.hire_date', 'hire_date'], ['e.termination_date', 'termination_date'], ['e.payroll_status', 'payroll_status'], ['e.compensation_type', 'compensation_type'], ['e.salary_daily', 'salary_daily'], ['e.salary_integrated', 'salary_integrated'], ['e.payment_frequency', 'payment_frequency'], ['e.bank_account_id', 'bank_account_id'], ['e.sat_regime_code', 'sat_regime_code'], ['e.contract_type', 'contract_type'], ['e.work_shift', 'work_shift'], ['e.risk_class', 'risk_class'], ['e.active', 'active'], ['s.id', 'seller_id'], ['s.default_commission_plan_id', 'seller_plan_id'], ['s.base_commission_percent', 'base_commission_percent'], ['s.payment_commission_percent', 'payment_commission_percent'], ['s.quota_commission_percent', 'quota_commission_percent'], ['s.active', 'seller_active'], [\DB::expr('CASE WHEN s.id IS NULL THEN 0 ELSE 1 END'), 'is_seller'])
             ->from(['core_employees', 'e'])
             ->join(['users', 'u'], 'left')->on('e.user_id', '=', 'u.id')
             ->join(['core_departments', 'd'], 'left')->on('e.department_id', '=', 'd.id')
             ->join(['core_branches', 'b'], 'left')->on('e.branch_id', '=', 'b.id')
+            ->join(['core_sales_sellers', 's'], 'left')->on('e.id', '=', 's.employee_id')
             ->order_by('e.full_name', 'asc')
             ->execute()
             ->as_array();
@@ -373,6 +381,7 @@ class Controller_Admin_Hr extends Controller_Adminbase
             'payments' => \DBUtil::table_exists('core_payments') ? $this->payment_options() : [],
             'cfdi_payroll' => \DBUtil::table_exists('core_sat_cfdi') ? $this->cfdi_payroll_options() : [],
             'sat_payroll_regimes' => \DBUtil::table_exists('core_sat_payroll_regimes') ? Helper_Core_Sat_Catalog::options('core_sat_payroll_regimes') : [],
+            'commission_plans' => \DBUtil::table_exists('core_commission_plans') ? $this->select_options('core_commission_plans', 'id', 'name') : [],
         ];
     }
 
@@ -383,7 +392,53 @@ class Controller_Admin_Hr extends Controller_Adminbase
             'active_payroll' => (int) \DB::select()->from('core_employees')->where('active', '=', 1)->where('payroll_status', '=', 'active')->execute()->count(),
             'periods_open' => (int) \DB::select()->from('core_hr_payroll_periods')->where('active', '=', 1)->where('status', '=', 'open')->execute()->count(),
             'net_pending' => (float) \DB::select([\DB::expr('COALESCE(SUM(net_total),0)'), 'total'])->from('core_hr_payroll_items')->where('active', '=', 1)->where('payment_status', '!=', 'paid')->execute()->current()['total'],
+            'sellers' => \DBUtil::table_exists('core_sales_sellers') ? (int) \DB::select()->from('core_sales_sellers')->where('seller_type', '=', 'employee')->where('active', '=', 1)->execute()->count() : 0,
         ];
+    }
+
+    protected function sync_seller_from_employee(\Model_Core_Employee $employee, array $values)
+    {
+        $is_seller = (bool) \Arr::get($values, 'is_seller', false);
+        if (!\DBUtil::table_exists('core_sales_sellers')) {
+            if ($is_seller) {
+                throw new \RuntimeException('Falta ejecutar migraciones de vendedores y comisiones.');
+            }
+            return;
+        }
+
+        $row = \DB::select('id')->from('core_sales_sellers')->where('employee_id', '=', (int) $employee->id)->execute()->current();
+        if (!$is_seller) {
+            if ($row) {
+                \DB::update('core_sales_sellers')
+                    ->set(['active' => 0, 'updated_at' => time()])
+                    ->where('id', '=', (int) $row['id'])
+                    ->execute();
+            }
+            return;
+        }
+
+        $data = [
+            'name' => (string) $employee->full_name,
+            'seller_type' => 'employee',
+            'employee_id' => (int) $employee->id,
+            'party_id' => (int) $employee->party_id,
+            'user_id' => (int) $employee->user_id,
+            'default_commission_plan_id' => (int) \Arr::get($values, 'seller_plan_id', 0),
+            'base_commission_percent' => max(0, (float) \Arr::get($values, 'base_commission_percent', 0)),
+            'payment_commission_percent' => max(0, (float) \Arr::get($values, 'payment_commission_percent', 0)),
+            'quota_commission_percent' => max(0, (float) \Arr::get($values, 'quota_commission_percent', 0)),
+            'active' => (int) $employee->active,
+            'updated_at' => time(),
+        ];
+
+        if ($row) {
+            \DB::update('core_sales_sellers')->set($data)->where('id', '=', (int) $row['id'])->execute();
+            return;
+        }
+
+        $data['code'] = $this->next_seller_code((int) $employee->id);
+        $data['created_at'] = time();
+        \DB::insert('core_sales_sellers')->set($data)->execute();
     }
 
     protected function recalculate_run($run_id)
@@ -452,6 +507,24 @@ class Controller_Admin_Hr extends Controller_Adminbase
         return in_array($value, ['draft', 'calculated', 'stamped', 'paid', 'cancelled'], true) ? $value : 'draft';
     }
 
+    protected function compensation_type($value)
+    {
+        $value = $this->codeify($value);
+        return in_array($value, ['salary', 'commission_only', 'mixed'], true) ? $value : 'salary';
+    }
+
+    protected function next_seller_code($employee_id)
+    {
+        $base = 'VEN-EMP-'.str_pad((string) $employee_id, 5, '0', STR_PAD_LEFT);
+        $code = $base;
+        $suffix = 1;
+        while (\DB::select('id')->from('core_sales_sellers')->where('code', '=', $code)->execute()->current()) {
+            $suffix++;
+            $code = $base.'-'.$suffix;
+        }
+        return $code;
+    }
+
     protected function next_employee_number()
     {
         return 'EMP-'.str_pad((string) ((int) \DB::count_records('core_employees') + 1), 5, '0', STR_PAD_LEFT);
@@ -485,7 +558,7 @@ class Controller_Admin_Hr extends Controller_Adminbase
                 throw new \RuntimeException('Falta ejecutar migraciones de RH.');
             }
         }
-        if (!\DBUtil::field_exists('core_employees', ['rfc', 'salary_daily', 'payroll_status'])) {
+        if (!\DBUtil::field_exists('core_employees', ['rfc', 'salary_daily', 'payroll_status', 'compensation_type'])) {
             throw new \RuntimeException('Falta actualizar estructura de empleados para RH.');
         }
     }

@@ -21,6 +21,7 @@ class Model_Core_Employee extends \Orm\Model
         'hire_date',
         'termination_date',
         'payroll_status',
+        'compensation_type',
         'salary_daily',
         'salary_integrated',
         'payment_frequency',
