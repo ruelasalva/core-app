@@ -255,6 +255,63 @@ class Controller_Admin_Commerce extends Controller_Adminbase
     }
 
     /**
+     * CSV TEMPLATE
+     *
+     * DESCARGA PLANTILLA CSV PARA PRODUCTOS
+     *
+     * @access  public
+     * @return  Response
+     */
+    public function action_csv_template()
+    {
+        $rows = [
+            ['sku', 'name', 'short_description', 'description', 'brand', 'category', 'subcategory', 'product_type', 'unit_code', 'sat_product_service_code', 'sat_unit_code', 'currency_code', 'price', 'cost', 'tax_code', 'published', 'show_in_home', 'featured'],
+            ['SKU-001', 'Producto ejemplo', 'Descripcion corta', 'Descripcion completa', 'Marca ejemplo', 'Categoria ejemplo', 'Subcategoria ejemplo', 'product', 'pieza', '01010101', 'H87', 'MXN', '100.00', '70.00', 'iva_16', '0', '0', '0'],
+        ];
+
+        return $this->csv_response('plantilla_productos.csv', $rows);
+    }
+
+    /**
+     * IMPORT CSV
+     *
+     * IMPORTA PRODUCTOS DESDE ARCHIVO CSV
+     *
+     * @access  public
+     * @return  Response
+     */
+    public function action_import_csv()
+    {
+        $this->require_access('commerce.access[edit]');
+
+        try {
+            $this->assert_schema_ready();
+            $file = \Input::file('file');
+            if (!$file || (int) \Arr::get($file, 'error', UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+                return $this->json_response(['error' => 'Selecciona un archivo CSV valido.'], 422);
+            }
+
+            $extension = strtolower(pathinfo((string) \Arr::get($file, 'name', ''), PATHINFO_EXTENSION));
+            if (!in_array($extension, ['csv', 'txt'], true)) {
+                return $this->json_response(['error' => 'Solo se permiten archivos CSV o TXT.'], 422);
+            }
+
+            $result = $this->import_products_csv((string) \Arr::get($file, 'tmp_name', ''));
+            return $this->json_response([
+                'status' => 'ok',
+                'message' => 'Importacion terminada. Creados: '.$result['created'].', actualizados: '.$result['updated'].', omitidos: '.$result['skipped'].'.',
+                'summary' => $result,
+                'items' => $this->get_all_items(),
+                'options' => $this->get_options(),
+                'stats' => $this->get_stats(),
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error importando productos CSV: '.$e->getMessage());
+            return $this->json_response(['error' => $e->getMessage()], 400);
+        }
+    }
+
+    /**
      * GET DEFINITIONS
      *
      * DEFINE SECCIONES, MODELOS Y CAMPOS ADMINISTRABLES
@@ -522,6 +579,209 @@ class Controller_Admin_Commerce extends Controller_Adminbase
         }
 
         return $stats;
+    }
+
+    protected function import_products_csv($path)
+    {
+        $rows = $this->read_csv_rows($path);
+        $result = ['created' => 0, 'updated' => 0, 'skipped' => 0, 'errors' => []];
+        foreach ($rows as $index => $row) {
+            $sku = strtoupper(trim((string) \Arr::get($row, 'sku', '')));
+            $name = trim((string) \Arr::get($row, 'name', ''));
+            if ($sku === '' || $name === '') {
+                $result['errors'][] = 'Fila '.($index + 2).': SKU y nombre son obligatorios.';
+                $result['skipped']++;
+                continue;
+            }
+
+            $data = [
+                'sku' => $sku,
+                'name' => $name,
+                'slug' => $this->unique_product_slug(\Arr::get($row, 'slug', $name), $sku),
+                'short_description' => trim((string) \Arr::get($row, 'short_description', '')),
+                'description' => trim((string) \Arr::get($row, 'description', '')),
+                'brand_id' => $this->ensure_named_catalog('core_commerce_brands', 'Model_Core_Commerce_Brand', \Arr::get($row, 'brand', '')),
+                'category_id' => $this->ensure_named_catalog('core_commerce_categories', 'Model_Core_Commerce_Category', \Arr::get($row, 'category', '')),
+                'subcategory_id' => 0,
+                'product_type' => $this->product_type(\Arr::get($row, 'product_type', 'product')),
+                'is_internal_service' => 0,
+                'unit_code' => trim((string) \Arr::get($row, 'unit_code', 'pieza')) ?: 'pieza',
+                'sat_product_service_code' => trim((string) \Arr::get($row, 'sat_product_service_code', '01010101')) ?: '01010101',
+                'sat_unit_code' => trim((string) \Arr::get($row, 'sat_unit_code', 'H87')) ?: 'H87',
+                'sat_object_tax_code' => trim((string) \Arr::get($row, 'sat_object_tax_code', '02')) ?: '02',
+                'currency_code' => strtoupper(substr((string) \Arr::get($row, 'currency_code', 'MXN'), 0, 3)) ?: 'MXN',
+                'price' => max(0, (float) \Arr::get($row, 'price', 0)),
+                'cost' => max(0, (float) \Arr::get($row, 'cost', 0)),
+                'tax_code' => trim((string) \Arr::get($row, 'tax_code', 'iva_16')),
+                'sat_tax_code' => trim((string) \Arr::get($row, 'sat_tax_code', '002')) ?: '002',
+                'sat_tax_factor_type' => trim((string) \Arr::get($row, 'sat_tax_factor_type', 'Tasa')) ?: 'Tasa',
+                'sat_tax_rate' => max(0, (float) \Arr::get($row, 'sat_tax_rate', 0.16)),
+                'stock_quantity' => max(0, (float) \Arr::get($row, 'stock_quantity', 0)),
+                'stock_reserved' => 0,
+                'stock_updated_at' => time(),
+                'main_image_path' => trim((string) \Arr::get($row, 'main_image_path', '')),
+                'show_in_home' => (int) (bool) \Arr::get($row, 'show_in_home', 0),
+                'featured' => (int) (bool) \Arr::get($row, 'featured', 0),
+                'published' => (int) (bool) \Arr::get($row, 'published', 0),
+                'active' => 1,
+                'sort_order' => (int) \Arr::get($row, 'sort_order', 0),
+            ];
+
+            if ($data['category_id'] > 0) {
+                $data['subcategory_id'] = $this->ensure_subcategory((int) $data['category_id'], \Arr::get($row, 'subcategory', ''));
+            }
+
+            $existing = \DB::select('id')->from('core_commerce_products')->where('sku', '=', $sku)->execute()->current();
+            if ($existing) {
+                $product = \Model_Core_Commerce_Product::find((int) $existing['id']);
+                if ($product) {
+                    $data['slug'] = $this->unique_product_slug(\Arr::get($row, 'slug', $name), $sku, (int) $product->id);
+                    $product->set($data);
+                    $product->save();
+                    $result['updated']++;
+                    continue;
+                }
+            }
+
+            \Model_Core_Commerce_Product::forge($data)->save();
+            $result['created']++;
+        }
+        return $result;
+    }
+
+    protected function read_csv_rows($path)
+    {
+        $handle = fopen($path, 'r');
+        if (!$handle) {
+            throw new \RuntimeException('No se pudo leer el archivo CSV.');
+        }
+        $first = fgets($handle);
+        if ($first === false) {
+            fclose($handle);
+            return [];
+        }
+        $delimiter = substr_count((string) $first, ';') > substr_count((string) $first, ',') ? ';' : ',';
+        rewind($handle);
+        $headers = fgetcsv($handle, 0, $delimiter);
+        if (!$headers) {
+            fclose($handle);
+            return [];
+        }
+        $headers = array_map([$this, 'csv_key'], $headers);
+        $rows = [];
+        while (($line = fgetcsv($handle, 0, $delimiter)) !== false) {
+            $row = [];
+            foreach ($headers as $index => $header) {
+                if ($header === '') {
+                    continue;
+                }
+                $row[$header] = isset($line[$index]) ? trim((string) $line[$index]) : '';
+            }
+            $rows[] = $row;
+        }
+        fclose($handle);
+        return $rows;
+    }
+
+    protected function csv_response($filename, array $rows)
+    {
+        $output = fopen('php://temp', 'r+');
+        foreach ($rows as $row) {
+            fputcsv($output, $row);
+        }
+        rewind($output);
+        $content = stream_get_contents($output);
+        fclose($output);
+
+        return \Response::forge("\xEF\xBB\xBF".$content, 200, [
+            'Content-Type' => 'text/csv; charset=utf-8',
+            'Content-Disposition' => 'attachment; filename="'.$filename.'"',
+        ]);
+    }
+
+    protected function csv_key($value)
+    {
+        return strtolower(trim(preg_replace('/[^a-z0-9_]+/i', '_', (string) $value), '_'));
+    }
+
+    protected function ensure_named_catalog($table, $model, $name)
+    {
+        $name = trim((string) $name);
+        if ($name === '' || !\DBUtil::table_exists($table)) {
+            return 0;
+        }
+        $row = \DB::select('id')->from($table)->where('name', '=', $name)->execute()->current();
+        if ($row) {
+            return (int) $row['id'];
+        }
+        $item = $model::forge([
+            'name' => $name,
+            'slug' => $this->unique_slug_for_table($table, $name),
+            'description' => '',
+            'active' => 1,
+        ]);
+        $item->save();
+        return (int) $item->id;
+    }
+
+    protected function ensure_subcategory($category_id, $name)
+    {
+        $name = trim((string) $name);
+        if ($name === '' || !\DBUtil::table_exists('core_commerce_subcategories')) {
+            return 0;
+        }
+        $row = \DB::select('id')->from('core_commerce_subcategories')->where('category_id', '=', (int) $category_id)->where('name', '=', $name)->execute()->current();
+        if ($row) {
+            return (int) $row['id'];
+        }
+        $item = \Model_Core_Commerce_Subcategory::forge([
+            'category_id' => (int) $category_id,
+            'name' => $name,
+            'slug' => $this->unique_slug_for_table('core_commerce_subcategories', $name),
+            'description' => '',
+            'active' => 1,
+        ]);
+        $item->save();
+        return (int) $item->id;
+    }
+
+    protected function unique_slug_for_table($table, $seed, $id = 0)
+    {
+        $base = $this->slugify($seed) ?: 'registro';
+        $slug = substr($base, 0, 220);
+        $i = 2;
+        while (true) {
+            $query = \DB::select('id')->from($table)->where('slug', '=', $slug);
+            if ($id > 0) {
+                $query->where('id', '!=', (int) $id);
+            }
+            if (!$query->execute()->current()) {
+                return $slug;
+            }
+            $suffix = '-'.$i++;
+            $slug = substr($base, 0, 220 - strlen($suffix)).$suffix;
+        }
+    }
+
+    protected function unique_product_slug($seed, $sku, $id = 0)
+    {
+        return $this->unique_slug_for_table('core_commerce_products', $seed ?: $sku, $id);
+    }
+
+    protected function product_type($value)
+    {
+        $value = $this->codeify($value);
+        $aliases = [
+            'producto' => 'product',
+            'producto_fisico' => 'product',
+            'servicio' => 'service',
+            'renta' => 'rental',
+            'arrendamiento' => 'rental',
+        ];
+        if (isset($aliases[$value])) {
+            return $aliases[$value];
+        }
+        return in_array($value, ['product', 'service', 'rental'], true) ? $value : 'product';
     }
 
     /**

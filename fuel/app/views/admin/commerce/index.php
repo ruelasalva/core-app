@@ -34,11 +34,19 @@
                     <select class="form-control form-control-sm mr-2" v-model="currentSection">
                         <option v-for="key in sectionKeys" :key="key" :value="key">{{ definitions[key].title }}</option>
                     </select>
+                    <a v-if="currentSection === 'products'" class="btn btn-outline-success btn-sm mr-2" href="<?php echo Uri::create('admin/commerce/csv_template'); ?>">
+                        <i class="bi bi-download"></i> Plantilla
+                    </a>
+                    <label v-if="currentSection === 'products'" class="btn btn-outline-primary btn-sm mb-0 mr-2">
+                        <i class="bi bi-upload"></i> Importar CSV
+                        <input type="file" accept=".csv,.txt,text/csv" class="d-none" @change="importCsv">
+                    </label>
                     <button class="btn btn-primary btn-sm" @click="newItem"><i class="bi bi-plus-lg"></i> Nuevo</button>
                 </div>
             </div>
         </div>
         <div class="card-body">
+            <div v-if="message" class="alert alert-info py-2">{{ message }}</div>
             <div v-if="loading" class="text-center p-5">
                 <div class="spinner-border text-primary" role="status"></div>
                 <p class="mt-2">Cargando comercial...</p>
@@ -132,6 +140,7 @@ window.onload = function() {
             items: {},
             options: {},
             stats: {},
+            message: '',
             form: {}
         },
         computed: {
@@ -216,6 +225,23 @@ window.onload = function() {
                     }
                     this.$set(this.form, field.name, data.path);
                 });
+            },
+            importCsv(event) {
+                const file = event.target.files && event.target.files[0] ? event.target.files[0] : null;
+                if (!file) return;
+                const form = new FormData();
+                form.append('file', file);
+                form.append(window.coreAppCsrfKey, fuel_csrf_token());
+                fetch('<?php echo Uri::create('admin/commerce/import_csv'); ?>', { method: 'POST', body: form })
+                    .then(res => res.json())
+                    .then(data => {
+                        event.target.value = '';
+                        if (data.error) { alert(data.error); return; }
+                        this.message = data.message || 'Importacion terminada.';
+                        this.items = data.items || {};
+                        this.options = data.options || {};
+                        this.stats = data.stats || {};
+                    });
             },
             inputType(field) {
                 if (field.type === 'date') return 'date';

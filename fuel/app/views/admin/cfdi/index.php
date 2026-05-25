@@ -80,6 +80,9 @@
                                     <button v-if="item.convertible_purchase == 1" class="btn btn-xs btn-outline-primary" @click.stop="convertPurchase(item)">
                                         <i class="bi bi-cart-check"></i>
                                     </button>
+                                    <button class="btn btn-xs btn-outline-success" @click.stop="materializeCatalogs(item)" title="Crear cliente/proveedor y productos base">
+                                        <i class="bi bi-box-arrow-in-down"></i>
+                                    </button>
                                 </td>
                             </tr>
                             <tr v-if="selected && selected.id === item.id" :key="'detail-' + item.id">
@@ -130,6 +133,9 @@
                                             </div>
                                             <button v-if="selected.convertible_purchase == 1" class="btn btn-sm btn-primary btn-block" @click="convertPurchase(selected)">
                                                 <i class="bi bi-cart-check"></i> Convertir a compra
+                                            </button>
+                                            <button class="btn btn-sm btn-outline-success btn-block" @click="materializeCatalogs(selected)">
+                                                <i class="bi bi-box-arrow-in-down"></i> Guardar tercero y productos
                                             </button>
                                         </div>
                                     </div>
@@ -364,6 +370,19 @@ window.onload = function() {
                         this.convertForm.saving = false;
                         this.error = 'No se pudo convertir el CFDI.';
                     });
+            },
+            materializeCatalogs: function(item) {
+                if (!item) return;
+                this.error = '';
+                this.message = '';
+                fetch('<?php echo Uri::create('admin/cfdi/materialize_catalogs'); ?>', window.coreAppFetchOptions({ cfdi_id: item.id }))
+                    .then(function(res) { return res.json(); })
+                    .then(data => {
+                        if (data.error) { this.error = data.error; return; }
+                        this.message = data.message || 'Catalogos actualizados desde CFDI.';
+                        this.openDetails(item);
+                    })
+                    .catch(() => { this.error = 'No se pudieron crear catalogos desde CFDI.'; });
             },
             findProductBySku: function(sku) {
                 sku = (sku || '').toString().trim().toLowerCase();

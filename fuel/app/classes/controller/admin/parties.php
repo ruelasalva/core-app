@@ -79,6 +79,68 @@ class Controller_Admin_Parties extends Controller_Adminbase
     }
 
     /**
+     * CSV TEMPLATE
+     *
+     * DESCARGA PLANTILLA CSV PARA IMPORTAR CLIENTES O PROVEEDORES
+     *
+     * @access  public
+     * @return  Response
+     */
+    public function action_csv_template()
+    {
+        $section = trim((string) \Input::get('section', 'customers'));
+        $type = $section === 'suppliers' ? 'supplier' : 'customer';
+        $filename = $type === 'supplier' ? 'plantilla_proveedores.csv' : 'plantilla_clientes.csv';
+        $rows = [
+            ['party_type', 'code', 'name', 'legal_name', 'rfc', 'email', 'phone', 'sat_cfdi_use_code', 'sat_tax_regime_code', 'credit_limit', 'credit_days', 'notes'],
+            [$type, strtoupper(substr($type, 0, 3)).'-001', 'Empresa ejemplo', 'Empresa Ejemplo SA de CV', 'XAXX010101000', 'contacto@ejemplo.com', '3330000000', $type === 'supplier' ? 'G03' : 'S01', '601', '0', '0', 'Registro de ejemplo'],
+        ];
+
+        return $this->csv_response($filename, $rows);
+    }
+
+    /**
+     * IMPORT CSV
+     *
+     * IMPORTA CLIENTES O PROVEEDORES DESDE ARCHIVO CSV
+     *
+     * @access  public
+     * @return  Response
+     */
+    public function action_import_csv()
+    {
+        $this->require_access('parties.access[edit]');
+
+        try {
+            $this->assert_schema_ready();
+            $section = trim((string) \Input::post('section', 'customers'));
+            $default_type = $section === 'suppliers' ? 'supplier' : 'customer';
+            $file = \Input::file('file');
+            if (!$file || (int) \Arr::get($file, 'error', UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+                return $this->json_response(['error' => 'Selecciona un archivo CSV valido.'], 422);
+            }
+
+            $extension = strtolower(pathinfo((string) \Arr::get($file, 'name', ''), PATHINFO_EXTENSION));
+            if (!in_array($extension, ['csv', 'txt'], true)) {
+                return $this->json_response(['error' => 'Solo se permiten archivos CSV o TXT.'], 422);
+            }
+
+            $result = $this->import_parties_csv((string) \Arr::get($file, 'tmp_name', ''), $default_type);
+            return $this->json_response([
+                'status' => 'ok',
+                'message' => 'Importacion terminada. Creados: '.$result['created'].', actualizados: '.$result['updated'].', omitidos: '.$result['skipped'].'.',
+                'summary' => $result,
+                'items' => $this->get_all_items(),
+                'options' => $this->get_options(),
+                'stats' => $this->get_stats(),
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error importando terceros CSV: '.$e->getMessage());
+            return $this->json_response(['error' => $e->getMessage()], 400);
+        }
+    }
+
+    /**
      * SAVE
      *
      * CREA O ACTUALIZA UN REGISTRO DE TERCEROS
@@ -407,6 +469,180 @@ class Controller_Admin_Parties extends Controller_Adminbase
         } catch (\Exception $e) {
             \Log::error('Error validando proveedor: '.$e->getMessage());
             return $this->json_response(['error' => 'No se pudo validar proveedor.'], 400);
+        }
+    }
+
+    protected function import_parties_csv($path, $default_type)
+    {
+        $rows = $this->read_csv_rows($path);
+        $result = ['created' => 0, 'updated' => 0, 'skipped' => 0, 'errors' => []];
+        foreach ($rows as $index => $row) {
+            $name = trim((string) \Arr::get($row, 'name', ''));
+            $rfc = strtoupper(trim((string) \Arr::get($row, 'rfc', '')));
+            if ($name === '' && $rfc === '') {
+                $result['skipped']++;
+                continue;
+            }
+
+            $party_type = $this->party_type(\Arr::get($row, 'party_type', $default_type));
+            $data = [
+                'party_type' => $party_type,
+                'code' => $this->unique_party_code(trim((string) \Arr::get($row, 'code', '')), $name, 0),
+                'name' => $name ?: $rfc,
+                'legal_name' => trim((string) \Arr::get($row, 'legal_name', $name)),
+                'rfc' => $rfc,
+                'email' => trim((string) \Arr::get($row, 'email', '')),
+                'phone' => trim((string) \Arr::get($row, 'phone', '')),
+                'sat_cfdi_use_code' => trim((string) \Arr::get($row, 'sat_cfdi_use_code', $party_type === 'supplier' ? 'G03' : 'S01')),
+                'sat_tax_regime_code' => trim((string) \Arr::get($row, 'sat_tax_regime_code', '601')),
+                'credit_limit' => max(0, (float) \Arr::get($row, 'credit_limit', 0)),
+                'credit_days' => max(0, (int) \Arr::get($row, 'credit_days', 0)),
+                'notes' => trim((string) \Arr::get($row, 'notes', '')),
+                'active' => 1,
+            ];
+
+            if ($data['email'] !== '' && !filter_var($data['email'], FILTER_VALIDATE_EMAIL)) {
+                $result['errors'][] = 'Fila '.($index + 2).': correo invalido.';
+                $result['skipped']++;
+                continue;
+            }
+
+            $existing = $this->find_party_by_rfc_or_code($data['rfc'], (string) \Arr::get($row, 'code', ''));
+            if ($existing) {
+                $party = \Model_Core_Party::find((int) $existing['id']);
+                if ($party) {
+                    $data['party_type'] = $this->merge_party_type((string) $party->party_type, $party_type);
+                    unset($data['code']);
+                    $party->set($data);
+                    $party->save();
+                    $result['updated']++;
+                    continue;
+                }
+            }
+
+            \Model_Core_Party::forge($data)->save();
+            $result['created']++;
+        }
+
+        return $result;
+    }
+
+    protected function read_csv_rows($path)
+    {
+        $handle = fopen($path, 'r');
+        if (!$handle) {
+            throw new \RuntimeException('No se pudo leer el archivo CSV.');
+        }
+
+        $first = fgets($handle);
+        if ($first === false) {
+            fclose($handle);
+            return [];
+        }
+        $delimiter = $this->detect_csv_delimiter($first);
+        rewind($handle);
+        $headers = fgetcsv($handle, 0, $delimiter);
+        if (!$headers) {
+            fclose($handle);
+            return [];
+        }
+
+        $headers = array_map([$this, 'csv_key'], $headers);
+        $rows = [];
+        while (($line = fgetcsv($handle, 0, $delimiter)) !== false) {
+            $row = [];
+            foreach ($headers as $index => $header) {
+                if ($header === '') {
+                    continue;
+                }
+                $row[$header] = isset($line[$index]) ? trim((string) $line[$index]) : '';
+            }
+            $rows[] = $row;
+        }
+        fclose($handle);
+        return $rows;
+    }
+
+    protected function csv_response($filename, array $rows)
+    {
+        $output = fopen('php://temp', 'r+');
+        foreach ($rows as $row) {
+            fputcsv($output, $row);
+        }
+        rewind($output);
+        $content = stream_get_contents($output);
+        fclose($output);
+
+        return \Response::forge("\xEF\xBB\xBF".$content, 200, [
+            'Content-Type' => 'text/csv; charset=utf-8',
+            'Content-Disposition' => 'attachment; filename="'.$filename.'"',
+        ]);
+    }
+
+    protected function detect_csv_delimiter($line)
+    {
+        return substr_count((string) $line, ';') > substr_count((string) $line, ',') ? ';' : ',';
+    }
+
+    protected function csv_key($value)
+    {
+        return strtolower(trim(preg_replace('/[^a-z0-9_]+/i', '_', (string) $value), '_'));
+    }
+
+    protected function party_type($value)
+    {
+        $value = $this->codeify($value);
+        $aliases = [
+            'cliente' => 'customer',
+            'proveedor' => 'supplier',
+            'ambos' => 'both',
+            'cliente_y_proveedor' => 'both',
+        ];
+        if (isset($aliases[$value])) {
+            return $aliases[$value];
+        }
+        return in_array($value, ['customer', 'supplier', 'both'], true) ? $value : 'customer';
+    }
+
+    protected function merge_party_type($current, $incoming)
+    {
+        if ($current === $incoming || $current === 'both') {
+            return $current;
+        }
+        return in_array($current, ['customer', 'supplier'], true) && in_array($incoming, ['customer', 'supplier'], true) ? 'both' : $incoming;
+    }
+
+    protected function find_party_by_rfc_or_code($rfc, $code)
+    {
+        if ($rfc !== '') {
+            $row = \DB::select('id')->from('core_parties')->where('rfc', '=', $rfc)->execute()->current();
+            if ($row) {
+                return $row;
+            }
+        }
+        $code = $this->codeify($code);
+        if ($code !== '') {
+            return \DB::select('id')->from('core_parties')->where('code', '=', $code)->execute()->current();
+        }
+        return null;
+    }
+
+    protected function unique_party_code($code, $name, $id)
+    {
+        $base = $this->codeify($code ?: $name);
+        $base = $base ?: 'tercero';
+        $candidate = substr($base, 0, 60);
+        $i = 2;
+        while (true) {
+            $query = \DB::select('id')->from('core_parties')->where('code', '=', $candidate);
+            if ($id > 0) {
+                $query->where('id', '!=', (int) $id);
+            }
+            if (!$query->execute()->current()) {
+                return $candidate;
+            }
+            $suffix = '-'.$i++;
+            $candidate = substr($base, 0, 60 - strlen($suffix)).$suffix;
         }
     }
 

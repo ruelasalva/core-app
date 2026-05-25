@@ -179,6 +179,75 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
         }
     }
 
+    /**
+     * MATERIALIZE CATALOGS
+     *
+     * CREA/ACTUALIZA TERCERO FISCAL Y PRODUCTOS BASE DESDE UN CFDI
+     *
+     * @access  public
+     * @return  Response
+     */
+    public function action_materialize_catalogs()
+    {
+        $this->require_access('sat.access[edit]');
+        $this->require_access('parties.access[edit]');
+        $this->require_access('commerce.access[edit]');
+
+        $transaction_started = false;
+        try {
+            $this->assert_schema_ready();
+            $payload = (array) \Input::json();
+            $id = (int) \Arr::get($payload, 'cfdi_id', 0);
+            $cfdi = \Model_Core_Sat_Cfdi::find($id);
+            if (!$cfdi || !$this->can_access_cfdi((int) $cfdi->id)) {
+                return $this->json_response(['error' => 'CFDI no encontrado o sin permiso.'], 404);
+            }
+            if (!\DBUtil::table_exists('core_parties') || !\DBUtil::table_exists('core_commerce_products')) {
+                return $this->json_response(['error' => 'Faltan migraciones de terceros o productos.'], 422);
+            }
+
+            $result = ['parties_created' => 0, 'parties_updated' => 0, 'products_created' => 0, 'products_updated' => 0, 'products_skipped' => 0];
+            \DB::start_transaction();
+            $transaction_started = true;
+            $party_result = $this->materialize_cfdi_party($cfdi);
+            $result['parties_created'] += $party_result['created'];
+            $result['parties_updated'] += $party_result['updated'];
+            foreach ($this->details((int) $cfdi->id) as $line) {
+                if ((string) $line['line_type'] !== 'concept') {
+                    continue;
+                }
+                $product_result = $this->materialize_cfdi_product($cfdi, $line);
+                $result[$product_result]++;
+            }
+            $cfdi->reviewed_by = (int) $this->user_id;
+            $cfdi->reviewed_at = time();
+            $cfdi->save();
+            \DB::commit_transaction();
+
+            \Helper_Core_Audit::log([
+                'module' => 'sat',
+                'action' => 'materialize_catalogs',
+                'business_event' => 'sat.materialize_catalogs',
+                'entity_type' => 'sat_cfdi',
+                'entity_id' => (int) $cfdi->id,
+                'summary' => 'Catalogos actualizados desde CFDI '.$cfdi->uuid,
+                'new_values' => $result,
+            ]);
+
+            return $this->json_response([
+                'status' => 'ok',
+                'message' => 'Catalogos actualizados. Terceros creados: '.$result['parties_created'].', actualizados: '.$result['parties_updated'].'. Productos creados: '.$result['products_created'].', actualizados: '.$result['products_updated'].'.',
+                'summary' => $result,
+            ]);
+        } catch (\Exception $e) {
+            if ($transaction_started) {
+                \DB::rollback_transaction();
+            }
+            \Log::error('Error creando catalogos desde CFDI: '.$e->getMessage());
+            return $this->json_response(['error' => $e->getMessage()], 400);
+        }
+    }
+
     protected function filters()
     {
         $month = trim((string) \Input::get('month', date('Y-m')));
@@ -649,6 +718,145 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
         ]);
         $product->save();
         return (int) $product->id;
+    }
+
+    protected function materialize_cfdi_party(\Model_Core_Sat_Cfdi $cfdi)
+    {
+        $is_issued = (string) $cfdi->direction === 'issued';
+        $rfc = strtoupper(trim((string) ($is_issued ? $cfdi->receiver_rfc : $cfdi->emitter_rfc)));
+        $name = trim((string) ($is_issued ? $cfdi->receiver_name : $cfdi->emitter_name));
+        $type = $is_issued ? 'customer' : 'supplier';
+        if ($rfc === '' && $name === '') {
+            return ['created' => 0, 'updated' => 0];
+        }
+
+        $row = $rfc !== '' ? \DB::select('id')->from('core_parties')->where('rfc', '=', $rfc)->execute()->current() : null;
+        if ($row) {
+            $party = \Model_Core_Party::find((int) $row['id']);
+            $party->party_type = $this->merge_party_type((string) $party->party_type, $type);
+            $party->name = $party->name ?: ($name ?: $rfc);
+            $party->legal_name = $party->legal_name ?: $name;
+            $party->active = 1;
+            $party->save();
+            $this->link_cfdi_party($cfdi, (int) $party->id, $type);
+            return ['created' => 0, 'updated' => 1];
+        }
+
+        $party = \Model_Core_Party::forge([
+            'party_type' => $type,
+            'code' => $this->unique_party_code($rfc ?: $name),
+            'name' => $name ?: $rfc,
+            'legal_name' => $name,
+            'rfc' => $rfc,
+            'email' => '',
+            'phone' => '',
+            'sat_cfdi_use_code' => $type === 'customer' ? 'S01' : 'G03',
+            'sat_tax_regime_code' => '601',
+            'notes' => 'Creado desde CFDI SAT '.$cfdi->uuid,
+            'active' => 1,
+        ]);
+        $party->save();
+        $this->link_cfdi_party($cfdi, (int) $party->id, $type);
+        return ['created' => 1, 'updated' => 0];
+    }
+
+    protected function materialize_cfdi_product(\Model_Core_Sat_Cfdi $cfdi, array $line)
+    {
+        $sku_seed = trim((string) $line['identification_number']);
+        $name = trim((string) $line['description']);
+        if ($name === '') {
+            return 'products_skipped';
+        }
+
+        $product = null;
+        if ($sku_seed !== '') {
+            $row = \DB::select('id')->from('core_commerce_products')->where('sku', '=', strtoupper($sku_seed))->execute()->current();
+            $product = $row ? \Model_Core_Commerce_Product::find((int) $row['id']) : null;
+        }
+        if (!$product) {
+            $row = \DB::select('id')->from('core_commerce_products')
+                ->where('name', '=', $name)
+                ->where('sat_product_service_code', '=', (string) $line['product_service_code'])
+                ->execute()
+                ->current();
+            $product = $row ? \Model_Core_Commerce_Product::find((int) $row['id']) : null;
+        }
+
+        $data = [
+            'name' => $name,
+            'short_description' => substr($name, 0, 255),
+            'description' => $name,
+            'unit_code' => 'pieza',
+            'sat_product_service_code' => (string) $line['product_service_code'] ?: '01010101',
+            'sat_unit_code' => (string) $line['unit_code'] ?: 'H87',
+            'sat_object_tax_code' => '02',
+            'currency_code' => (string) $cfdi->currency ?: 'MXN',
+            'price' => (string) $cfdi->direction === 'issued' ? max(0, (float) $line['unit_value']) : 0,
+            'cost' => (string) $cfdi->direction === 'received' ? max(0, (float) $line['unit_value']) : 0,
+            'tax_code' => (float) $line['vat_rate'] > 0 ? 'iva_16' : '',
+            'sat_tax_code' => (float) $line['vat_rate'] > 0 ? '002' : '',
+            'sat_tax_factor_type' => (float) $line['vat_rate'] > 0 ? 'Tasa' : 'Exento',
+            'sat_tax_rate' => max(0, (float) $line['vat_rate']),
+            'published' => 0,
+            'active' => 1,
+        ];
+
+        if ($product) {
+            $product->set($data);
+            $product->save();
+            return 'products_updated';
+        }
+
+        $data += [
+            'sku' => $this->unique_product_sku($sku_seed ?: 'SAT-'.$cfdi->id.'-'.$line['id']),
+            'slug' => $this->unique_product_slug($name),
+            'brand_id' => 0,
+            'category_id' => 0,
+            'subcategory_id' => 0,
+            'product_type' => 'product',
+            'is_internal_service' => 0,
+            'stock_quantity' => 0,
+            'stock_reserved' => 0,
+            'stock_updated_at' => 0,
+            'main_image_path' => '',
+            'show_in_home' => 0,
+            'featured' => 0,
+            'sort_order' => 0,
+        ];
+        \Model_Core_Commerce_Product::forge($data)->save();
+        return 'products_created';
+    }
+
+    protected function link_cfdi_party(\Model_Core_Sat_Cfdi $cfdi, $party_id, $type)
+    {
+        if ($type === 'customer') {
+            $cfdi->receiver_party_id = (int) $party_id;
+            $cfdi->customer_party_id = (int) $party_id;
+            return;
+        }
+        $cfdi->emitter_party_id = (int) $party_id;
+        $cfdi->supplier_party_id = (int) $party_id;
+    }
+
+    protected function merge_party_type($current, $incoming)
+    {
+        if ($current === $incoming || $current === 'both') {
+            return $current;
+        }
+        return in_array($current, ['customer', 'supplier'], true) && in_array($incoming, ['customer', 'supplier'], true) ? 'both' : $incoming;
+    }
+
+    protected function unique_party_code($seed)
+    {
+        $base = strtolower(preg_replace('/[^a-z0-9]+/i', '-', trim((string) $seed)));
+        $base = trim($base, '-') ?: 'tercero';
+        $code = substr($base, 0, 60);
+        $i = 2;
+        while (\DB::select('id')->from('core_parties')->where('code', '=', $code)->execute()->current()) {
+            $suffix = '-'.$i++;
+            $code = substr($base, 0, 60 - strlen($suffix)).$suffix;
+        }
+        return $code;
     }
 
     protected function save_cfdi_line_mapping(Model_Core_Sat_Cfdi $cfdi, array $line, array $mapping, $order_id, $item_id, $movement_id)
