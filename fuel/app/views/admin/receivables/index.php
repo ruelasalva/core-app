@@ -7,13 +7,35 @@
     </div>
 
     <div v-if="error" class="alert alert-danger">{{ error }}</div>
+    <div v-if="message" class="alert alert-success">{{ message }}</div>
 
     <div class="card card-light mb-3">
         <div class="card-body py-2">
             <div class="row align-items-end">
                 <div class="col-md-3"><label>Desde</label><input type="date" class="form-control" v-model="periodFilters.start_date"></div>
                 <div class="col-md-3"><label>Hasta</label><input type="date" class="form-control" v-model="periodFilters.end_date"></div>
-                <div class="col-md-3"><button class="btn btn-primary" @click="load"><i class="bi bi-funnel"></i> Consultar</button></div>
+                <div class="col-md-6">
+                    <button class="btn btn-primary" @click="load"><i class="bi bi-funnel"></i> Consultar</button>
+                    <button class="btn btn-outline-secondary ml-2" @click="syncStatuses"><i class="bi bi-arrow-repeat"></i> Sincronizar saldos</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card card-outline card-secondary">
+        <div class="card-header"><h3 class="card-title">Antiguedad de saldos</h3></div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm table-bordered mb-0">
+                    <thead><tr><th>Rango</th><th>Documentos</th><th>Saldo</th></tr></thead>
+                    <tbody>
+                        <tr v-for="bucket in agingRows" :key="bucket.key">
+                            <td><span class="badge" :class="agingClass(bucket.key)">{{ bucket.label }}</span></td>
+                            <td>{{ bucket.documents }}</td>
+                            <td>{{ money(bucket.amount) }}</td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>
@@ -57,19 +79,20 @@
             <div v-show="tab === 'documents'">
                 <div class="table-responsive">
                     <table class="table table-bordered table-hover">
-                        <thead><tr><th>Documento</th><th>Cliente</th><th>Emision</th><th>Vence</th><th>Total</th><th>Saldo</th><th>Estado</th><th></th></tr></thead>
+                        <thead><tr><th>Documento</th><th>Cliente</th><th>Emision</th><th>Vence</th><th>Antiguedad</th><th>Total</th><th>Saldo</th><th>Estado</th><th></th></tr></thead>
                         <tbody>
                             <tr v-for="doc in documents" :key="doc.id">
                                 <td><strong>{{ doc.folio }}</strong><div class="text-muted small">{{ doc.uuid || '-' }}</div></td>
                                 <td>{{ doc.party_name }}</td>
                                 <td>{{ doc.issue_date }}</td>
                                 <td><span :class="isOverdue(doc) ? 'text-danger font-weight-bold' : ''">{{ doc.due_date || '-' }}</span></td>
+                                <td><span class="badge" :class="agingClass(doc.aging_bucket)">{{ agingLabel(doc) }}</span></td>
                                 <td>{{ money(doc.total) }}</td>
                                 <td>{{ money(doc.balance_due) }}</td>
                                 <td><span class="badge badge-light">{{ doc.status }}</span></td>
                                 <td><button class="btn btn-xs btn-outline-primary" @click="openAction({ party_id: doc.party_id, invoice_id: doc.id, promise_amount: doc.balance_due })">Gestion</button></td>
                             </tr>
-                            <tr v-if="documents.length === 0"><td colspan="8" class="text-center text-muted">Sin documentos por cobrar.</td></tr>
+                            <tr v-if="documents.length === 0"><td colspan="9" class="text-center text-muted">Sin documentos por cobrar.</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -141,10 +164,18 @@
 window.onload = function() {
     new Vue({
         el: '#app-receivables',
-        data: { tab: 'customers', error: '', customers: [], documents: [], actions: [], periodFilters: { start_date: '', end_date: '' }, options: { customers: [], documents: [], users: [] }, stats: {}, actionForm: {}, creditForm: {} },
+        data: { tab: 'customers', error: '', message: '', customers: [], documents: [], actions: [], aging: {}, periodFilters: { start_date: '', end_date: '' }, options: { customers: [], documents: [], users: [] }, stats: {}, actionForm: {}, creditForm: {} },
+        computed: {
+            agingRows: function() {
+                var order = ['por_vencer', '1_30', '31_60', '61_90', '90_mas', 'sin_fecha'];
+                return order.map(key => Object.assign({ key: key, label: key, documents: 0, amount: 0 }, this.aging[key] || {}));
+            }
+        },
         mounted: function() { this.load(); },
         methods: {
             load: function() {
+                this.error = '';
+                this.message = '';
                 var url = '<?php echo Uri::create('admin/receivables/data'); ?>';
                 var params = [];
                 if (this.periodFilters.start_date) params.push('start_date=' + encodeURIComponent(this.periodFilters.start_date));
@@ -155,6 +186,7 @@ window.onload = function() {
                     this.customers = data.customers || [];
                     this.documents = data.documents || [];
                     this.actions = data.actions || [];
+                    this.aging = data.aging || {};
                     this.periodFilters = data.period_filters || this.periodFilters;
                     this.options = data.options || this.options;
                     this.stats = data.stats || {};
@@ -173,17 +205,24 @@ window.onload = function() {
             },
             saveAction: function() { this.post('save_action', this.actionForm, 'modal-action'); },
             saveCredit: function() { this.post('save_customer_status', this.creditForm, 'modal-credit'); },
+            syncStatuses: function() { this.post('sync_statuses', {}, null); },
             post: function(action, payload, modal) {
+                this.error = '';
+                this.message = '';
                 fetch('<?php echo Uri::create('admin/receivables'); ?>/' + action, window.coreAppFetchOptions(payload)).then(function(r) { return r.json(); }).then(data => {
                     if (data.error) { this.error = data.error; return; }
+                    if (data.message) this.message = data.message;
                     if (data.customers) this.customers = data.customers;
                     if (data.documents) this.documents = data.documents;
                     if (data.actions) this.actions = data.actions;
+                    if (data.aging) this.aging = data.aging;
                     if (data.stats) this.stats = data.stats;
                     if (modal) this.hideModal(modal);
                 });
             },
             isOverdue: function(doc) { return doc.due_date && doc.due_date < new Date().toISOString().slice(0, 10); },
+            agingLabel: function(doc) { return doc.aging_bucket === 'por_vencer' ? 'Por vencer' : (Number(doc.days_overdue || 0) > 0 ? doc.days_overdue + ' dias' : 'Sin fecha'); },
+            agingClass: function(v) { return ({por_vencer:'badge-success', '1_30':'badge-warning', '31_60':'badge-warning', '61_90':'badge-danger', '90_mas':'badge-dark', sin_fecha:'badge-light'})[v] || 'badge-light'; },
             money: function(v) { return Number(v || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); },
             creditStatusLabel: function(v) { return ({normal:'Normal', watch:'Observacion', hold:'Retener', blocked:'Bloqueado'})[v] || v; },
             creditStatusClass: function(v) { return ({normal:'badge-success', watch:'badge-warning', hold:'badge-danger', blocked:'badge-dark'})[v] || 'badge-light'; },
