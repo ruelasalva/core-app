@@ -69,16 +69,18 @@ class Controller_Admin_Sat extends Controller_Adminbase
         try {
             # SE VALIDA QUE LA ESTRUCTURA EXISTA
             $this->assert_schema_ready();
+            $filters = $this->period_filters();
 
             # SE REGRESA INFORMACION PARA VUE
             return $this->json_response([
                 'config' => $this->get_config(),
                 'credentials' => $this->get_credentials(),
                 'integrations' => $this->get_integration_status(),
-                'stats' => $this->get_stats(),
-                'requests' => $this->get_recent_requests(),
-                'packages' => $this->get_recent_packages(),
-                'cfdi_alerts' => $this->get_cfdi_alerts(),
+                'stats' => $this->get_stats($filters),
+                'requests' => $this->get_recent_requests($filters),
+                'packages' => $this->get_recent_packages($filters),
+                'cfdi_alerts' => $this->get_cfdi_alerts($filters),
+                'period_filters' => $filters,
             ]);
         } catch (\Exception $e) {
             \Log::error('Error cargando SAT: '.$e->getMessage());
@@ -782,17 +784,20 @@ class Controller_Admin_Sat extends Controller_Adminbase
      * @access  protected
      * @return  Array
      */
-    protected function get_stats()
+    protected function get_stats(array $filters = [])
     {
+        $filters = $filters ?: $this->period_filters();
+        $start = $filters['start_date'].' 00:00:00';
+        $end = $filters['end_date'].' 23:59:59';
         # SE REGRESAN CONTADORES AGREGADOS
         return [
-            'cfdi' => (int) \DB::count_records('core_sat_cfdi'),
-            'requests' => (int) \DB::count_records('core_sat_sync_requests'),
-            'packages' => (int) \DB::count_records('core_sat_packages'),
+            'cfdi' => (int) \DB::select()->from('core_sat_cfdi')->where('issued_at', '>=', $start)->where('issued_at', '<=', $end)->execute()->count(),
+            'requests' => (int) \DB::select()->from('core_sat_sync_requests')->where('date_from', '<=', $filters['end_date'])->where('date_to', '>=', $filters['start_date'])->execute()->count(),
+            'packages' => (int) \DB::select()->from('core_sat_packages')->where('created_at', '>=', strtotime($filters['start_date'].' 00:00:00'))->where('created_at', '<=', strtotime($filters['end_date'].' 23:59:59'))->execute()->count(),
             'credentials' => (int) \DB::count_records('core_sat_credentials'),
-            'missing_xml' => $this->field_exists('core_sat_cfdi', 'missing_xml') ? (int) \DB::select()->from('core_sat_cfdi')->where('missing_xml', '=', 1)->execute()->count() : 0,
-            'cancelled' => (int) \DB::select()->from('core_sat_cfdi')->where('sat_status', '=', 'cancelado')->execute()->count(),
-            'unvalidated' => $this->field_exists('core_sat_cfdi', 'last_validated_at') ? (int) \DB::select()->from('core_sat_cfdi')->where('last_validated_at', '=', 0)->execute()->count() : 0,
+            'missing_xml' => $this->field_exists('core_sat_cfdi', 'missing_xml') ? (int) \DB::select()->from('core_sat_cfdi')->where('missing_xml', '=', 1)->where('issued_at', '>=', $start)->where('issued_at', '<=', $end)->execute()->count() : 0,
+            'cancelled' => (int) \DB::select()->from('core_sat_cfdi')->where('sat_status', '=', 'cancelado')->where('issued_at', '>=', $start)->where('issued_at', '<=', $end)->execute()->count(),
+            'unvalidated' => $this->field_exists('core_sat_cfdi', 'last_validated_at') ? (int) \DB::select()->from('core_sat_cfdi')->where('last_validated_at', '=', 0)->where('issued_at', '>=', $start)->where('issued_at', '<=', $end)->execute()->count() : 0,
         ];
     }
 
@@ -804,12 +809,13 @@ class Controller_Admin_Sat extends Controller_Adminbase
      * @access  protected
      * @return  Array
      */
-    protected function get_cfdi_alerts()
+    protected function get_cfdi_alerts(array $filters = [])
     {
         # SI AUN NO EXISTE LA MIGRACION NUEVA SE REGRESA VACIO
         if (!$this->field_exists('core_sat_cfdi', 'missing_xml')) {
             return [];
         }
+        $filters = $filters ?: $this->period_filters();
 
         # SE CONSULTAN ALERTAS PRINCIPALES
         $rows = \DB::select('id', 'uuid', 'direction', 'emitter_rfc', 'receiver_rfc', 'total', 'sat_status', 'origin', 'xml_path', 'missing_xml', 'last_validated_at')
@@ -819,6 +825,8 @@ class Controller_Admin_Sat extends Controller_Adminbase
                 ->or_where('sat_status', '=', 'cancelado')
                 ->or_where('last_validated_at', '=', 0)
             ->where_close()
+            ->where('issued_at', '>=', $filters['start_date'].' 00:00:00')
+            ->where('issued_at', '<=', $filters['end_date'].' 23:59:59')
             ->order_by('id', 'desc')
             ->limit(20)
             ->execute();
@@ -841,10 +849,13 @@ class Controller_Admin_Sat extends Controller_Adminbase
      * @access  protected
      * @return  Array
      */
-    protected function get_recent_requests()
+    protected function get_recent_requests(array $filters = [])
     {
+        $filters = $filters ?: $this->period_filters();
         # SE CONSULTAN ULTIMAS SOLICITUDES
         $requests = Model_Core_Sat_Sync_Request::query()
+            ->where('date_from', '<=', $filters['end_date'])
+            ->where('date_to', '>=', $filters['start_date'])
             ->order_by('created_at', 'desc')
             ->limit(10)
             ->get();
@@ -882,9 +893,12 @@ class Controller_Admin_Sat extends Controller_Adminbase
      * @access  protected
      * @return  Array
      */
-    protected function get_recent_packages()
+    protected function get_recent_packages(array $filters = [])
     {
+        $filters = $filters ?: $this->period_filters();
         $packages = Model_Core_Sat_Package::query()
+            ->where('created_at', '>=', strtotime($filters['start_date'].' 00:00:00'))
+            ->where('created_at', '<=', strtotime($filters['end_date'].' 23:59:59'))
             ->order_by('created_at', 'desc')
             ->limit(10)
             ->get();

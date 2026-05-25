@@ -54,14 +54,16 @@ class Controller_Admin_Helpdesk extends Controller_Adminbase
         try {
             # SE VALIDA QUE LA ESTRUCTURA EXISTA
             $this->assert_schema_ready();
+            $filters = $this->period_filters();
 
             # SE REGRESA INFORMACION PARA VUE
             return $this->json_response([
-                'tickets' => $this->get_tickets(),
-                'messages' => $this->get_messages(),
-                'documents' => $this->get_ticket_documents(),
+                'tickets' => $this->get_tickets($filters),
+                'messages' => $this->get_messages($filters),
+                'documents' => $this->get_ticket_documents($filters),
                 'options' => $this->get_options(),
-                'stats' => $this->get_stats(),
+                'stats' => $this->get_stats($filters),
+                'period_filters' => $filters,
             ]);
         } catch (\Exception $e) {
             \Log::error('Error cargando helpdesk: '.$e->getMessage());
@@ -396,10 +398,13 @@ class Controller_Admin_Helpdesk extends Controller_Adminbase
         return $this->post_upload_document();
     }
 
-    protected function get_tickets()
+    protected function get_tickets(array $filters = [])
     {
+        $filters = $filters ?: $this->period_filters();
+        $start = strtotime($filters['start_date'].' 00:00:00');
+        $end = strtotime($filters['end_date'].' 23:59:59');
         $tickets = [];
-        foreach (Model_Core_Helpdesk_Ticket::query()->order_by('id', 'desc')->limit(200)->get() as $ticket) {
+        foreach (Model_Core_Helpdesk_Ticket::query()->where('created_at', '>=', $start)->where('created_at', '<=', $end)->order_by('id', 'desc')->limit(200)->get() as $ticket) {
             $row = $ticket->to_array();
             $row['created_at'] = $ticket->created_at ? date('d/m/Y H:i', $ticket->created_at) : '';
             $row['updated_at'] = $ticket->updated_at ? date('d/m/Y H:i', $ticket->updated_at) : '';
@@ -488,10 +493,13 @@ class Controller_Admin_Helpdesk extends Controller_Adminbase
         return $time ? (int) $time : 0;
     }
 
-    protected function get_messages()
+    protected function get_messages(array $filters = [])
     {
+        $filters = $filters ?: $this->period_filters();
+        $start = strtotime($filters['start_date'].' 00:00:00');
+        $end = strtotime($filters['end_date'].' 23:59:59');
         $messages = [];
-        foreach (Model_Core_Helpdesk_Message::query()->order_by('id', 'asc')->limit(500)->get() as $message) {
+        foreach (Model_Core_Helpdesk_Message::query()->where('created_at', '>=', $start)->where('created_at', '<=', $end)->order_by('id', 'asc')->limit(500)->get() as $message) {
             $row = $message->to_array();
             $row['created_at'] = $message->created_at ? date('d/m/Y H:i', $message->created_at) : '';
             $row['updated_at'] = $message->updated_at ? date('d/m/Y H:i', $message->updated_at) : '';
@@ -508,8 +516,9 @@ class Controller_Admin_Helpdesk extends Controller_Adminbase
      * @access  protected
      * @return  Array
      */
-    protected function get_ticket_documents()
+    protected function get_ticket_documents(array $filters = [])
     {
+        $filters = $filters ?: $this->period_filters();
         $rows = \DB::select(
                 ['d.id', 'id'],
                 ['l.entity_id', 'ticket_id'],
@@ -528,6 +537,8 @@ class Controller_Admin_Helpdesk extends Controller_Adminbase
             ->where('l.entity_type', '=', 'ticket')
             ->where('l.active', '=', 1)
             ->where('d.active', '=', 1)
+            ->where('d.created_at', '>=', strtotime($filters['start_date'].' 00:00:00'))
+            ->where('d.created_at', '<=', strtotime($filters['end_date'].' 23:59:59'))
             ->order_by('d.id', 'desc')
             ->limit(500)
             ->execute();
@@ -568,16 +579,19 @@ class Controller_Admin_Helpdesk extends Controller_Adminbase
         ];
     }
 
-    protected function get_stats()
+    protected function get_stats(array $filters = [])
     {
+        $filters = $filters ?: $this->period_filters();
+        $start = strtotime($filters['start_date'].' 00:00:00');
+        $end = strtotime($filters['end_date'].' 23:59:59');
         $open_statuses = \DB::select('id')->from('core_helpdesk_statuses')->where('is_closed', '=', 0)->execute()->as_array();
         $open_ids = array_map(function ($row) { return (int) $row['id']; }, $open_statuses);
 
         return [
-            'tickets' => (int) \DB::count_records('core_helpdesk_tickets'),
-            'open' => !empty($open_ids) ? (int) \DB::select()->from('core_helpdesk_tickets')->where('status_id', 'in', $open_ids)->execute()->count() : 0,
-            'assigned_to_me' => (int) \DB::select()->from('core_helpdesk_tickets')->where('assigned_user_id', '=', $this->user_id)->execute()->count(),
-            'messages' => (int) \DB::count_records('core_helpdesk_messages'),
+            'tickets' => (int) \DB::select()->from('core_helpdesk_tickets')->where('created_at', '>=', $start)->where('created_at', '<=', $end)->execute()->count(),
+            'open' => !empty($open_ids) ? (int) \DB::select()->from('core_helpdesk_tickets')->where('status_id', 'in', $open_ids)->where('created_at', '>=', $start)->where('created_at', '<=', $end)->execute()->count() : 0,
+            'assigned_to_me' => (int) \DB::select()->from('core_helpdesk_tickets')->where('assigned_user_id', '=', $this->user_id)->where('created_at', '>=', $start)->where('created_at', '<=', $end)->execute()->count(),
+            'messages' => (int) \DB::select()->from('core_helpdesk_messages')->where('created_at', '>=', $start)->where('created_at', '<=', $end)->execute()->count(),
         ];
     }
 

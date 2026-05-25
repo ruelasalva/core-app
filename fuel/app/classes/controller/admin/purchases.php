@@ -49,13 +49,15 @@ class Controller_Admin_Purchases extends Controller_Adminbase
     {
         try {
             $this->assert_schema_ready();
+            $filters = $this->period_filters();
             return $this->json_response([
-                'orders' => $this->orders(),
-                'invoices' => $this->invoices(),
-                'receipts' => $this->receipts(),
-                'documents' => $this->documents(),
+                'orders' => $this->orders($filters),
+                'invoices' => $this->invoices($filters),
+                'receipts' => $this->receipts($filters),
+                'documents' => $this->documents($filters),
                 'options' => $this->options(),
-                'stats' => $this->stats(),
+                'stats' => $this->stats($filters),
+                'period_filters' => $filters,
             ]);
         } catch (\Exception $e) {
             \Log::error('Error cargando compras: '.$e->getMessage());
@@ -438,15 +440,18 @@ class Controller_Admin_Purchases extends Controller_Adminbase
         return $this->post_upload_document();
     }
 
-    protected function orders()
+    protected function orders(array $filters = [])
     {
+        $filters = $filters ?: $this->period_filters();
         $rows = \DB::select(['o.id', 'id'], ['o.folio', 'folio'], ['o.party_id', 'party_id'], ['p.name', 'party_name'], ['p.rfc', 'party_rfc'], ['o.department_id', 'department_id'], ['d.name', 'department_name'], ['o.requested_by', 'requested_by'], ['ur.username', 'requested_by_name'], ['o.requested_at', 'requested_at'], ['o.authorized_by', 'authorized_by'], ['ua.username', 'authorized_by_name'], ['o.authorized_at', 'authorized_at'], ['o.order_date', 'order_date'], ['o.expected_date', 'expected_date'], ['o.payment_term_id', 'payment_term_id'], ['o.status', 'status'], ['o.approval_status', 'approval_status'], ['o.approval_required', 'approval_required'], ['o.approval_rule_id', 'approval_rule_id'], ['o.currency_code', 'currency_code'], ['o.exchange_rate', 'exchange_rate'], ['o.subtotal', 'subtotal'], ['o.tax_total', 'tax_total'], ['o.retention_total', 'retention_total'], ['o.total', 'total'], ['o.invoiced_total', 'invoiced_total'], ['o.balance_total', 'balance_total'], ['o.notes', 'notes'], ['o.internal_notes', 'internal_notes'], ['o.approval_notes', 'approval_notes'], ['o.external_reference', 'external_reference'], ['o.created_at', 'created_at'])
             ->from(['core_purchase_orders', 'o'])
             ->join(['core_parties', 'p'], 'left')->on('o.party_id', '=', 'p.id')
             ->join(['core_departments', 'd'], 'left')->on('o.department_id', '=', 'd.id')
             ->join(['users', 'ur'], 'left')->on('o.requested_by', '=', 'ur.id')
             ->join(['users', 'ua'], 'left')->on('o.authorized_by', '=', 'ua.id')
-            ->where('o.active', '=', 1);
+            ->where('o.active', '=', 1)
+            ->where('o.order_date', '>=', $filters['start_date'])
+            ->where('o.order_date', '<=', $filters['end_date']);
         $this->apply_purchase_scope($rows, 'o', 'p');
 
         $rows = $rows
@@ -476,14 +481,17 @@ class Controller_Admin_Purchases extends Controller_Adminbase
             ->as_array();
     }
 
-    protected function invoices()
+    protected function invoices(array $filters = [])
     {
+        $filters = $filters ?: $this->period_filters();
         $rows = \DB::select(['i.id', 'id'], ['i.folio', 'folio'], ['i.party_id', 'party_id'], ['p.name', 'party_name'], ['i.order_id', 'order_id'], ['o.folio', 'order_folio'], ['o.status', 'order_status'], ['i.cfdi_id', 'cfdi_id'], ['i.uuid', 'uuid'], ['c.sat_status', 'cfdi_sat_status'], ['c.voucher_type', 'cfdi_type'], ['i.invoice_date', 'invoice_date'], ['i.due_date', 'due_date'], ['i.currency_code', 'currency_code'], ['i.subtotal', 'subtotal'], ['i.tax_total', 'tax_total'], ['i.retention_total', 'retention_total'], ['i.total', 'total'], ['i.balance_due', 'balance_due'], ['i.status', 'status'], ['i.validation_status', 'validation_status'], ['i.sat_status', 'sat_status'], ['i.message', 'message'], ['i.created_at', 'created_at'])
             ->from(['core_purchase_invoices', 'i'])
             ->join(['core_parties', 'p'], 'left')->on('i.party_id', '=', 'p.id')
             ->join(['core_purchase_orders', 'o'], 'left')->on('i.order_id', '=', 'o.id')
             ->join(['core_sat_cfdi', 'c'], 'left')->on('i.cfdi_id', '=', 'c.id')
-            ->where('i.active', '=', 1);
+            ->where('i.active', '=', 1)
+            ->where('i.invoice_date', '>=', $filters['start_date'])
+            ->where('i.invoice_date', '<=', $filters['end_date']);
         $this->apply_purchase_scope($rows, 'o', 'p');
 
         $rows = $rows
@@ -498,13 +506,16 @@ class Controller_Admin_Purchases extends Controller_Adminbase
         return $rows;
     }
 
-    protected function receipts()
+    protected function receipts(array $filters = [])
     {
+        $filters = $filters ?: $this->period_filters();
         $rows = \DB::select(['r.id', 'id'], ['r.folio', 'folio'], ['r.party_id', 'party_id'], ['p.name', 'party_name'], ['r.issue_date', 'issue_date'], ['r.scheduled_payment_date', 'scheduled_payment_date'], ['r.currency_code', 'currency_code'], ['r.total', 'total'], ['r.payment_id', 'payment_id'], ['pay.folio', 'payment_folio'], ['pay.status', 'payment_status'], ['r.status', 'status'], ['r.notes', 'notes'], ['r.created_at', 'created_at'])
             ->from(['core_purchase_receipts', 'r'])
             ->join(['core_parties', 'p'], 'left')->on('r.party_id', '=', 'p.id')
             ->join(['core_payments', 'pay'], 'left')->on('r.payment_id', '=', 'pay.id')
-            ->where('r.active', '=', 1);
+            ->where('r.active', '=', 1)
+            ->where('r.issue_date', '>=', $filters['start_date'])
+            ->where('r.issue_date', '<=', $filters['end_date']);
         $this->apply_party_scope($rows, 'p', 'purchases');
 
         $rows = $rows
@@ -530,14 +541,17 @@ class Controller_Admin_Purchases extends Controller_Adminbase
             ->as_array();
     }
 
-    protected function documents()
+    protected function documents(array $filters = [])
     {
+        $filters = $filters ?: $this->period_filters();
         $rows = \DB::select(['d.id', 'id'], ['l.entity_type', 'entity_type'], ['l.entity_id', 'entity_id'], ['d.title', 'title'], ['d.original_name', 'original_name'], ['d.file_path', 'file_path'], ['d.file_extension', 'file_extension'], ['d.visibility', 'visibility'], ['d.is_evidence', 'is_evidence'], ['d.created_at', 'created_at'])
             ->from(['core_document_links', 'l'])
             ->join(['core_documents', 'd'], 'inner')->on('d.id', '=', 'l.document_id')
             ->where('l.entity_type', 'in', ['purchase_order', 'purchase_invoice', 'purchase_receipt'])
             ->where('l.active', '=', 1)
             ->where('d.active', '=', 1)
+            ->where('d.created_at', '>=', strtotime($filters['start_date'].' 00:00:00'))
+            ->where('d.created_at', '<=', strtotime($filters['end_date'].' 23:59:59'))
             ->order_by('d.id', 'desc')
             ->limit(300)
             ->execute()
@@ -563,15 +577,16 @@ class Controller_Admin_Purchases extends Controller_Adminbase
         ];
     }
 
-    protected function stats()
+    protected function stats(array $filters = [])
     {
+        $filters = $filters ?: $this->period_filters();
         return [
-            'orders' => (int) \DB::count_records('core_purchase_orders'),
-            'open_orders' => (int) \DB::select()->from('core_purchase_orders')->where('status', 'in', ['draft', 'pending_authorization', 'authorized', 'partial'])->where('active', '=', 1)->execute()->count(),
-            'pending_authorizations' => (int) \DB::select()->from('core_purchase_orders')->where('approval_status', '=', 'pending')->where('active', '=', 1)->execute()->count(),
-            'invoices' => (int) \DB::count_records('core_purchase_invoices'),
-            'pending_invoices' => (int) \DB::select()->from('core_purchase_invoices')->where('validation_status', '=', 'pending')->where('active', '=', 1)->execute()->count(),
-            'receipts' => (int) \DB::count_records('core_purchase_receipts'),
+            'orders' => (int) \DB::select()->from('core_purchase_orders')->where('order_date', '>=', $filters['start_date'])->where('order_date', '<=', $filters['end_date'])->execute()->count(),
+            'open_orders' => (int) \DB::select()->from('core_purchase_orders')->where('status', 'in', ['draft', 'pending_authorization', 'authorized', 'partial'])->where('active', '=', 1)->where('order_date', '>=', $filters['start_date'])->where('order_date', '<=', $filters['end_date'])->execute()->count(),
+            'pending_authorizations' => (int) \DB::select()->from('core_purchase_orders')->where('approval_status', '=', 'pending')->where('active', '=', 1)->where('order_date', '>=', $filters['start_date'])->where('order_date', '<=', $filters['end_date'])->execute()->count(),
+            'invoices' => (int) \DB::select()->from('core_purchase_invoices')->where('invoice_date', '>=', $filters['start_date'])->where('invoice_date', '<=', $filters['end_date'])->execute()->count(),
+            'pending_invoices' => (int) \DB::select()->from('core_purchase_invoices')->where('validation_status', '=', 'pending')->where('active', '=', 1)->where('invoice_date', '>=', $filters['start_date'])->where('invoice_date', '<=', $filters['end_date'])->execute()->count(),
+            'receipts' => (int) \DB::select()->from('core_purchase_receipts')->where('issue_date', '>=', $filters['start_date'])->where('issue_date', '<=', $filters['end_date'])->execute()->count(),
         ];
     }
 

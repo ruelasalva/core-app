@@ -8,6 +8,16 @@
 
     <div v-if="error" class="alert alert-danger">{{ error }}</div>
 
+    <div class="card card-light mb-3">
+        <div class="card-body py-2">
+            <div class="row align-items-end">
+                <div class="col-md-3"><label>Desde</label><input type="date" class="form-control" v-model="periodFilters.start_date"></div>
+                <div class="col-md-3"><label>Hasta</label><input type="date" class="form-control" v-model="periodFilters.end_date"></div>
+                <div class="col-md-3"><button class="btn btn-primary" @click="load"><i class="bi bi-funnel"></i> Consultar</button></div>
+            </div>
+        </div>
+    </div>
+
     <div class="card card-primary card-outline">
         <div class="card-header p-2">
             <ul class="nav nav-pills">
@@ -198,6 +208,7 @@ window.onload = function() {
             baseUrl: '<?php echo Uri::base(false); ?>',
             loading: true, error: '', tab: 'orders', selectedFile: null,
             orders: [], invoices: [], receipts: [], documents: [],
+            periodFilters: { start_date: '', end_date: '' },
             options: { suppliers: [], departments: [], users: [], payment_terms: [], payments: [], approval_rules: [], currencies: [], taxes: [], retentions: [] },
             stats: {},
             orderForm: { items: [] },
@@ -215,7 +226,12 @@ window.onload = function() {
         methods: {
             load: function() {
                 var self = this; self.loading = true;
-                fetch('<?php echo Uri::create('admin/purchases/data'); ?>').then(function(r){ return r.json(); }).then(function(data){
+                var params = [];
+                if (self.periodFilters.start_date) params.push('start_date=' + encodeURIComponent(self.periodFilters.start_date));
+                if (self.periodFilters.end_date) params.push('end_date=' + encodeURIComponent(self.periodFilters.end_date));
+                var url = '<?php echo Uri::create('admin/purchases/data'); ?>';
+                if (params.length) url += '?' + params.join('&');
+                fetch(url).then(function(r){ return r.json(); }).then(function(data){
                     self.orders = data.orders || [];
                     self.invoices = data.invoices || [];
                     self.receipts = (data.receipts || []).map(function(receipt) {
@@ -223,6 +239,7 @@ window.onload = function() {
                         return receipt;
                     });
                     self.documents = data.documents || [];
+                    self.periodFilters = data.period_filters || self.periodFilters;
                     data.options = data.options || {};
                     self.options = {
                         suppliers: data.options.suppliers || [],

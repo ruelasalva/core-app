@@ -54,18 +54,20 @@ class Controller_Admin_Payments extends Controller_Adminbase
         try {
             # SE VALIDA ESTRUCTURA
             $this->assert_schema_ready();
+            $filters = $this->period_filters();
 
             # SE REGRESA INFORMACION PARA VUE
             return $this->json_response([
-                'payments' => $this->get_payments(),
+                'payments' => $this->get_payments($filters),
                 'receivables' => $this->get_receivables(),
                 'payables' => $this->get_payables(),
-                'movements' => $this->get_movements(),
-                'reconciliations' => $this->get_reconciliations(),
-                'statement_imports' => $this->get_statement_imports(),
+                'movements' => $this->get_movements($filters),
+                'reconciliations' => $this->get_reconciliations($filters),
+                'statement_imports' => $this->get_statement_imports($filters),
                 'suggestions' => $this->get_reconciliation_suggestions(),
                 'options' => $this->get_options(),
-                'stats' => $this->get_stats(),
+                'stats' => $this->get_stats($filters),
+                'period_filters' => $filters,
             ]);
         } catch (\Exception $e) {
             \Log::error('Error cargando pagos: '.$e->getMessage());
@@ -475,10 +477,11 @@ class Controller_Admin_Payments extends Controller_Adminbase
      * @access  protected
      * @return  Array
      */
-    protected function get_payments()
+    protected function get_payments(array $filters = [])
     {
+        $filters = $filters ?: $this->period_filters();
         $items = [];
-        foreach (Model_Core_Payment::query()->order_by('id', 'desc')->limit(200)->get() as $payment) {
+        foreach (Model_Core_Payment::query()->where('payment_date', '>=', $filters['start_date'])->where('payment_date', '<=', $filters['end_date'])->order_by('id', 'desc')->limit(200)->get() as $payment) {
             $row = $payment->to_array();
             $row['created_at'] = $payment->created_at ? date('d/m/Y H:i', $payment->created_at) : '';
             $items[] = $row;
@@ -494,10 +497,11 @@ class Controller_Admin_Payments extends Controller_Adminbase
      * @access  protected
      * @return  Array
      */
-    protected function get_movements()
+    protected function get_movements(array $filters = [])
     {
+        $filters = $filters ?: $this->period_filters();
         $items = [];
-        foreach (Model_Core_Bank_Movement::query()->order_by('id', 'desc')->limit(200)->get() as $movement) {
+        foreach (Model_Core_Bank_Movement::query()->where('movement_date', '>=', $filters['start_date'])->where('movement_date', '<=', $filters['end_date'])->order_by('id', 'desc')->limit(200)->get() as $movement) {
             $row = $movement->to_array();
             $row['created_at'] = $movement->created_at ? date('d/m/Y H:i', $movement->created_at) : '';
             $items[] = $row;
@@ -591,23 +595,25 @@ class Controller_Admin_Payments extends Controller_Adminbase
             ->as_array();
     }
 
-    protected function get_reconciliations()
+    protected function get_reconciliations(array $filters = [])
     {
+        $filters = $filters ?: $this->period_filters();
         $items = [];
-        foreach (Model_Core_Bank_Reconciliation::query()->order_by('id', 'desc')->limit(100)->get() as $reconciliation) {
+        foreach (Model_Core_Bank_Reconciliation::query()->where('period_start', '<=', $filters['end_date'])->where('period_end', '>=', $filters['start_date'])->order_by('id', 'desc')->limit(100)->get() as $reconciliation) {
             $items[] = $reconciliation->to_array();
         }
         return $items;
     }
 
-    protected function get_statement_imports()
+    protected function get_statement_imports(array $filters = [])
     {
         if (!\DBUtil::table_exists('core_bank_statement_imports')) {
             return [];
         }
 
+        $filters = $filters ?: $this->period_filters();
         $items = [];
-        foreach (Model_Core_Bank_Statement_Import::query()->order_by('id', 'desc')->limit(50)->get() as $statement) {
+        foreach (Model_Core_Bank_Statement_Import::query()->where('period_start', '<=', $filters['end_date'])->where('period_end', '>=', $filters['start_date'])->order_by('id', 'desc')->limit(50)->get() as $statement) {
             $row = $statement->to_array();
             $row['created_at_label'] = $statement->created_at ? date('d/m/Y H:i', (int) $statement->created_at) : '';
             $items[] = $row;
@@ -668,8 +674,9 @@ class Controller_Admin_Payments extends Controller_Adminbase
         ];
     }
 
-    protected function get_stats()
+    protected function get_stats(array $filters = [])
     {
+        $filters = $filters ?: $this->period_filters();
         $receivable_rows = $this->get_receivables();
         $payable_rows = $this->get_payables();
         $receivables = count($receivable_rows);
@@ -684,16 +691,16 @@ class Controller_Admin_Payments extends Controller_Adminbase
         }
 
         return [
-            'payments' => (int) \DB::count_records('core_payments'),
+            'payments' => (int) \DB::select()->from('core_payments')->where('payment_date', '>=', $filters['start_date'])->where('payment_date', '<=', $filters['end_date'])->execute()->count(),
             'receivables' => $receivables,
             'receivable_total' => $receivable_total,
             'payables' => $payables,
             'payable_total' => $payable_total,
-            'pending' => (int) \DB::select()->from('core_payments')->where('status', '=', 'pending')->execute()->count(),
-            'rep_pending' => \DBUtil::field_exists('core_payments', ['rep_status']) ? (int) \DB::select()->from('core_payments')->where('rep_status', '=', 'pending')->execute()->count() : 0,
-            'movements' => (int) \DB::count_records('core_bank_movements'),
-            'unreconciled' => (int) \DB::select()->from('core_bank_movements')->where('reconciled', '=', 0)->execute()->count(),
-            'statement_imports' => \DBUtil::table_exists('core_bank_statement_imports') ? (int) \DB::count_records('core_bank_statement_imports') : 0,
+            'pending' => (int) \DB::select()->from('core_payments')->where('status', '=', 'pending')->where('payment_date', '>=', $filters['start_date'])->where('payment_date', '<=', $filters['end_date'])->execute()->count(),
+            'rep_pending' => \DBUtil::field_exists('core_payments', ['rep_status']) ? (int) \DB::select()->from('core_payments')->where('rep_status', '=', 'pending')->where('payment_date', '>=', $filters['start_date'])->where('payment_date', '<=', $filters['end_date'])->execute()->count() : 0,
+            'movements' => (int) \DB::select()->from('core_bank_movements')->where('movement_date', '>=', $filters['start_date'])->where('movement_date', '<=', $filters['end_date'])->execute()->count(),
+            'unreconciled' => (int) \DB::select()->from('core_bank_movements')->where('reconciled', '=', 0)->where('movement_date', '>=', $filters['start_date'])->where('movement_date', '<=', $filters['end_date'])->execute()->count(),
+            'statement_imports' => count($this->get_statement_imports($filters)),
             'reconciliation_suggestions' => \DBUtil::table_exists('core_bank_reconciliation_suggestions') ? (int) \DB::select()->from('core_bank_reconciliation_suggestions')->where('status', '=', 'pending')->execute()->count() : 0,
         ];
     }

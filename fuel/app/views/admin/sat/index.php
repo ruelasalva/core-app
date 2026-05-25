@@ -47,6 +47,13 @@
                 </a>
             </div>
         </div>
+        <div class="card-body border-bottom py-2">
+            <div class="row align-items-end">
+                <div class="col-md-3"><label>Desde</label><input type="date" class="form-control" v-model="periodFilters.start_date"></div>
+                <div class="col-md-3"><label>Hasta</label><input type="date" class="form-control" v-model="periodFilters.end_date"></div>
+                <div class="col-md-3"><button class="btn btn-primary" @click="loadData"><i class="bi bi-funnel"></i> Consultar</button></div>
+            </div>
+        </div>
         <div class="card-header p-0 border-bottom-0">
             <ul class="nav nav-tabs" role="tablist">
                 <li class="nav-item">
@@ -490,6 +497,7 @@ window.onload = function() {
             requests: [],
             packages: [],
             cfdiAlerts: [],
+            periodFilters: { start_date: '', end_date: '' },
             stats: { cfdi: 0, requests: 0, packages: 0, credentials: 0, missing_xml: 0, cancelled: 0, unvalidated: 0 },
             integrations: {},
             credentialForm: {},
@@ -521,7 +529,12 @@ window.onload = function() {
             },
             loadData() {
                 this.loading = true;
-                fetch('<?php echo Uri::create('admin/sat/data'); ?>')
+                const params = [];
+                if (this.periodFilters.start_date) params.push('start_date=' + encodeURIComponent(this.periodFilters.start_date));
+                if (this.periodFilters.end_date) params.push('end_date=' + encodeURIComponent(this.periodFilters.end_date));
+                let url = '<?php echo Uri::create('admin/sat/data'); ?>';
+                if (params.length) url += '?' + params.join('&');
+                fetch(url)
                     .then(res => res.json())
                     .then(data => {
                         this.loading = false;
@@ -536,6 +549,7 @@ window.onload = function() {
                         this.requests = data.requests || [];
                         this.packages = data.packages || [];
                         this.cfdiAlerts = data.cfdi_alerts || [];
+                        this.periodFilters = data.period_filters || this.periodFilters;
                         this.stats = data.stats || this.stats;
                     });
             },

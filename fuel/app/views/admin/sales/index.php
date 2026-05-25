@@ -137,6 +137,15 @@
             <div v-if="error" class="alert alert-danger">
                 {{ error }}
             </div>
+            <div class="card card-light mb-3">
+                <div class="card-body py-2">
+                    <div class="row align-items-end">
+                        <div class="col-md-3"><label>Desde</label><input type="date" class="form-control" v-model="periodFilters.start_date"></div>
+                        <div class="col-md-3"><label>Hasta</label><input type="date" class="form-control" v-model="periodFilters.end_date"></div>
+                        <div class="col-md-3"><button class="btn btn-primary" @click="loadData"><i class="bi bi-funnel"></i> Consultar</button></div>
+                    </div>
+                </div>
+            </div>
             <div v-if="loading" class="text-center p-5">
                 <div class="spinner-border text-primary" role="status"></div>
                 <p class="mt-2">Cargando ventas...</p>
@@ -674,6 +683,7 @@ window.onload = function() {
             selected: null,
             selectedOrder: null,
             stats: { quotes: 0, orders: 0, deliveries: 0, prequote: 0, requested: 0, approved: 0, rejected: 0 },
+            periodFilters: { start_date: '', end_date: '' },
             options: { customers: [], sellers: [], products: [], brands: [], categories: [], warehouses: [] },
             quoteForm: { party_id: '', seller_id: 0, quote_mode: 'quote', items: [], customer_notes: '', internal_notes: '', offline_uuid: '' },
             lineForm: { product_id: '', product_query: '', product_type: 'product', quantity: 1, search_open: false, search_results: [] },
@@ -734,7 +744,12 @@ window.onload = function() {
             loadData() {
                 this.loading = true;
                 this.error = '';
-                fetch('<?php echo Uri::create('admin/sales/data'); ?>')
+                const params = [];
+                if (this.periodFilters.start_date) params.push('start_date=' + encodeURIComponent(this.periodFilters.start_date));
+                if (this.periodFilters.end_date) params.push('end_date=' + encodeURIComponent(this.periodFilters.end_date));
+                let url = '<?php echo Uri::create('admin/sales/data'); ?>';
+                if (params.length) url += '?' + params.join('&');
+                fetch(url)
                     .then(res => window.coreAppJson ? window.coreAppJson(res) : res.json())
                     .then(data => {
                         this.loading = false;
@@ -746,6 +761,7 @@ window.onload = function() {
                         this.orders = data.orders || [];
                         this.deliveries = data.deliveries || [];
                         this.stats = data.stats || this.stats;
+                        this.periodFilters = data.period_filters || this.periodFilters;
                         this.options = data.options || this.options;
                         this.cacheCatalogs();
                     })

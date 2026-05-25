@@ -54,18 +54,20 @@ class Controller_Admin_Billing extends Controller_Adminbase
         try {
             # SE VALIDA ESTRUCTURA
             $this->assert_schema_ready();
+            $filters = $this->period_filters();
 
             # SE REGRESA INFORMACION PARA VUE
             return $this->json_response([
-                'invoices' => $this->get_invoices(),
-                'recurring_profiles' => $this->get_recurring_profiles(),
+                'invoices' => $this->get_invoices($filters),
+                'recurring_profiles' => $this->get_recurring_profiles($filters),
                 'recurring_items' => $this->get_recurring_items((int) \Input::get('recurring_profile_id', 0)),
-                'recurring_runs' => $this->get_recurring_runs(),
-                'fiscal_documents' => $this->get_fiscal_documents(),
-                'pending_deliveries' => $this->get_pending_deliveries(),
+                'recurring_runs' => $this->get_recurring_runs($filters),
+                'fiscal_documents' => $this->get_fiscal_documents($filters),
+                'pending_deliveries' => $this->get_pending_deliveries($filters),
                 'items' => $this->get_items((int) \Input::get('invoice_id', 0)),
                 'options' => $this->get_options(),
-                'stats' => $this->get_stats(),
+                'stats' => $this->get_stats($filters),
+                'period_filters' => $filters,
             ]);
         } catch (\Exception $e) {
             \Log::error('Error cargando facturacion: '.$e->getMessage());
@@ -738,11 +740,17 @@ class Controller_Admin_Billing extends Controller_Adminbase
      * @access  protected
      * @return  Array
      */
-    protected function get_invoices()
+    protected function get_invoices(array $filters = [])
     {
+        $filters = $filters ?: $this->period_filters();
         # SE CONSULTAN FACTURAS RECIENTES
         $items = [];
-        $rows = Model_Core_Billing_Invoice::query()->order_by('id', 'desc')->limit(200)->get();
+        $rows = Model_Core_Billing_Invoice::query()
+            ->where('issue_date', '>=', $filters['start_date'])
+            ->where('issue_date', '<=', $filters['end_date'])
+            ->order_by('id', 'desc')
+            ->limit(200)
+            ->get();
 
         foreach ($rows as $invoice) {
             $row = $invoice->to_array();
@@ -785,32 +793,38 @@ class Controller_Admin_Billing extends Controller_Adminbase
         return $items;
     }
 
-    protected function get_fiscal_documents()
+    protected function get_fiscal_documents(array $filters = [])
     {
         if (!\DBUtil::table_exists('core_fiscal_documents')) {
             return [];
         }
+        $filters = $filters ?: $this->period_filters();
 
         return \DB::select(['f.id', 'id'], ['f.folio', 'folio'], ['f.document_type', 'document_type'], ['f.voucher_type', 'voucher_type'], ['f.party_id', 'party_id'], ['p.name', 'party_name'], ['f.source_module', 'source_module'], ['f.source_entity_type', 'source_entity_type'], ['f.source_entity_id', 'source_entity_id'], ['f.source_folio', 'source_folio'], ['f.fiscal_mode', 'fiscal_mode'], ['f.uuid', 'uuid'], ['f.sat_status', 'sat_status'], ['f.workflow_status', 'workflow_status'], ['f.issue_date', 'issue_date'], ['f.currency_code', 'currency_code'], ['f.total', 'total'], ['f.created_at', 'created_at'])
             ->from(['core_fiscal_documents', 'f'])
             ->join(['core_parties', 'p'], 'left')->on('f.party_id', '=', 'p.id')
             ->where('f.active', '=', 1)
+            ->where('f.issue_date', '>=', $filters['start_date'])
+            ->where('f.issue_date', '<=', $filters['end_date'])
             ->order_by('f.id', 'desc')
             ->limit(200)
             ->execute()
             ->as_array();
     }
 
-    protected function get_recurring_profiles()
+    protected function get_recurring_profiles(array $filters = [])
     {
         if (!\DBUtil::table_exists('core_billing_recurring_profiles')) {
             return [];
         }
+        $filters = $filters ?: $this->period_filters();
 
         return \DB::select(['r.id', 'id'], ['r.folio', 'folio'], ['r.name', 'name'], ['r.party_id', 'party_id'], ['p.name', 'party_name'], ['r.invoice_type', 'invoice_type'], ['r.frequency', 'frequency'], ['r.start_date', 'start_date'], ['r.end_date', 'end_date'], ['r.next_run_date', 'next_run_date'], ['r.last_run_at', 'last_run_at'], ['r.auto_stamp', 'auto_stamp'], ['r.pac_connection_id', 'pac_connection_id'], ['r.pac_series_id', 'pac_series_id'], ['r.pac_receptor_uid', 'pac_receptor_uid'], ['r.currency_code', 'currency_code'], ['r.exchange_rate', 'exchange_rate'], ['r.payment_term_id', 'payment_term_id'], ['r.sat_cfdi_use_code', 'sat_cfdi_use_code'], ['r.sat_payment_form_code', 'sat_payment_form_code'], ['r.sat_payment_method_code', 'sat_payment_method_code'], ['r.notes', 'notes'], ['r.status', 'status'], ['r.active', 'active'])
             ->from(['core_billing_recurring_profiles', 'r'])
             ->join(['core_parties', 'p'], 'left')->on('r.party_id', '=', 'p.id')
             ->where('r.active', '=', 1)
+            ->where('r.next_run_date', '>=', $filters['start_date'])
+            ->where('r.next_run_date', '<=', $filters['end_date'])
             ->order_by('r.next_run_date', 'asc')
             ->order_by('r.id', 'desc')
             ->limit(200)
@@ -833,27 +847,31 @@ class Controller_Admin_Billing extends Controller_Adminbase
             ->as_array();
     }
 
-    protected function get_recurring_runs()
+    protected function get_recurring_runs(array $filters = [])
     {
         if (!\DBUtil::table_exists('core_billing_recurring_runs')) {
             return [];
         }
+        $filters = $filters ?: $this->period_filters();
 
         return \DB::select(['rr.id', 'id'], ['rr.profile_id', 'profile_id'], ['rp.folio', 'profile_folio'], ['rp.name', 'profile_name'], ['rr.invoice_id', 'invoice_id'], ['i.folio', 'invoice_folio'], ['rr.run_date', 'run_date'], ['rr.status', 'status'], ['rr.message', 'message'], ['rr.created_at', 'created_at'])
             ->from(['core_billing_recurring_runs', 'rr'])
             ->join(['core_billing_recurring_profiles', 'rp'], 'left')->on('rr.profile_id', '=', 'rp.id')
             ->join(['core_billing_invoices', 'i'], 'left')->on('rr.invoice_id', '=', 'i.id')
+            ->where('rr.run_date', '>=', $filters['start_date'])
+            ->where('rr.run_date', '<=', $filters['end_date'])
             ->order_by('rr.id', 'desc')
             ->limit(100)
             ->execute()
             ->as_array();
     }
 
-    protected function get_pending_deliveries()
+    protected function get_pending_deliveries(array $filters = [])
     {
         if (!\DBUtil::table_exists('core_sales_deliveries')) {
             return [];
         }
+        $filters = $filters ?: $this->period_filters();
 
         $query = \DB::select(
                 ['d.id', 'id'],
@@ -873,6 +891,8 @@ class Controller_Admin_Billing extends Controller_Adminbase
             ->join(['core_inventory_warehouses', 'w'], 'left')->on('d.warehouse_id', '=', 'w.id')
             ->where('d.active', '=', 1)
             ->where('d.billing_invoice_id', '=', 0)
+            ->where('d.delivery_date', '>=', $filters['start_date'])
+            ->where('d.delivery_date', '<=', $filters['end_date'])
             ->order_by('d.delivery_date', 'asc')
             ->order_by('d.id', 'asc')
             ->limit(200);
@@ -1005,19 +1025,20 @@ class Controller_Admin_Billing extends Controller_Adminbase
      * @access  protected
      * @return  Array
      */
-    protected function get_stats()
+    protected function get_stats(array $filters = [])
     {
+        $filters = $filters ?: $this->period_filters();
         # SE REGRESAN CONTADORES AGREGADOS
         return [
-            'invoices' => (int) \DB::count_records('core_billing_invoices'),
-            'draft' => (int) \DB::select()->from('core_billing_invoices')->where('status', '=', 'draft')->execute()->count(),
-            'ready' => (int) \DB::select()->from('core_billing_invoices')->where('status', '=', 'ready')->execute()->count(),
-            'stamped' => (int) \DB::select()->from('core_billing_invoices')->where('status', '=', 'stamped')->execute()->count(),
-            'cancelled' => (int) \DB::select()->from('core_billing_invoices')->where('status', '=', 'cancelled')->execute()->count(),
-            'pending_deliveries' => \DBUtil::table_exists('core_sales_deliveries') ? (int) \DB::select()->from('core_sales_deliveries')->where('active', '=', 1)->where('billing_invoice_id', '=', 0)->execute()->count() : 0,
-            'recurring_profiles' => \DBUtil::table_exists('core_billing_recurring_profiles') ? (int) \DB::select()->from('core_billing_recurring_profiles')->where('active', '=', 1)->execute()->count() : 0,
-            'recurring_due' => \DBUtil::table_exists('core_billing_recurring_profiles') ? (int) \DB::select()->from('core_billing_recurring_profiles')->where('active', '=', 1)->where('status', '=', 'active')->where('next_run_date', '<=', date('Y-m-d'))->execute()->count() : 0,
-            'fiscal_drafts' => \DBUtil::table_exists('core_fiscal_documents') ? (int) \DB::select()->from('core_fiscal_documents')->where('active', '=', 1)->where('workflow_status', '=', 'draft')->execute()->count() : 0,
+            'invoices' => (int) \DB::select()->from('core_billing_invoices')->where('issue_date', '>=', $filters['start_date'])->where('issue_date', '<=', $filters['end_date'])->execute()->count(),
+            'draft' => (int) \DB::select()->from('core_billing_invoices')->where('status', '=', 'draft')->where('issue_date', '>=', $filters['start_date'])->where('issue_date', '<=', $filters['end_date'])->execute()->count(),
+            'ready' => (int) \DB::select()->from('core_billing_invoices')->where('status', '=', 'ready')->where('issue_date', '>=', $filters['start_date'])->where('issue_date', '<=', $filters['end_date'])->execute()->count(),
+            'stamped' => (int) \DB::select()->from('core_billing_invoices')->where('status', '=', 'stamped')->where('issue_date', '>=', $filters['start_date'])->where('issue_date', '<=', $filters['end_date'])->execute()->count(),
+            'cancelled' => (int) \DB::select()->from('core_billing_invoices')->where('status', '=', 'cancelled')->where('issue_date', '>=', $filters['start_date'])->where('issue_date', '<=', $filters['end_date'])->execute()->count(),
+            'pending_deliveries' => count($this->get_pending_deliveries($filters)),
+            'recurring_profiles' => count($this->get_recurring_profiles($filters)),
+            'recurring_due' => \DBUtil::table_exists('core_billing_recurring_profiles') ? (int) \DB::select()->from('core_billing_recurring_profiles')->where('active', '=', 1)->where('status', '=', 'active')->where('next_run_date', '>=', $filters['start_date'])->where('next_run_date', '<=', $filters['end_date'])->execute()->count() : 0,
+            'fiscal_drafts' => \DBUtil::table_exists('core_fiscal_documents') ? (int) \DB::select()->from('core_fiscal_documents')->where('active', '=', 1)->where('workflow_status', '=', 'draft')->where('issue_date', '>=', $filters['start_date'])->where('issue_date', '<=', $filters['end_date'])->execute()->count() : 0,
         ];
     }
 

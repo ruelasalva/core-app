@@ -26,6 +26,15 @@
         </div>
 
         <div v-if="error" class="alert alert-danger">{{ error }}</div>
+        <div class="card card-light mb-3">
+            <div class="card-body py-2">
+                <div class="row align-items-end">
+                    <div class="col-md-3"><label>Desde</label><input type="date" class="form-control" v-model="periodFilters.start_date"></div>
+                    <div class="col-md-3"><label>Hasta</label><input type="date" class="form-control" v-model="periodFilters.end_date"></div>
+                    <div class="col-md-3"><button class="btn btn-primary" @click="load(selectedInvoice ? selectedInvoice.id : 0, selectedRecurringProfile ? selectedRecurringProfile.id : 0)"><i class="bi bi-funnel"></i> Consultar</button></div>
+                </div>
+            </div>
+        </div>
         <div v-if="loading" class="text-muted">Cargando facturacion...</div>
 
         <div class="row" v-if="!loading">
@@ -685,6 +694,7 @@ new Vue({
         selectedRecurringProfile: null,
         pendingDeliveries: [],
         items: [],
+        periodFilters: { start_date: '', end_date: '' },
         selectedInvoice: null,
         stats: {},
         options: { parties: [], products: [], currencies: [], payment_terms: [], sat_cfdi_uses: [], sat_payment_forms: [], sat_payment_methods: [], sat_tax_regimes: [], units: [], sat_product_service_keys: [], sat_object_tax_codes: [], taxes: [], retentions: [], pac_connections: [] },
@@ -745,6 +755,8 @@ new Vue({
             const params = [];
             if (invoiceId) params.push('invoice_id=' + invoiceId);
             if (recurringProfileId) params.push('recurring_profile_id=' + recurringProfileId);
+            if (this.periodFilters.start_date) params.push('start_date=' + encodeURIComponent(this.periodFilters.start_date));
+            if (this.periodFilters.end_date) params.push('end_date=' + encodeURIComponent(this.periodFilters.end_date));
             if (params.length) url += '?' + params.join('&');
             fetch(url)
                 .then(res => res.json())
@@ -757,6 +769,7 @@ new Vue({
                     this.fiscalDocuments = data.fiscal_documents || [];
                     this.pendingDeliveries = data.pending_deliveries || [];
                     this.items = data.items || [];
+                    this.periodFilters = data.period_filters || this.periodFilters;
                     this.options = data.options || this.options;
                     this.stats = data.stats || {};
                     if (invoiceId) {

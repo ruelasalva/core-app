@@ -40,6 +40,15 @@
         </div>
         <div class="card-body">
             <div v-if="error" class="alert alert-danger">{{ error }}</div>
+            <div class="card card-light mb-3">
+                <div class="card-body py-2">
+                    <div class="row align-items-end">
+                        <div class="col-md-3"><label>Desde</label><input type="date" class="form-control" v-model="periodFilters.start_date"></div>
+                        <div class="col-md-3"><label>Hasta</label><input type="date" class="form-control" v-model="periodFilters.end_date"></div>
+                        <div class="col-md-3"><button class="btn btn-primary" @click="loadData"><i class="bi bi-funnel"></i> Consultar</button></div>
+                    </div>
+                </div>
+            </div>
 
             <div v-if="loading" class="text-center p-5">
                 <div class="spinner-border text-primary" role="status"></div>
@@ -291,6 +300,7 @@ window.onload = function() {
             tickets: [],
             messages: [],
             documents: [],
+            periodFilters: { start_date: '', end_date: '' },
             options: { parties: [], departments: [], categories: [], statuses: [], users: [], priorities: [] },
             stats: {},
             selectedTicket: null,
@@ -316,7 +326,12 @@ window.onload = function() {
         methods: {
             loadData() {
                 this.loading = true;
-                fetch('<?php echo Uri::create('admin/helpdesk/data'); ?>')
+                const params = [];
+                if (this.periodFilters.start_date) params.push('start_date=' + encodeURIComponent(this.periodFilters.start_date));
+                if (this.periodFilters.end_date) params.push('end_date=' + encodeURIComponent(this.periodFilters.end_date));
+                let url = '<?php echo Uri::create('admin/helpdesk/data'); ?>';
+                if (params.length) url += '?' + params.join('&');
+                fetch(url)
                     .then(res => res.json())
                     .then(data => {
                         this.loading = false;
@@ -324,6 +339,7 @@ window.onload = function() {
                         this.tickets = data.tickets || [];
                         this.messages = data.messages || [];
                         this.documents = data.documents || [];
+                        this.periodFilters = data.period_filters || this.periodFilters;
                         this.options = data.options || this.options;
                         this.stats = data.stats || {};
                     })

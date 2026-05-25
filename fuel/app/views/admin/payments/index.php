@@ -8,6 +8,15 @@
 
     <div v-if="error" class="alert alert-danger">{{ error }}</div>
     <div v-if="message" class="alert alert-info">{{ message }}</div>
+    <div class="card card-light mb-3">
+        <div class="card-body py-2">
+            <div class="row align-items-end">
+                <div class="col-md-3"><label>Desde</label><input type="date" class="form-control" v-model="periodFilters.start_date"></div>
+                <div class="col-md-3"><label>Hasta</label><input type="date" class="form-control" v-model="periodFilters.end_date"></div>
+                <div class="col-md-3"><button class="btn btn-primary" @click="loadData"><i class="bi bi-funnel"></i> Consultar</button></div>
+            </div>
+        </div>
+    </div>
 
     <div class="card card-info card-outline">
         <div class="card-header">
@@ -229,11 +238,16 @@
 window.onload = function() {
     new Vue({
         el: '#app-payments',
-        data: { error: '', message: '', payments: [], receivables: [], payables: [], movements: [], reconciliations: [], statement_imports: [], suggestions: [], options: { parties: [], bank_accounts: [], currencies: [], sat_payment_forms: [], integrations: [] }, stats: {}, paymentForm: {}, movementForm: {}, statementForm: { bank_account_id: 0, file: null } },
+        data: { error: '', message: '', payments: [], receivables: [], payables: [], movements: [], reconciliations: [], statement_imports: [], suggestions: [], periodFilters: { start_date: '', end_date: '' }, options: { parties: [], bank_accounts: [], currencies: [], sat_payment_forms: [], integrations: [] }, stats: {}, paymentForm: {}, movementForm: {}, statementForm: { bank_account_id: 0, file: null } },
         mounted() { this.loadData(); },
         methods: {
             loadData() {
-                fetch('<?php echo Uri::create('admin/payments/data'); ?>').then(res => res.json()).then(data => {
+                var url = '<?php echo Uri::create('admin/payments/data'); ?>';
+                var params = [];
+                if (this.periodFilters.start_date) params.push('start_date=' + encodeURIComponent(this.periodFilters.start_date));
+                if (this.periodFilters.end_date) params.push('end_date=' + encodeURIComponent(this.periodFilters.end_date));
+                if (params.length) url += '?' + params.join('&');
+                fetch(url).then(res => res.json()).then(data => {
                     if (data.error) { this.error = data.error; return; }
                     this.payments = data.payments || [];
                     this.receivables = data.receivables || [];
@@ -242,6 +256,7 @@ window.onload = function() {
                     this.reconciliations = data.reconciliations || [];
                     this.statement_imports = data.statement_imports || [];
                     this.suggestions = data.suggestions || [];
+                    this.periodFilters = data.period_filters || this.periodFilters;
                     this.options = data.options || this.options;
                     this.stats = data.stats || {};
                 });

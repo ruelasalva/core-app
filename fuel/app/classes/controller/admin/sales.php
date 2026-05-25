@@ -73,13 +73,15 @@ class Controller_Admin_Sales extends Controller_Adminbase
             # SE VALIDA ESQUEMA BASE
             $this->assert_schema_ready();
             $this->sync_approved_quotes_to_orders();
+            $filters = $this->period_filters();
 
             return $this->json_response([
-                'quotes' => $this->quotes(),
-                'stats' => $this->stats(),
+                'quotes' => $this->quotes($filters),
+                'stats' => $this->stats($filters),
                 'options' => $this->options(),
-                'orders' => $this->orders(),
-                'deliveries' => $this->deliveries(),
+                'orders' => $this->orders($filters),
+                'deliveries' => $this->deliveries($filters),
+                'period_filters' => $filters,
             ]);
         } catch (\Exception $e) {
             \Log::error('Error cargando ventas: '.$e->getMessage().' | trace='.$e->getTraceAsString());
@@ -634,8 +636,9 @@ class Controller_Admin_Sales extends Controller_Adminbase
      * @access  protected
      * @return  Array
      */
-    protected function quotes()
+    protected function quotes(array $filters = [])
     {
+        $filters = $filters ?: $this->period_filters();
         # SE CONSULTAN COTIZACIONES CON TERCERO
         $rows = \DB::select(
                 array('q.id', 'id'),
@@ -667,6 +670,8 @@ class Controller_Admin_Sales extends Controller_Adminbase
             ->join(array('core_sales_sellers', 's'), 'left')
                 ->on('q.seller_id', '=', 's.id');
         $this->apply_party_scope($rows, 'p', 'sales');
+        $rows->where('q.created_at', '>=', strtotime($filters['start_date'].' 00:00:00'))
+            ->where('q.created_at', '<=', strtotime($filters['end_date'].' 23:59:59'));
 
         $rows = $rows
             ->order_by('q.id', 'desc')
@@ -784,27 +789,33 @@ class Controller_Admin_Sales extends Controller_Adminbase
      * @access  protected
      * @return  Array
      */
-    protected function stats()
+    protected function stats(array $filters = [])
     {
+        $filters = $filters ?: $this->period_filters();
+        $start = strtotime($filters['start_date'].' 00:00:00');
+        $end = strtotime($filters['end_date'].' 23:59:59');
         # SE REGRESAN CONTADORES GENERALES
         return [
-            'quotes' => (int) \DB::count_records('core_sales_quotes'),
-            'orders' => (int) \DB::count_records('core_sales_orders'),
-            'deliveries' => (int) \DB::count_records('core_sales_deliveries'),
-            'prequote' => (int) \DB::select()->from('core_sales_quotes')->where('status', '=', 'prequote')->execute()->count(),
-            'requested' => (int) \DB::select()->from('core_sales_quotes')->where('status', '=', 'requested')->execute()->count(),
-            'approved' => (int) \DB::select()->from('core_sales_quotes')->where('status', '=', 'approved')->execute()->count(),
-            'rejected' => (int) \DB::select()->from('core_sales_quotes')->where('status', '=', 'rejected')->execute()->count(),
+            'quotes' => (int) \DB::select()->from('core_sales_quotes')->where('created_at', '>=', $start)->where('created_at', '<=', $end)->execute()->count(),
+            'orders' => (int) \DB::select()->from('core_sales_orders')->where('order_date', '>=', $filters['start_date'])->where('order_date', '<=', $filters['end_date'])->execute()->count(),
+            'deliveries' => (int) \DB::select()->from('core_sales_deliveries')->where('delivery_date', '>=', $filters['start_date'])->where('delivery_date', '<=', $filters['end_date'])->execute()->count(),
+            'prequote' => (int) \DB::select()->from('core_sales_quotes')->where('status', '=', 'prequote')->where('created_at', '>=', $start)->where('created_at', '<=', $end)->execute()->count(),
+            'requested' => (int) \DB::select()->from('core_sales_quotes')->where('status', '=', 'requested')->where('created_at', '>=', $start)->where('created_at', '<=', $end)->execute()->count(),
+            'approved' => (int) \DB::select()->from('core_sales_quotes')->where('status', '=', 'approved')->where('created_at', '>=', $start)->where('created_at', '<=', $end)->execute()->count(),
+            'rejected' => (int) \DB::select()->from('core_sales_quotes')->where('status', '=', 'rejected')->where('created_at', '>=', $start)->where('created_at', '<=', $end)->execute()->count(),
         ];
     }
 
-    protected function orders()
+    protected function orders(array $filters = [])
     {
+        $filters = $filters ?: $this->period_filters();
         $query = \DB::select(['o.id', 'id'], ['o.folio', 'folio'], ['o.status', 'status'], ['o.order_date', 'order_date'], ['o.currency_code', 'currency_code'], ['o.total', 'total'], ['o.delivered_total', 'delivered_total'], ['o.billed_total', 'billed_total'], ['q.folio', 'quote_folio'], ['p.name', 'party_name'])
             ->from(['core_sales_orders', 'o'])
             ->join(['core_sales_quotes', 'q'], 'left')->on('o.source_quote_id', '=', 'q.id')
             ->join(['core_parties', 'p'], 'left')->on('o.party_id', '=', 'p.id')
-            ->where('o.active', '=', 1);
+            ->where('o.active', '=', 1)
+            ->where('o.order_date', '>=', $filters['start_date'])
+            ->where('o.order_date', '<=', $filters['end_date']);
         $this->apply_party_scope($query, 'p', 'sales');
 
         $rows = $query
@@ -827,14 +838,17 @@ class Controller_Admin_Sales extends Controller_Adminbase
         return $rows;
     }
 
-    protected function deliveries()
+    protected function deliveries(array $filters = [])
     {
+        $filters = $filters ?: $this->period_filters();
         $query = \DB::select(['d.id', 'id'], ['d.folio', 'folio'], ['d.status', 'status'], ['d.delivery_date', 'delivery_date'], ['d.currency_code', 'currency_code'], ['d.total', 'total'], ['d.billing_invoice_id', 'billing_invoice_id'], ['o.folio', 'order_folio'], ['p.name', 'party_name'], ['w.name', 'warehouse_name'])
             ->from(['core_sales_deliveries', 'd'])
             ->join(['core_sales_orders', 'o'], 'left')->on('d.order_id', '=', 'o.id')
             ->join(['core_parties', 'p'], 'left')->on('d.party_id', '=', 'p.id')
             ->join(['core_inventory_warehouses', 'w'], 'left')->on('d.warehouse_id', '=', 'w.id')
-            ->where('d.active', '=', 1);
+            ->where('d.active', '=', 1)
+            ->where('d.delivery_date', '>=', $filters['start_date'])
+            ->where('d.delivery_date', '<=', $filters['end_date']);
         $this->apply_party_scope($query, 'p', 'sales');
 
         return $query
