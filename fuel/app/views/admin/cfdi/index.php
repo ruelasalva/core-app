@@ -40,7 +40,94 @@
             <div v-if="message" class="alert alert-info py-2">{{ message }}</div>
             <div v-if="error" class="alert alert-danger py-2">{{ error }}</div>
 
-            <div class="table-responsive">
+            <div v-if="filters.tab === 'reports'" class="mb-3">
+                <div class="row">
+                    <div class="col-md-4" v-for="card in reportCards" :key="card.key">
+                        <div class="info-box">
+                            <span class="info-box-icon" :class="card.bg"><i :class="card.icon"></i></span>
+                            <div class="info-box-content">
+                                <span class="info-box-text">{{ card.label }}</span>
+                                <span class="info-box-number">{{ card.money ? money(card.value, 'MXN') : card.value }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-lg-6">
+                        <h6>Clientes principales</h6>
+                        <table class="table table-sm table-bordered">
+                            <thead><tr><th>Cliente</th><th class="text-right">CFDI</th><th class="text-right">Total</th><th class="text-right">IVA</th></tr></thead>
+                            <tbody>
+                                <tr v-for="row in reports.customers" :key="'c-' + row.rfc">
+                                    <td><strong>{{ row.rfc }}</strong><div class="text-muted small">{{ row.name }}</div></td>
+                                    <td class="text-right">{{ row.cfdi_count }}</td>
+                                    <td class="text-right">{{ money(row.total, 'MXN') }}</td>
+                                    <td class="text-right">{{ money(row.vat, 'MXN') }}</td>
+                                </tr>
+                                <tr v-if="reports.customers.length === 0"><td colspan="4" class="text-muted text-center">Sin clientes en el periodo.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="col-lg-6">
+                        <h6>Proveedores principales</h6>
+                        <table class="table table-sm table-bordered">
+                            <thead><tr><th>Proveedor</th><th class="text-right">CFDI</th><th class="text-right">Total</th><th class="text-right">IVA</th></tr></thead>
+                            <tbody>
+                                <tr v-for="row in reports.suppliers" :key="'s-' + row.rfc">
+                                    <td><strong>{{ row.rfc }}</strong><div class="text-muted small">{{ row.name }}</div></td>
+                                    <td class="text-right">{{ row.cfdi_count }}</td>
+                                    <td class="text-right">{{ money(row.total, 'MXN') }}</td>
+                                    <td class="text-right">{{ money(row.vat, 'MXN') }}</td>
+                                </tr>
+                                <tr v-if="reports.suppliers.length === 0"><td colspan="4" class="text-muted text-center">Sin proveedores en el periodo.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <h6>CFDI sin XML</h6>
+                <table class="table table-sm table-hover">
+                    <thead><tr><th>Fecha</th><th>Tipo</th><th>UUID</th><th>Contraparte</th><th class="text-right">Total</th></tr></thead>
+                    <tbody>
+                        <tr v-for="row in reports.missing_xml" :key="'m-' + row.id">
+                            <td>{{ row.issued_label }}</td>
+                            <td><span class="badge" :class="row.direction === 'issued' ? 'badge-info' : 'badge-secondary'">{{ row.direction === 'issued' ? 'Emitido' : 'Recibido' }}</span></td>
+                            <td><code>{{ row.uuid }}</code></td>
+                            <td><strong>{{ row.counterparty_rfc }}</strong><div class="text-muted small">{{ row.counterparty_name }}</div></td>
+                            <td class="text-right">{{ money(row.total, row.currency || 'MXN') }}</td>
+                        </tr>
+                        <tr v-if="reports.missing_xml.length === 0"><td colspan="5" class="text-muted text-center">No hay pendientes de XML.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div v-if="filters.tab === 'ppd_audit'" class="mb-3">
+                <div class="row">
+                    <div class="col-md-3" v-for="card in ppdCards" :key="card.key">
+                        <div class="small-box" :class="card.bg">
+                            <div class="inner"><h3>{{ card.money ? money(card.value, 'MXN') : card.value }}</h3><p>{{ card.label }}</p></div>
+                            <div class="icon"><i :class="card.icon"></i></div>
+                        </div>
+                    </div>
+                </div>
+                <table class="table table-sm table-hover">
+                    <thead><tr><th>Fecha</th><th>Sentido</th><th>Factura</th><th>Contraparte</th><th class="text-right">Total</th><th class="text-right">Pagado REP</th><th class="text-right">Saldo</th><th>Estado</th></tr></thead>
+                    <tbody>
+                        <tr v-for="row in ppdAudit.items" :key="'ppd-' + row.id">
+                            <td>{{ row.issued_label }}</td>
+                            <td><span class="badge" :class="row.direction === 'issued' ? 'badge-info' : 'badge-secondary'">{{ row.direction === 'issued' ? 'Por cobrar' : 'Por pagar' }}</span></td>
+                            <td><div>{{ row.serie || '' }} {{ row.folio || '' }}</div><code>{{ row.uuid }}</code></td>
+                            <td><strong>{{ row.counterparty_rfc }}</strong><div class="text-muted small">{{ row.counterparty_name }}</div></td>
+                            <td class="text-right">{{ money(row.total, row.currency || 'MXN') }}</td>
+                            <td class="text-right">{{ money(row.paid_amount, row.currency || 'MXN') }}</td>
+                            <td class="text-right" :class="row.balance_amount > 1 ? 'text-danger' : 'text-success'">{{ money(row.balance_amount, row.currency || 'MXN') }}</td>
+                            <td><span class="badge" :class="ppdBadge(row.ppd_status)">{{ ppdLabel(row.ppd_status) }}</span></td>
+                        </tr>
+                        <tr v-if="ppdAudit.items.length === 0"><td colspan="8" class="text-muted text-center">Sin facturas PPD en el periodo.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div v-if="filters.tab !== 'reports' && filters.tab !== 'ppd_audit'" class="table-responsive">
                 <table class="table table-sm table-hover">
                     <thead>
                         <tr>
@@ -246,6 +333,8 @@ window.onload = function() {
             stats: {},
             items: [],
             options: { products: [], warehouses: [] },
+            reports: { summary: {}, customers: [], suppliers: [], missing_xml: [] },
+            ppdAudit: { summary: {}, items: [] },
             selected: null,
             selectedContext: { details: [], payments: [], relations: [], linked: [] },
             convertForm: { item: null, mappings: [], saving: false },
@@ -256,6 +345,8 @@ window.onload = function() {
                 { key: 'issued', label: 'Emitidos', icon: 'bi bi-send' },
                 { key: 'cancelled', label: 'Cancelados', icon: 'bi bi-x-circle' },
                 { key: 'payments', label: 'REP', icon: 'bi bi-cash-coin' },
+                { key: 'ppd_audit', label: 'Auditoria PPD', icon: 'bi bi-clipboard-check' },
+                { key: 'reports', label: 'Reportes', icon: 'bi bi-bar-chart' },
                 { key: 'all', label: 'Todos', icon: 'bi bi-collection' }
             ],
             docTypes: [
@@ -275,6 +366,26 @@ window.onload = function() {
                     { key: 'invoices', label: 'Facturas', value: this.stats.invoices || 0, icon: 'bi bi-file-earmark-text' },
                     { key: 'payments', label: 'REP', value: this.stats.payments || 0, icon: 'bi bi-cash-coin' },
                     { key: 'cancelled', label: 'Cancelados', value: this.stats.cancelled || 0, icon: 'bi bi-x-circle' }
+                ];
+            },
+            reportCards: function() {
+                var s = this.reports.summary || {};
+                return [
+                    { key: 'issued_total', label: 'Facturado emitido', value: s.issued_total || 0, money: true, icon: 'bi bi-send', bg: 'bg-info' },
+                    { key: 'received_total', label: 'Facturado recibido', value: s.received_total || 0, money: true, icon: 'bi bi-inbox', bg: 'bg-secondary' },
+                    { key: 'vat_balance', label: 'IVA neto estimado', value: s.vat_balance || 0, money: true, icon: 'bi bi-percent', bg: 'bg-warning' },
+                    { key: 'missing_xml', label: 'Sin XML', value: s.missing_xml || 0, money: false, icon: 'bi bi-file-earmark-x', bg: 'bg-danger' },
+                    { key: 'issued_vat', label: 'IVA trasladado', value: s.issued_vat || 0, money: true, icon: 'bi bi-arrow-up-circle', bg: 'bg-primary' },
+                    { key: 'received_vat', label: 'IVA acreditable', value: s.received_vat || 0, money: true, icon: 'bi bi-arrow-down-circle', bg: 'bg-success' }
+                ];
+            },
+            ppdCards: function() {
+                var s = this.ppdAudit.summary || {};
+                return [
+                    { key: 'issued_balance', label: 'PPD por cobrar', value: s.issued_balance || 0, money: true, icon: 'bi bi-wallet2', bg: 'bg-info' },
+                    { key: 'received_balance', label: 'PPD por pagar', value: s.received_balance || 0, money: true, icon: 'bi bi-bank', bg: 'bg-warning' },
+                    { key: 'without_rep', label: 'Sin REP', value: s.without_rep || 0, money: false, icon: 'bi bi-exclamation-circle', bg: 'bg-danger' },
+                    { key: 'needs_xml', label: 'Requieren XML', value: s.needs_xml || 0, money: false, icon: 'bi bi-file-earmark-arrow-down', bg: 'bg-secondary' }
                 ];
             }
         },
@@ -303,6 +414,8 @@ window.onload = function() {
                         if (data.error) { this.error = data.error; return; }
                         this.stats = data.stats || {};
                         this.items = data.items || [];
+                        this.reports = data.reports || { summary: {}, customers: [], suppliers: [], missing_xml: [] };
+                        this.ppdAudit = data.ppd_audit || { summary: {}, items: [] };
                         this.options = data.options || { products: [], warehouses: [] };
                         this.selectedContext = data.selected || { details: [], payments: [], relations: [], linked: [] };
                     })
@@ -395,6 +508,18 @@ window.onload = function() {
                 var found = this.options.warehouses.find(warehouse => parseInt(warehouse.is_default || 0) === 1);
                 if (!found && this.options.warehouses.length > 0) found = this.options.warehouses[0];
                 return found ? found.id : '';
+            },
+            ppdLabel: function(status) {
+                if (status === 'needs_xml') return 'Requiere XML';
+                if (status === 'paid') return 'Pagado';
+                if (status === 'partial') return 'Parcial';
+                return 'Sin REP';
+            },
+            ppdBadge: function(status) {
+                if (status === 'needs_xml') return 'badge-secondary';
+                if (status === 'paid') return 'badge-success';
+                if (status === 'partial') return 'badge-warning';
+                return 'badge-danger';
             },
             importXml: function(event) {
                 var file = event.target.files[0];

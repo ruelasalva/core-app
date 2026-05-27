@@ -33,6 +33,8 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
                 'filters' => $filters,
                 'stats' => $this->stats($filters),
                 'items' => $this->items($filters),
+                'reports' => $this->reports($filters),
+                'ppd_audit' => $this->ppd_audit($filters),
                 'selected' => $this->selected_context(),
                 'options' => $this->options(),
             ]);
@@ -266,6 +268,10 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
 
     protected function items(array $filters)
     {
+        if (in_array($filters['tab'], ['reports', 'ppd_audit'], true)) {
+            return [];
+        }
+
         $query = \DB::select(
             'id', 'uuid', 'direction', 'voucher_type', 'serie', 'folio',
             'emitter_rfc', 'emitter_name', 'receiver_rfc', 'receiver_name',
@@ -313,6 +319,176 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
         }
 
         return $items;
+    }
+
+    protected function reports(array $filters)
+    {
+        $start = $filters['month'].'-01 00:00:00';
+        $end = date('Y-m-t 23:59:59', strtotime($filters['month'].'-01'));
+
+        $summary = [
+            'issued_total' => $this->sum_month($start, $end, 'total', ['direction' => 'issued', 'voucher_type' => 'I']),
+            'received_total' => $this->sum_month($start, $end, 'total', ['direction' => 'received', 'voucher_type' => 'I']),
+            'issued_vat' => $this->sum_month($start, $end, 'tax_transferred_total', ['direction' => 'issued']),
+            'received_vat' => $this->sum_month($start, $end, 'tax_transferred_total', ['direction' => 'received']),
+            'missing_xml' => $this->count_month($start, $end, ['missing_xml' => 1]),
+            'cancelled' => $this->count_month($start, $end, ['sat_status' => 'cancelado']),
+        ];
+        $summary['vat_balance'] = $summary['issued_vat'] - $summary['received_vat'];
+
+        return [
+            'summary' => $summary,
+            'customers' => $this->counterparty_report($start, $end, 'issued'),
+            'suppliers' => $this->counterparty_report($start, $end, 'received'),
+            'missing_xml' => $this->missing_xml_report($start, $end),
+        ];
+    }
+
+    protected function ppd_audit(array $filters)
+    {
+        $start = $filters['month'].'-01 00:00:00';
+        $end = date('Y-m-t 23:59:59', strtotime($filters['month'].'-01'));
+        $payments = $this->payment_totals_by_invoice();
+        $items = [];
+        $summary = [
+            'issued_total' => 0.0,
+            'issued_paid' => 0.0,
+            'issued_balance' => 0.0,
+            'received_total' => 0.0,
+            'received_paid' => 0.0,
+            'received_balance' => 0.0,
+            'without_rep' => 0,
+            'partial' => 0,
+            'paid' => 0,
+            'needs_xml' => 0,
+        ];
+
+        $query = \DB::select(
+            'id', 'uuid', 'direction', 'serie', 'folio', 'emitter_rfc', 'emitter_name',
+            'receiver_rfc', 'receiver_name', 'issued_at', 'currency', 'total',
+            'payment_method', 'payment_form', 'sat_status', 'missing_xml', 'xml_path'
+        )->from('core_sat_cfdi')
+            ->where('issued_at', '>=', $start)
+            ->where('issued_at', '<=', $end)
+            ->where('voucher_type', '=', 'I')
+            ->where('sat_status', '!=', 'cancelado')
+            ->where_open()
+                ->where('payment_method', '=', 'PPD')
+                ->or_where('payment_method', '=', '')
+            ->where_close();
+
+        $this->apply_cfdi_scope($query);
+
+        foreach ($query->order_by('issued_at', 'desc')->limit(300)->execute() as $row) {
+            $uuid = strtoupper((string) $row['uuid']);
+            $paid = (float) ($payments[$uuid] ?? 0);
+            $total = (float) $row['total'];
+            $balance = max(0, $total - $paid);
+            $needs_xml = (int) $row['missing_xml'] === 1 && trim((string) $row['payment_method']) === '';
+            $status = $needs_xml ? 'needs_xml' : ($paid <= 0 ? 'without_rep' : ($balance > 1 ? 'partial' : 'paid'));
+            $direction = (string) $row['direction'];
+
+            if ($direction === 'issued') {
+                $summary['issued_total'] += $total;
+                $summary['issued_paid'] += $paid;
+                $summary['issued_balance'] += $balance;
+            } else {
+                $summary['received_total'] += $total;
+                $summary['received_paid'] += $paid;
+                $summary['received_balance'] += $balance;
+            }
+            $summary[$status]++;
+
+            $row['issued_label'] = $row['issued_at'] ? date('d/m/Y', strtotime($row['issued_at'])) : '';
+            $row['paid_amount'] = $paid;
+            $row['balance_amount'] = $balance;
+            $row['ppd_status'] = $status;
+            $row['counterparty_rfc'] = $direction === 'issued' ? $row['receiver_rfc'] : $row['emitter_rfc'];
+            $row['counterparty_name'] = $direction === 'issued' ? $row['receiver_name'] : $row['emitter_name'];
+            $items[] = $row;
+        }
+
+        return ['summary' => $summary, 'items' => $items];
+    }
+
+    protected function sum_month($start, $end, $field, array $where = [])
+    {
+        $query = \DB::select([\DB::expr('COALESCE(SUM('.$field.'),0)'), 'total'])
+            ->from('core_sat_cfdi')
+            ->where('issued_at', '>=', $start)
+            ->where('issued_at', '<=', $end);
+        $this->apply_cfdi_scope($query);
+        foreach ($where as $column => $value) {
+            $query->where($column, '=', $value);
+        }
+        $row = $query->execute()->current();
+        return (float) ($row['total'] ?? 0);
+    }
+
+    protected function counterparty_report($start, $end, $direction)
+    {
+        $rfc_field = $direction === 'issued' ? 'receiver_rfc' : 'emitter_rfc';
+        $name_field = $direction === 'issued' ? 'receiver_name' : 'emitter_name';
+        $query = \DB::select(
+            [$rfc_field, 'rfc'],
+            [$name_field, 'name'],
+            [\DB::expr('COUNT(*)'), 'cfdi_count'],
+            [\DB::expr('COALESCE(SUM(total),0)'), 'total'],
+            [\DB::expr('COALESCE(SUM(tax_transferred_total),0)'), 'vat'],
+            [\DB::expr("SUM(CASE WHEN sat_status = 'cancelado' THEN 1 ELSE 0 END)"), 'cancelled'],
+            [\DB::expr('SUM(CASE WHEN missing_xml = 1 THEN 1 ELSE 0 END)'), 'missing_xml']
+        )->from('core_sat_cfdi')
+            ->where('issued_at', '>=', $start)
+            ->where('issued_at', '<=', $end)
+            ->where('direction', '=', $direction)
+            ->where('voucher_type', '=', 'I')
+            ->group_by($rfc_field)
+            ->group_by($name_field)
+            ->order_by('total', 'desc')
+            ->limit(20);
+        $this->apply_cfdi_scope($query);
+
+        return $query->execute()->as_array();
+    }
+
+    protected function missing_xml_report($start, $end)
+    {
+        $query = \DB::select('id', 'uuid', 'direction', 'emitter_rfc', 'emitter_name', 'receiver_rfc', 'receiver_name', 'issued_at', 'total', 'currency')
+            ->from('core_sat_cfdi')
+            ->where('issued_at', '>=', $start)
+            ->where('issued_at', '<=', $end)
+            ->where('missing_xml', '=', 1)
+            ->order_by('issued_at', 'desc')
+            ->limit(25);
+        $this->apply_cfdi_scope($query);
+
+        $items = [];
+        foreach ($query->execute() as $row) {
+            $row['issued_label'] = $row['issued_at'] ? date('d/m/Y', strtotime($row['issued_at'])) : '';
+            $row['counterparty_rfc'] = $row['direction'] === 'issued' ? $row['receiver_rfc'] : $row['emitter_rfc'];
+            $row['counterparty_name'] = $row['direction'] === 'issued' ? $row['receiver_name'] : $row['emitter_name'];
+            $items[] = $row;
+        }
+        return $items;
+    }
+
+    protected function payment_totals_by_invoice()
+    {
+        if (!\DBUtil::table_exists('core_sat_payment_details')) {
+            return [];
+        }
+
+        $totals = [];
+        foreach (\DB::select('invoice_uuid', [\DB::expr('COALESCE(SUM(paid_amount),0)'), 'paid'])
+            ->from('core_sat_payment_details')
+            ->group_by('invoice_uuid')
+            ->execute() as $row) {
+            $uuid = strtoupper(trim((string) $row['invoice_uuid']));
+            if ($uuid !== '') {
+                $totals[$uuid] = (float) $row['paid'];
+            }
+        }
+        return $totals;
     }
 
     protected function normalize_month_directions(array $filters)
