@@ -385,11 +385,17 @@
                         </div>
                         <div class="col-md-6 mt-2">
                             <label>Uso CFDI</label>
-                            <input class="form-control" v-model="catalogForm.party.sat_cfdi_use_code">
+                            <select class="form-control" v-model="catalogForm.party.sat_cfdi_use_code">
+                                <option value="">Seleccionar uso CFDI</option>
+                                <option v-for="option in options.sat_cfdi_uses" :value="option.value">{{ option.label }}</option>
+                            </select>
                         </div>
                         <div class="col-md-6 mt-2">
                             <label>Regimen fiscal</label>
-                            <input class="form-control" v-model="catalogForm.party.sat_tax_regime_code">
+                            <select class="form-control" v-model="catalogForm.party.sat_tax_regime_code">
+                                <option value="">Seleccionar regimen fiscal</option>
+                                <option v-for="option in options.sat_tax_regimes" :value="option.value">{{ option.label }}</option>
+                            </select>
                         </div>
                     </div>
                     <div v-if="catalogForm.mode === 'both'" class="alert alert-info mt-3 mb-0 py-2">
@@ -416,7 +422,7 @@ window.onload = function() {
             filters: { month: '<?php echo date('Y-m'); ?>', tab: 'received', doc_type: 'invoices', q: '' },
             stats: {},
             items: [],
-            options: { products: [], warehouses: [], departments: [] },
+            options: { products: [], warehouses: [], departments: [], sat_cfdi_uses: [], sat_tax_regimes: [] },
             reports: { summary: {}, customers: [], suppliers: [], missing_xml: [] },
             ppdAudit: { summary: {}, items: [] },
             selected: null,
@@ -515,7 +521,7 @@ window.onload = function() {
                         this.items = data.items || [];
                         this.reports = data.reports || { summary: {}, customers: [], suppliers: [], missing_xml: [] };
                         this.ppdAudit = data.ppd_audit || { summary: {}, items: [] };
-                        this.options = data.options || { products: [], warehouses: [], departments: [] };
+                        this.options = data.options || { products: [], warehouses: [], departments: [], sat_cfdi_uses: [], sat_tax_regimes: [] };
                         this.selectedContext = data.selected || { details: [], payments: [], relations: [], linked: [] };
                     })
                     .catch(() => { this.error = 'No se pudo cargar Auditoria SAT.'; });
@@ -599,6 +605,7 @@ window.onload = function() {
                 var issued = item.direction === 'issued';
                 var rfc = issued ? item.receiver_rfc : item.emitter_rfc;
                 var name = issued ? item.receiver_name : item.emitter_name;
+                var regime = issued ? item.receiver_regime : item.emitter_regime;
                 return {
                     party_type: issued ? 'customer' : 'supplier',
                     code: (rfc || name || '').toString().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
@@ -608,8 +615,8 @@ window.onload = function() {
                     rfc: rfc || '',
                     email: '',
                     phone: '',
-                    sat_cfdi_use_code: issued ? 'S01' : 'G03',
-                    sat_tax_regime_code: '601'
+                    sat_cfdi_use_code: item.cfdi_use || (issued ? 'S01' : 'G03'),
+                    sat_tax_regime_code: regime || '601'
                 };
             },
             submitCatalogParty: function() {

@@ -290,9 +290,10 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
 
         $query = \DB::select(
             'id', 'uuid', 'direction', 'voucher_type', 'serie', 'folio',
-            'emitter_rfc', 'emitter_name', 'receiver_rfc', 'receiver_name',
+            'emitter_rfc', 'emitter_name', 'emitter_regime', 'receiver_rfc', 'receiver_name', 'receiver_regime',
             'issued_at', 'stamped_at', 'currency', 'subtotal', 'tax_transferred_total',
             'tax_withheld_total', 'total', 'sat_status', 'missing_xml',
+            'cfdi_use',
             'has_payment_complement', 'has_waybill', 'sales_status', 'purchase_status',
             'portal_visible_customer', 'portal_visible_supplier', 'origin', 'xml_path',
             'supplier_party_id', 'customer_party_id', 'reviewed_by', 'reviewed_at'
@@ -598,6 +599,8 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
             'products' => $this->product_options(),
             'warehouses' => $this->warehouse_options(),
             'departments' => $this->department_options(),
+            'sat_cfdi_uses' => \Helper_Core_Sat_Catalog::options('core_sat_cfdi_uses'),
+            'sat_tax_regimes' => \Helper_Core_Sat_Catalog::options('core_sat_tax_regimes'),
         ];
     }
 
@@ -1015,6 +1018,7 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
         if ($rfc === '' && $name === '') {
             return ['created' => 0, 'updated' => 0];
         }
+        $defaults = $this->cfdi_party_defaults($cfdi, $type);
 
         $row = $rfc !== '' ? \DB::select('id')->from('core_parties')->where('rfc', '=', $rfc)->execute()->current() : null;
         if ($row) {
@@ -1025,8 +1029,8 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
             $party->legal_name = trim((string) \Arr::get($party_data, 'legal_name', '')) ?: ($party->legal_name ?: $name);
             $party->email = trim((string) \Arr::get($party_data, 'email', $party->email ?: ''));
             $party->phone = trim((string) \Arr::get($party_data, 'phone', $party->phone ?: ''));
-            $party->sat_cfdi_use_code = trim((string) \Arr::get($party_data, 'sat_cfdi_use_code', $party->sat_cfdi_use_code ?: ($type === 'customer' ? 'S01' : 'G03')));
-            $party->sat_tax_regime_code = trim((string) \Arr::get($party_data, 'sat_tax_regime_code', $party->sat_tax_regime_code ?: '601'));
+            $party->sat_cfdi_use_code = trim((string) \Arr::get($party_data, 'sat_cfdi_use_code', $party->sat_cfdi_use_code ?: $defaults['sat_cfdi_use_code']));
+            $party->sat_tax_regime_code = trim((string) \Arr::get($party_data, 'sat_tax_regime_code', $party->sat_tax_regime_code ?: $defaults['sat_tax_regime_code']));
             $party->active = 1;
             $party->save();
             $this->link_cfdi_party($cfdi, (int) $party->id, $type);
@@ -1047,8 +1051,8 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
             'phone' => trim((string) \Arr::get($party_data, 'phone', '')),
             'price_list_id' => (int) \Arr::get($party_data, 'price_list_id', 0),
             'payment_term_id' => (int) \Arr::get($party_data, 'payment_term_id', 0),
-            'sat_cfdi_use_code' => trim((string) \Arr::get($party_data, 'sat_cfdi_use_code', $type === 'customer' ? 'S01' : 'G03')),
-            'sat_tax_regime_code' => trim((string) \Arr::get($party_data, 'sat_tax_regime_code', '601')),
+            'sat_cfdi_use_code' => trim((string) \Arr::get($party_data, 'sat_cfdi_use_code', $defaults['sat_cfdi_use_code'])),
+            'sat_tax_regime_code' => trim((string) \Arr::get($party_data, 'sat_tax_regime_code', $defaults['sat_tax_regime_code'])),
             'fiscal_operation_type_id' => (int) \Arr::get($party_data, 'fiscal_operation_type_id', 0),
             'shipping_method_id' => (int) \Arr::get($party_data, 'shipping_method_id', 0),
             'credit_limit' => (float) \Arr::get($party_data, 'credit_limit', 0),
@@ -1063,6 +1067,16 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
         $party->save();
         $this->link_cfdi_party($cfdi, (int) $party->id, $type);
         return ['created' => 1, 'updated' => 0];
+    }
+
+    protected function cfdi_party_defaults(\Model_Core_Sat_Cfdi $cfdi, $type)
+    {
+        $regime = $type === 'customer' ? (string) $cfdi->receiver_regime : (string) $cfdi->emitter_regime;
+
+        return [
+            'sat_cfdi_use_code' => trim((string) $cfdi->cfdi_use) ?: ($type === 'customer' ? 'S01' : 'G03'),
+            'sat_tax_regime_code' => trim($regime) ?: '601',
+        ];
     }
 
     protected function materialize_cfdi_product(\Model_Core_Sat_Cfdi $cfdi, array $line)
