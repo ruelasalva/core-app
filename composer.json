@@ -16,7 +16,8 @@
         "fuelphp/upload": "2.0.6",
         "twbs/bootstrap": "5.3.3",
         "phpcfdi/sat-ws-descarga-masiva": "0.5.7",
-        "guzzlehttp/guzzle": "7.10"
+        "guzzlehttp/guzzle": "7.10",
+        "smalot/pdfparser": "^2.12"
     },
     "require-dev": {
         "fuel/docs": "dev-1.9/develop"

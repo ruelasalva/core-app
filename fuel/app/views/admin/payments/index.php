@@ -35,8 +35,8 @@
                 </div>
                 <div class="col-md-4">
                     <div class="form-group">
-                        <label>Archivo CSV</label>
-                        <input type="file" class="form-control" accept=".csv,.txt,text/csv" @change="selectStatementFile">
+                        <label>Archivo CSV/TXT/PDF</label>
+                        <input type="file" class="form-control" accept=".csv,.txt,.pdf,text/csv,application/pdf" @change="selectStatementFile">
                     </div>
                 </div>
                 <div class="col-md-4">
@@ -354,12 +354,12 @@ window.onload = function() {
                 this.error = '';
                 this.message = '';
                 if (!this.statementForm.bank_account_id || this.statementForm.bank_account_id == 0) { this.error = 'Selecciona una cuenta bancaria.'; return; }
-                if (!this.statementForm.file) { this.error = 'Selecciona un CSV de estado de cuenta.'; return; }
+                if (!this.statementForm.file) { this.error = 'Selecciona un CSV, TXT o PDF de estado de cuenta.'; return; }
                 const form = new FormData();
                 form.append('bank_account_id', this.statementForm.bank_account_id);
                 form.append('file', this.statementForm.file);
                 form.append(window.coreAppCsrfKey, fuel_csrf_token());
-                fetch('<?php echo Uri::create('admin/payments/import_statement'); ?>', { method: 'POST', body: form }).then(res => res.json()).then(data => {
+                fetch('<?php echo Uri::create('admin/payments/import_statement'); ?>', { method: 'POST', credentials: 'same-origin', headers: { 'Accept': 'application/json', 'X-CSRF-Token': fuel_csrf_token() }, body: form }).then(window.coreAppParseJsonResponse).then(data => {
                     if (data.error) { this.error = data.error; return; }
                     this.message = data.message || 'Estado importado.';
                     this.movements = data.movements || this.movements;

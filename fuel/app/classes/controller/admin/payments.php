@@ -242,7 +242,7 @@ class Controller_Admin_Payments extends Controller_Adminbase
     /**
      * IMPORT STATEMENT
      *
-     * IMPORTA ESTADO DE CUENTA CSV COMO MOVIMIENTOS BANCARIOS.
+     * IMPORTA ESTADO DE CUENTA CSV/TXT/PDF COMO MOVIMIENTOS BANCARIOS.
      *
      * @access  public
      * @return  Response
@@ -260,12 +260,12 @@ class Controller_Admin_Payments extends Controller_Adminbase
 
             $file = \Input::file('file');
             if (!$file || (int) \Arr::get($file, 'error', UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
-                return $this->json_response(['error' => 'Selecciona un archivo CSV valido.'], 422);
+                return $this->json_response(['error' => 'Selecciona un archivo CSV, TXT o PDF valido.'], 422);
             }
 
             $extension = strtolower(pathinfo((string) \Arr::get($file, 'name', ''), PATHINFO_EXTENSION));
-            if (!in_array($extension, ['csv', 'txt'], true)) {
-                return $this->json_response(['error' => 'Por seguridad esta primera version solo acepta CSV/TXT.'], 422);
+            if (!in_array($extension, ['csv', 'txt', 'pdf'], true)) {
+                return $this->json_response(['error' => 'Por seguridad solo se aceptan CSV, TXT o PDF bancarios.'], 422);
             }
 
             $relative_dir = 'assets/uploads/documents/bank_statements/'.date('Y').'/'.date('m');
@@ -280,14 +280,15 @@ class Controller_Admin_Payments extends Controller_Adminbase
                 return $this->json_response(['error' => 'No se pudo guardar el archivo.'], 400);
             }
 
-            $rows = $this->parse_statement_csv($target);
+            $source_format = $extension === 'pdf' ? 'bbva_pdf' : 'csv';
+            $rows = $extension === 'pdf' ? $this->parse_statement_pdf($target) : $this->parse_statement_csv($target);
             if (empty($rows)) {
                 return $this->json_response(['error' => 'No se detectaron movimientos en el archivo.'], 422);
             }
 
             $statement = Model_Core_Bank_Statement_Import::forge([
                 'bank_account_id' => $bank_account_id,
-                'source_format' => 'csv',
+                'source_format' => $source_format,
                 'original_name' => (string) \Arr::get($file, 'name', ''),
                 'file_path' => str_replace('\\', '/', $relative_dir.'/'.$filename),
                 'period_start' => $this->statement_period_date($rows, 'min'),
@@ -321,7 +322,7 @@ class Controller_Admin_Payments extends Controller_Adminbase
                     'description' => $row['description'],
                     'checksum' => $checksum,
                     'source_row_json' => json_encode($row['raw'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-                    'source' => 'statement_csv',
+                    'source' => 'statement_'.$source_format,
                     'statement_import_id' => (int) $statement->id,
                     'payment_id' => 0,
                     'reconciled' => 0,
@@ -869,6 +870,150 @@ class Controller_Admin_Payments extends Controller_Adminbase
         return $rows;
     }
 
+    protected function parse_statement_pdf($path)
+    {
+        if (!class_exists('\Smalot\PdfParser\Parser')) {
+            throw new \RuntimeException('Falta instalar smalot/pdfparser para importar estados PDF.');
+        }
+
+        $parser = new \Smalot\PdfParser\Parser();
+        $text = (string) $parser->parseFile($path)->getText();
+        if (stripos($text, 'BBVA') !== false) {
+            return $this->parse_bbva_statement_text($text);
+        }
+
+        throw new \RuntimeException('Formato PDF no reconocido. Por ahora se soporta BBVA con texto extraible.');
+    }
+
+    protected function parse_bbva_statement_text($text)
+    {
+        $year = $this->bbva_statement_year($text);
+        $lines = preg_split('/\R/u', (string) $text);
+        $rows = [];
+        $current = null;
+
+        foreach ($lines as $line) {
+            $line = trim(preg_replace('/\s+/u', ' ', (string) $line));
+            if ($line === '') {
+                continue;
+            }
+
+            $movement = $this->parse_bbva_movement_header($line, $year);
+            if ($movement) {
+                if ($current) {
+                    $rows[] = $this->finalize_bbva_movement($current);
+                }
+                $current = $movement;
+                continue;
+            }
+
+            if ($current && !$this->is_bbva_noise_line($line)) {
+                $current['extra'][] = $line;
+            }
+        }
+
+        if ($current) {
+            $rows[] = $this->finalize_bbva_movement($current);
+        }
+
+        return array_values(array_filter($rows));
+    }
+
+    protected function bbva_statement_year($text)
+    {
+        if (preg_match('/Fecha de Corte\s+\d{2}\/\d{2}\/(\d{4})/i', (string) $text, $m)) {
+            return (int) $m[1];
+        }
+        if (preg_match('/AL\s+\d{2}\/\d{2}\/(\d{4})/i', (string) $text, $m)) {
+            return (int) $m[1];
+        }
+        return (int) date('Y');
+    }
+
+    protected function parse_bbva_movement_header($line, $year)
+    {
+        if (!preg_match('/^(\d{2})\/([A-ZÁÉÍÓÚ]{3})(\d{2})\/([A-ZÁÉÍÓÚ]{3})\s+([A-Z0-9]{2,3})\s+(.+?)\s+(-?\(?[\d,]+\.\d{2}\)?)(?:\s+(-?[\d,]+\.\d{2})\s+(-?[\d,]+\.\d{2}))?$/u', $line, $m)) {
+            return null;
+        }
+
+        $date = $this->bbva_date((int) $m[1], $m[2], $year);
+        if ($date === '') {
+            return null;
+        }
+
+        $code = strtoupper((string) $m[5]);
+        $description = trim((string) $m[6]);
+        $amount = abs($this->money_value($m[7]));
+
+        return [
+            'movement_date' => $date,
+            'movement_type' => $this->bbva_movement_type($code, $description),
+            'amount' => round($amount, 2),
+            'balance_after' => isset($m[8]) && $m[8] !== '' ? round($this->money_value($m[8]), 2) : 0,
+            'currency_code' => 'MXN',
+            'reference' => '',
+            'description' => trim($code.' '.$description),
+            'extra' => [],
+            'raw' => ['line' => $line, 'bank' => 'BBVA', 'code' => $code],
+        ];
+    }
+
+    protected function finalize_bbva_movement(array $movement)
+    {
+        $extra = trim(implode(' ', (array) $movement['extra']));
+        $movement['description'] = trim($movement['description'].' '.$extra);
+        $movement['reference'] = $this->bbva_reference($movement['description']);
+        $movement['raw']['extra'] = $movement['extra'];
+        unset($movement['extra']);
+
+        return $movement;
+    }
+
+    protected function bbva_reference($text)
+    {
+        if (preg_match('/Ref\.?\s*[:.]?\s*([A-Z0-9\-]+)/i', (string) $text, $m)) {
+            return strtoupper($m[1]);
+        }
+        if (preg_match('/REF:?\s*([A-Z0-9\-]+)/i', (string) $text, $m)) {
+            return strtoupper($m[1]);
+        }
+        if (preg_match('/\b(BNET[0-9A-Z]+)\b/i', (string) $text, $m)) {
+            return strtoupper($m[1]);
+        }
+        return '';
+    }
+
+    protected function bbva_movement_type($code, $description)
+    {
+        $text = strtoupper($code.' '.$description);
+        if (preg_match('/(DEPOSITO|RECIBIDO|DEVOLUCION|TRANSFER BBVA|PAGO CUENTA DE TERCERO)/', $text)) {
+            return 'deposit';
+        }
+        if (preg_match('/(ENVIADO|KONFIO|SAT|SERV BANCA|COM SERV|IVA COM|RETIRO|CARGO|PAGO CIE)/', $text)) {
+            return 'withdrawal';
+        }
+        return in_array($code, ['T17', 'P14', 'S39', 'S40'], true) ? 'withdrawal' : 'deposit';
+    }
+
+    protected function bbva_date($day, $month, $year)
+    {
+        $months = [
+            'ENE' => '01', 'FEB' => '02', 'MAR' => '03', 'ABR' => '04',
+            'MAY' => '05', 'JUN' => '06', 'JUL' => '07', 'AGO' => '08',
+            'SEP' => '09', 'OCT' => '10', 'NOV' => '11', 'DIC' => '12',
+        ];
+        $month = strtoupper($this->remove_accents((string) $month));
+        if (!isset($months[$month])) {
+            return '';
+        }
+        return sprintf('%04d-%02d-%02d', (int) $year, (int) $months[$month], (int) $day);
+    }
+
+    protected function is_bbva_noise_line($line)
+    {
+        return (bool) preg_match('/^(PAGINA|MAESTRA PYME|BBVA MEXICO|No\. Cuenta|No\. Cliente|Estado de Cuenta|FECHA\s+SALDO|OPERLIQ|Informaci[oó]n Financiera|DOMICILIO FISCAL)/i', (string) $line);
+    }
+
     protected function detect_csv_delimiter($line)
     {
         $counts = [
@@ -1267,5 +1412,14 @@ class Controller_Admin_Payments extends Controller_Adminbase
         }
         $value = preg_replace('/[^a-z0-9]+/', '_', $value);
         return trim($value, '_');
+    }
+
+    protected function remove_accents($value)
+    {
+        $value = trim((string) $value);
+        if (function_exists('iconv')) {
+            $value = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $value);
+        }
+        return (string) $value;
     }
 }
