@@ -500,6 +500,35 @@ window.coreAppCsrfToken = <?php echo json_encode(Security::fetch_token()); ?>;
 window.fuel_csrf_token = function() {
     return window.coreAppCsrfToken || '';
 };
+window.coreAppParseJsonResponse = function(response) {
+    return response.text().then(function(text) {
+        var json = {};
+        try {
+            json = text ? JSON.parse(text) : {};
+        } catch (e) {
+            json = { error: 'El servidor rechazo la solicitud. Recarga la pantalla e intenta de nuevo.' };
+        }
+        if (json && json.csrf_token) {
+            window.coreAppCsrfToken = json.csrf_token;
+        }
+        if (!response.ok && !json.error) {
+            json.error = 'No se pudo completar la operacion.';
+        }
+        return json;
+    });
+};
+if (window.Response && !window.Response.prototype.coreAppCsrfPatched) {
+    window.Response.prototype.coreAppCsrfPatched = true;
+    window.Response.prototype.coreAppOriginalJson = window.Response.prototype.json;
+    window.Response.prototype.json = function() {
+        return this.coreAppOriginalJson().then(function(json) {
+            if (json && json.csrf_token) {
+                window.coreAppCsrfToken = json.csrf_token;
+            }
+            return json;
+        });
+    };
+}
 window.coreAppFetchOptions = function(data) {
     data = data || {};
     data[window.coreAppCsrfKey] = fuel_csrf_token();
@@ -512,13 +541,8 @@ window.coreAppFetchOptions = function(data) {
     };
 };
 window.coreAppJson = function(response) {
-    return response.json().then(function(json) {
-        if (json && json.csrf_token) {
-            window.coreAppCsrfToken = json.csrf_token;
-        }
-        if (!response.ok) {
-            throw json;
-        }
+    return window.coreAppParseJsonResponse(response).then(function(json) {
+        if (!response.ok) throw json;
         return json;
     });
 };
@@ -832,7 +856,7 @@ new Vue({
         },
         load: function() {
             fetch('<?php echo Uri::create('admin/notifications/data'); ?>')
-                .then(function(res) { return res.json(); })
+                .then(window.coreAppParseJsonResponse)
                 .then(data => {
                     if (data.error) return;
                     this.count = data.count || 0;
@@ -842,7 +866,7 @@ new Vue({
         openNotification: function(item) {
             fetch('<?php echo Uri::create('admin/notifications/mark_read'); ?>', {
                 ...window.coreAppFetchOptions({ recipient_id: item.recipient_id })
-            }).then(() => {
+            }).then(window.coreAppParseJsonResponse).then(() => {
                 this.open = false;
                 this.load();
                 if (item.url) {

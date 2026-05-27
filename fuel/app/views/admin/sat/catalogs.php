@@ -225,7 +225,7 @@ window.onload = function() {
             loadData() {
                 this.loading = true;
                 fetch('<?php echo Uri::create('admin/sat/catalogs_data'); ?>')
-                    .then(res => res.json())
+                    .then(window.coreAppParseJsonResponse)
                     .then(data => {
                         this.loading = false;
                         if (data.error) { alert(data.error); return; }
@@ -262,7 +262,7 @@ window.onload = function() {
                 fetch('<?php echo Uri::create('admin/sat/save_catalog'); ?>', {
                     ...window.coreAppFetchOptions(this.form)
                 })
-                .then(res => res.json())
+                .then(window.coreAppParseJsonResponse)
                 .then(data => {
                     if (data.error) { alert(data.error); return; }
                     this.items = data.items || {};
@@ -275,7 +275,7 @@ window.onload = function() {
                 fetch('<?php echo Uri::create('admin/sat/save_catalog_sync_source'); ?>', {
                     ...window.coreAppFetchOptions(payload)
                 })
-                .then(res => res.json())
+                .then(window.coreAppParseJsonResponse)
                 .then(data => {
                     if (data.error) { this.syncError = true; this.syncMessage = data.error; return; }
                     this.syncSources = data.sync_sources || this.syncSources;
@@ -290,7 +290,7 @@ window.onload = function() {
                 fetch('<?php echo Uri::create('admin/sat/sync_catalog'); ?>', {
                     ...window.coreAppFetchOptions({ catalog_key: this.currentCatalog })
                 })
-                .then(res => res.json())
+                .then(window.coreAppParseJsonResponse)
                 .then(data => {
                     this.syncing = false;
                     if (data.error) { this.syncError = true; this.syncMessage = data.error; return; }

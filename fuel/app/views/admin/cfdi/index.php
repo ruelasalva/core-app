@@ -296,7 +296,7 @@ window.onload = function() {
                 var params = new URLSearchParams(this.filters);
                 if (extra && extra.cfdi_id) params.set('cfdi_id', extra.cfdi_id);
                 return fetch('<?php echo Uri::create('admin/cfdi/data'); ?>?' + params.toString())
-                    .then(function(res) { return res.json(); })
+                    .then(window.coreAppParseJsonResponse)
                     .then(data => {
                         if (data.error) { this.error = data.error; return; }
                         this.stats = data.stats || {};
@@ -358,7 +358,7 @@ window.onload = function() {
                         new_name: row.new_name || ''
                     }))
                 }))
-                    .then(function(res) { return res.json(); })
+                    .then(window.coreAppParseJsonResponse)
                     .then(data => {
                         this.convertForm.saving = false;
                         if (data.error) { this.error = data.error; return; }
@@ -376,7 +376,7 @@ window.onload = function() {
                 this.error = '';
                 this.message = '';
                 fetch('<?php echo Uri::create('admin/cfdi/materialize_catalogs'); ?>', window.coreAppFetchOptions({ cfdi_id: item.id }))
-                    .then(function(res) { return res.json(); })
+                    .then(window.coreAppParseJsonResponse)
                     .then(data => {
                         if (data.error) { this.error = data.error; return; }
                         this.message = data.message || 'Catalogos actualizados desde CFDI.';
@@ -402,8 +402,13 @@ window.onload = function() {
                 var form = new FormData();
                 form.append('file', file);
                 form.append(window.coreAppCsrfKey, fuel_csrf_token());
-                fetch('<?php echo Uri::create('admin/cfdi/import_xml'); ?>', { method: 'POST', body: form })
-                    .then(function(res) { return res.json(); })
+                fetch('<?php echo Uri::create('admin/cfdi/import_xml'); ?>', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Accept': 'application/json', 'X-CSRF-Token': fuel_csrf_token() },
+                    body: form
+                })
+                    .then(window.coreAppParseJsonResponse)
                     .then(data => {
                         if (data.error) { this.error = data.error; return; }
                         this.message = data.message || 'XML importado.';
