@@ -100,7 +100,11 @@
                 </table>
             </div>
 
-            <div v-if="filters.tab === 'ppd_audit'" class="mb-3">
+            <div v-if="isPpdTab(filters.tab)" class="mb-3">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h5 class="mb-0">{{ ppdTitle }}</h5>
+                    <span class="text-muted small">Periodo {{ filters.month }}</span>
+                </div>
                 <div class="row">
                     <div class="col-md-3" v-for="card in ppdCards" :key="card.key">
                         <div class="small-box" :class="card.bg">
@@ -110,24 +114,24 @@
                     </div>
                 </div>
                 <table class="table table-sm table-hover">
-                    <thead><tr><th>Fecha</th><th>Sentido</th><th>Factura</th><th>Contraparte</th><th class="text-right">Total</th><th class="text-right">Pagado REP</th><th class="text-right">Saldo</th><th>Estado</th></tr></thead>
+                    <thead><tr><th>Fecha</th><th>Factura</th><th>{{ ppdCounterpartyLabel }}</th><th>REP relacionado</th><th class="text-right">Total</th><th class="text-right">Pagado REP</th><th class="text-right">Saldo</th><th>Estado</th></tr></thead>
                     <tbody>
                         <tr v-for="row in ppdAudit.items" :key="'ppd-' + row.id">
                             <td>{{ row.issued_label }}</td>
-                            <td><span class="badge" :class="row.direction === 'issued' ? 'badge-info' : 'badge-secondary'">{{ row.direction === 'issued' ? 'Por cobrar' : 'Por pagar' }}</span></td>
                             <td><div>{{ row.serie || '' }} {{ row.folio || '' }}</div><code>{{ row.uuid }}</code></td>
                             <td><strong>{{ row.counterparty_rfc }}</strong><div class="text-muted small">{{ row.counterparty_name }}</div></td>
+                            <td><span class="badge" :class="repBadge(row)">{{ repLabel(row) }}</span></td>
                             <td class="text-right">{{ money(row.total, row.currency || 'MXN') }}</td>
                             <td class="text-right">{{ money(row.paid_amount, row.currency || 'MXN') }}</td>
                             <td class="text-right" :class="row.balance_amount > 1 ? 'text-danger' : 'text-success'">{{ money(row.balance_amount, row.currency || 'MXN') }}</td>
                             <td><span class="badge" :class="ppdBadge(row.ppd_status)">{{ ppdLabel(row.ppd_status) }}</span></td>
                         </tr>
-                        <tr v-if="ppdAudit.items.length === 0"><td colspan="8" class="text-muted text-center">Sin facturas PPD en el periodo.</td></tr>
+                        <tr v-if="ppdAudit.items.length === 0"><td colspan="8" class="text-muted text-center">{{ ppdEmptyLabel }}</td></tr>
                     </tbody>
                 </table>
             </div>
 
-            <div v-if="filters.tab !== 'reports' && filters.tab !== 'ppd_audit'" class="table-responsive">
+            <div v-if="filters.tab !== 'reports' && !isPpdTab(filters.tab)" class="table-responsive">
                 <table class="table table-sm table-hover">
                     <thead>
                         <tr>
@@ -345,7 +349,8 @@ window.onload = function() {
                 { key: 'issued', label: 'Emitidos', icon: 'bi bi-send' },
                 { key: 'cancelled', label: 'Cancelados', icon: 'bi bi-x-circle' },
                 { key: 'payments', label: 'REP', icon: 'bi bi-cash-coin' },
-                { key: 'ppd_audit', label: 'Auditoria PPD', icon: 'bi bi-clipboard-check' },
+                { key: 'ppd_issued', label: 'PPD emitidos', icon: 'bi bi-wallet2' },
+                { key: 'ppd_received', label: 'PPD recibidos', icon: 'bi bi-bank' },
                 { key: 'reports', label: 'Reportes', icon: 'bi bi-bar-chart' },
                 { key: 'all', label: 'Todos', icon: 'bi bi-collection' }
             ],
@@ -381,12 +386,22 @@ window.onload = function() {
             },
             ppdCards: function() {
                 var s = this.ppdAudit.summary || {};
+                var issued = this.filters.tab === 'ppd_issued';
                 return [
-                    { key: 'issued_balance', label: 'PPD por cobrar', value: s.issued_balance || 0, money: true, icon: 'bi bi-wallet2', bg: 'bg-info' },
-                    { key: 'received_balance', label: 'PPD por pagar', value: s.received_balance || 0, money: true, icon: 'bi bi-bank', bg: 'bg-warning' },
+                    { key: 'total', label: issued ? 'Facturado PPD' : 'Recibido PPD', value: issued ? (s.issued_total || 0) : (s.received_total || 0), money: true, icon: issued ? 'bi bi-send' : 'bi bi-inbox', bg: issued ? 'bg-info' : 'bg-warning' },
+                    { key: 'balance', label: issued ? 'Saldo por cobrar' : 'Saldo por pagar', value: issued ? (s.issued_balance || 0) : (s.received_balance || 0), money: true, icon: issued ? 'bi bi-wallet2' : 'bi bi-bank', bg: 'bg-primary' },
                     { key: 'without_rep', label: 'Sin REP', value: s.without_rep || 0, money: false, icon: 'bi bi-exclamation-circle', bg: 'bg-danger' },
                     { key: 'needs_xml', label: 'Requieren XML', value: s.needs_xml || 0, money: false, icon: 'bi bi-file-earmark-arrow-down', bg: 'bg-secondary' }
                 ];
+            },
+            ppdTitle: function() {
+                return this.filters.tab === 'ppd_issued' ? 'Auditoria PPD emitidos - cuentas por cobrar' : 'Auditoria PPD recibidos - cuentas por pagar';
+            },
+            ppdCounterpartyLabel: function() {
+                return this.filters.tab === 'ppd_issued' ? 'Cliente' : 'Proveedor';
+            },
+            ppdEmptyLabel: function() {
+                return this.filters.tab === 'ppd_issued' ? 'Sin facturas PPD emitidas en el periodo.' : 'Sin facturas PPD recibidas en el periodo.';
             }
         },
         mounted: function() { this.load(); },
@@ -397,6 +412,9 @@ window.onload = function() {
                 this.selected = null;
                 this.selectedContext = { details: [], payments: [], relations: [], linked: [] };
                 this.load();
+            },
+            isPpdTab: function(tab) {
+                return tab === 'ppd_issued' || tab === 'ppd_received';
             },
             selectDocType: function(type) {
                 this.filters.doc_type = type;
@@ -520,6 +538,14 @@ window.onload = function() {
                 if (status === 'paid') return 'badge-success';
                 if (status === 'partial') return 'badge-warning';
                 return 'badge-danger';
+            },
+            repLabel: function(row) {
+                if (row.ppd_status === 'needs_xml') return 'XML pendiente';
+                return Number(row.paid_amount || 0) > 0 ? 'Con REP' : 'Sin REP';
+            },
+            repBadge: function(row) {
+                if (row.ppd_status === 'needs_xml') return 'badge-secondary';
+                return Number(row.paid_amount || 0) > 0 ? 'badge-success' : 'badge-danger';
             },
             importXml: function(event) {
                 var file = event.target.files[0];

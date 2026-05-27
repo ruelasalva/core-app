@@ -268,7 +268,7 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
 
     protected function items(array $filters)
     {
-        if (in_array($filters['tab'], ['reports', 'ppd_audit'], true)) {
+        if (in_array($filters['tab'], ['reports', 'ppd_issued', 'ppd_received'], true)) {
             return [];
         }
 
@@ -348,6 +348,7 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
     {
         $start = $filters['month'].'-01 00:00:00';
         $end = date('Y-m-t 23:59:59', strtotime($filters['month'].'-01'));
+        $direction_filter = $filters['tab'] === 'ppd_received' ? 'received' : 'issued';
         $payments = $this->payment_totals_by_invoice();
         $items = [];
         $summary = [
@@ -371,6 +372,7 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
             ->where('issued_at', '>=', $start)
             ->where('issued_at', '<=', $end)
             ->where('voucher_type', '=', 'I')
+            ->where('direction', '=', $direction_filter)
             ->where('sat_status', '!=', 'cancelado')
             ->where_open()
                 ->where('payment_method', '=', 'PPD')
@@ -408,7 +410,7 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
             $items[] = $row;
         }
 
-        return ['summary' => $summary, 'items' => $items];
+        return ['summary' => $summary, 'items' => $items, 'direction' => $direction_filter];
     }
 
     protected function sum_month($start, $end, $field, array $where = [])
