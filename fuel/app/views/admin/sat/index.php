@@ -522,6 +522,23 @@ window.onload = function() {
             this.loadData();
         },
         methods: {
+            parseJsonResponse(response) {
+                return response.text().then(text => {
+                    let data = {};
+                    try {
+                        data = text ? JSON.parse(text) : {};
+                    } catch (e) {
+                        data = { error: 'El servidor rechazo la solicitud. Recarga la pantalla e intenta de nuevo.' };
+                    }
+                    if (data && data.csrf_token) {
+                        window.coreAppCsrfToken = data.csrf_token;
+                    }
+                    if (!response.ok && !data.error) {
+                        data.error = 'No se pudo completar la operacion.';
+                    }
+                    return data;
+                });
+            },
             emptyCredential() {
                 return {
                     id: null,
@@ -545,7 +562,7 @@ window.onload = function() {
                 let url = '<?php echo Uri::create('admin/sat/data'); ?>';
                 if (params.length) url += '?' + params.join('&');
                 fetch(url)
-                    .then(res => res.json())
+                    .then(this.parseJsonResponse)
                     .then(data => {
                         this.loading = false;
                         if (data.error) {
@@ -567,7 +584,7 @@ window.onload = function() {
                 fetch('<?php echo Uri::create('admin/sat/save_config'); ?>', {
                     ...window.coreAppFetchOptions(this.config)
                 })
-                .then(res => res.json())
+                .then(this.parseJsonResponse)
                 .then(data => {
                     if (data.error) {
                         alert(data.error);
@@ -593,7 +610,7 @@ window.onload = function() {
                 return fetch('<?php echo Uri::create('admin/sat/save_credential'); ?>', {
                     ...window.coreAppFetchOptions(this.credentialForm)
                 })
-                .then(res => res.json())
+                .then(this.parseJsonResponse)
                 .then(data => {
                     if (data.error) {
                         alert(data.error);
@@ -621,8 +638,13 @@ window.onload = function() {
                 form.append('file_type', fileType);
                 form.append('file', file);
                 form.append(window.coreAppCsrfKey, fuel_csrf_token());
-                fetch('<?php echo Uri::create('admin/sat/upload_credential_file'); ?>', { method: 'POST', body: form })
-                    .then(res => res.json())
+                fetch('<?php echo Uri::create('admin/sat/upload_credential_file'); ?>', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Accept': 'application/json', 'X-CSRF-Token': fuel_csrf_token() },
+                    body: form
+                })
+                    .then(this.parseJsonResponse)
                     .then(data => {
                         if (data.error) {
                             alert(data.error);
@@ -631,6 +653,12 @@ window.onload = function() {
                         this.credentials = data.credentials || [];
                         const updated = this.credentials.find(item => String(item.id) === String(this.credentialForm.id));
                         if (updated) this.credentialForm = Object.assign(this.emptyCredential(), updated, { active: updated.active == 1, password: '' });
+                        this.operationError = false;
+                        this.operationMessage = 'Archivo ' + (data.original_name || file.name) + ' cargado correctamente.';
+                    })
+                    .catch(() => {
+                        this.operationError = true;
+                        this.operationMessage = 'No se pudo cargar el archivo. Revisa el archivo e intenta de nuevo.';
                     });
             },
             validityBadge(status) {
@@ -654,7 +682,7 @@ window.onload = function() {
                 fetch('<?php echo Uri::create('admin/sat/save_request'); ?>', {
                     ...window.coreAppFetchOptions(this.requestForm)
                 })
-                .then(res => res.json())
+                .then(this.parseJsonResponse)
                 .then(data => {
                     if (data.error) {
                         alert(data.error);
@@ -685,7 +713,7 @@ window.onload = function() {
                 fetch('<?php echo Uri::create('admin/sat'); ?>/' + action, {
                     ...window.coreAppFetchOptions(payload)
                 })
-                .then(res => res.json())
+                .then(this.parseJsonResponse)
                 .then(data => {
                     this.operating = false;
                     if (data.error) {

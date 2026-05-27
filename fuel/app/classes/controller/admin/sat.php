@@ -493,7 +493,13 @@ class Controller_Admin_Sat extends Controller_Adminbase
                 ],
             ]);
 
-            return $this->json_response(['status' => 'ok', 'credentials' => $this->get_credentials()]);
+            return $this->json_response([
+                'status' => 'ok',
+                'id' => (int) $credential->id,
+                'file_type' => $file_type,
+                'original_name' => (string) \Arr::get($file, 'name', ''),
+                'credentials' => $this->get_credentials(),
+            ]);
         } catch (\Exception $e) {
             \Log::error('Error cargando archivo credencial SAT: '.$e->getMessage());
             return $this->json_response(['error' => $e->getMessage()], 400);
