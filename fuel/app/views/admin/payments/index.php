@@ -258,8 +258,14 @@ window.onload = function() {
                     this.suggestions = data.suggestions || [];
                     this.periodFilters = data.period_filters || this.periodFilters;
                     this.options = data.options || this.options;
+                    this.ensureStatementBankAccount();
                     this.stats = data.stats || {};
                 });
+            },
+            ensureStatementBankAccount() {
+                if ((!this.statementForm.bank_account_id || this.statementForm.bank_account_id == 0) && this.options.bank_accounts && this.options.bank_accounts.length === 1) {
+                    this.statementForm.bank_account_id = this.options.bank_accounts[0].value;
+                }
             },
             openPayment(payment) {
                 this.paymentForm = Object.assign({ id: 0, payment_type: 'received', party_id: 0, bank_account_id: 0, integration_connection_id: 0, fiscal_document_id: 0, fiscal_mode: 'system_only', rep_status: 'not_required', payment_date: new Date().toISOString().slice(0, 10), currency_code: 'MXN', exchange_rate: 1, amount: 0, sat_payment_form_code: '99', reference: '', external_id: '', status: 'pending', notes: '', allocation_entity_type: '', allocation_entity_id: 0, active: true }, payment);
@@ -353,6 +359,7 @@ window.onload = function() {
             importStatement() {
                 this.error = '';
                 this.message = '';
+                this.ensureStatementBankAccount();
                 if (!this.statementForm.bank_account_id || this.statementForm.bank_account_id == 0) { this.error = 'Selecciona una cuenta bancaria.'; return; }
                 if (!this.statementForm.file) { this.error = 'Selecciona un CSV, TXT o PDF de estado de cuenta.'; return; }
                 const form = new FormData();

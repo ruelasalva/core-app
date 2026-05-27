@@ -254,6 +254,7 @@ class Controller_Admin_Payments extends Controller_Adminbase
         try {
             $this->assert_schema_ready();
             $bank_account_id = (int) \Input::post('bank_account_id', 0);
+            \Log::info('Pagos: importacion estado cuenta bank_account_id='.$bank_account_id.' file='.(string) \Arr::get((array) \Input::file('file'), 'name', ''));
             if ($bank_account_id < 1) {
                 return $this->json_response(['error' => 'Selecciona una cuenta bancaria.'], 422);
             }
@@ -282,6 +283,7 @@ class Controller_Admin_Payments extends Controller_Adminbase
 
             $source_format = $extension === 'pdf' ? 'bbva_pdf' : 'csv';
             $rows = $extension === 'pdf' ? $this->parse_statement_pdf($target) : $this->parse_statement_csv($target);
+            \Log::info('Pagos: estado cuenta parseado formato='.$source_format.' filas='.count($rows));
             if (empty($rows)) {
                 return $this->json_response(['error' => 'No se detectaron movimientos en el archivo.'], 422);
             }
@@ -305,6 +307,8 @@ class Controller_Admin_Payments extends Controller_Adminbase
             $imported = 0;
             $duplicates = 0;
             foreach ($rows as $row) {
+                $row['reference'] = $this->limit_text((string) $row['reference'], 120);
+                $row['description'] = $this->limit_text((string) $row['description'], 255);
                 $checksum = $this->movement_checksum($bank_account_id, $row);
                 if (\DB::select('id')->from('core_bank_movements')->where('checksum', '=', $checksum)->execute()->current()) {
                     $duplicates++;
@@ -1115,6 +1119,15 @@ class Controller_Admin_Payments extends Controller_Adminbase
         $value = str_replace(['(', ')', '+', '-'], '', $value);
         $amount = (float) $value;
         return $negative ? -$amount : $amount;
+    }
+
+    protected function limit_text($value, $length)
+    {
+        $value = trim((string) $value);
+        if (function_exists('mb_substr')) {
+            return mb_substr($value, 0, (int) $length, 'UTF-8');
+        }
+        return substr($value, 0, (int) $length);
     }
 
     protected function movement_checksum($bank_account_id, array $row)
