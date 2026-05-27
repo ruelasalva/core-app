@@ -111,6 +111,11 @@ class Controller_Adminbase extends Controller_Template
      */
     protected function json_response(array $data, $status = 200)
     {
+        # SE INCLUYE TOKEN ACTUAL PARA AJAX/FORMDATA CON CSRF ROTATIVO
+        if (!isset($data['csrf_token'])) {
+            $data['csrf_token'] = \Security::fetch_token();
+        }
+
         return \Response::forge(
             json_encode($data),
             $status,
