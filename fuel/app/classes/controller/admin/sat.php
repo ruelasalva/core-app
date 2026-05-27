@@ -415,8 +415,12 @@ class Controller_Admin_Sat extends Controller_Adminbase
             # SE GUARDA CREDENCIAL
             $credential->save();
 
-            # SE REGRESA LISTADO ACTUALIZADO
-            return $this->json_response(['status' => 'ok', 'credentials' => $this->get_credentials()]);
+            # SE REGRESA LISTADO ACTUALIZADO Y EL ID PARA HABILITAR CARGA DE ARCHIVOS
+            return $this->json_response([
+                'status' => 'ok',
+                'id' => (int) $credential->id,
+                'credentials' => $this->get_credentials(),
+            ]);
         } catch (\Exception $e) {
             \Log::error('Error guardando credencial SAT: '.$e->getMessage());
             return $this->json_response(['error' => 'No se pudo guardar la credencial SAT.'], 400);

@@ -339,6 +339,11 @@
                 </div>
                 <div class="modal-body">
                     <div class="row">
+                        <div class="col-md-12" v-if="!credentialForm.id">
+                            <div class="alert alert-info py-2">
+                                Primero guarda el RFC, tipo y password. Despues se habilita la carga de archivos .CER y .KEY.
+                            </div>
+                        </div>
                         <div class="col-md-3">
                             <div class="form-group">
                                 <label>Tipo</label>
@@ -372,13 +377,13 @@
                                 <div class="input-group">
                                     <input class="form-control" :value="credentialForm.cer_original_name || credentialForm.cer_path" readonly>
                                     <div class="input-group-append">
-                                        <label class="btn btn-outline-primary mb-0">
+                                        <label class="btn btn-outline-primary mb-0" :class="{ disabled: !credentialForm.id }">
                                             <i class="bi bi-upload"></i>
-                                            <input type="file" accept=".cer" class="d-none" @change="uploadCredentialFile($event, 'cer')">
+                                            <input type="file" accept=".cer" class="d-none" :disabled="!credentialForm.id" @change="uploadCredentialFile($event, 'cer')">
                                         </label>
                                     </div>
                                 </div>
-                                <small class="text-muted">La vigencia se toma del certificado.</small>
+                                <small class="text-muted">La vigencia se toma del certificado despues de cargarlo.</small>
                             </div>
                         </div>
                         <div class="col-md-6">
@@ -387,13 +392,13 @@
                                 <div class="input-group">
                                     <input class="form-control" :value="credentialForm.key_original_name || credentialForm.key_path" readonly>
                                     <div class="input-group-append">
-                                        <label class="btn btn-outline-primary mb-0">
+                                        <label class="btn btn-outline-primary mb-0" :class="{ disabled: !credentialForm.id }">
                                             <i class="bi bi-upload"></i>
-                                            <input type="file" accept=".key" class="d-none" @change="uploadCredentialFile($event, 'key')">
+                                            <input type="file" accept=".key" class="d-none" :disabled="!credentialForm.id" @change="uploadCredentialFile($event, 'key')">
                                         </label>
                                     </div>
                                 </div>
-                                <small class="text-muted">Guarda la credencial antes de cargar archivos.</small>
+                                <small class="text-muted">Disponible cuando la credencial ya existe.</small>
                             </div>
                         </div>
                         <div class="col-md-12" v-if="credentialForm.certificate_serial">
@@ -424,7 +429,12 @@
                 </div>
                 <div class="modal-footer">
                     <button class="btn btn-secondary" @click="hideModal('modal-credential')">Cerrar</button>
-                    <button class="btn btn-primary" @click="saveCredential">Guardar</button>
+                    <button class="btn btn-outline-primary" @click="saveCredential(true)">
+                        <i class="bi bi-save"></i> Guardar
+                    </button>
+                    <button class="btn btn-primary" @click="saveCredential(false)" v-if="credentialForm.id">
+                        Guardar y cerrar
+                    </button>
                 </div>
             </div>
         </div>
@@ -578,8 +588,9 @@ window.onload = function() {
                 });
                 this.showModal('modal-credential');
             },
-            saveCredential() {
-                fetch('<?php echo Uri::create('admin/sat/save_credential'); ?>', {
+            saveCredential(keepOpen) {
+                keepOpen = typeof keepOpen === 'undefined' ? true : keepOpen;
+                return fetch('<?php echo Uri::create('admin/sat/save_credential'); ?>', {
                     ...window.coreAppFetchOptions(this.credentialForm)
                 })
                 .then(res => res.json())
@@ -589,9 +600,12 @@ window.onload = function() {
                         return;
                     }
                     this.credentials = data.credentials || [];
-                    const updated = this.credentials.find(item => String(item.id) === String(this.credentialForm.id));
+                    const targetId = data.id || this.credentialForm.id;
+                    const updated = this.credentials.find(item => String(item.id) === String(targetId));
                     if (updated) this.credentialForm = Object.assign(this.emptyCredential(), updated, { active: updated.active == 1, password: '' });
-                    this.hideModal('modal-credential');
+                    this.operationError = false;
+                    this.operationMessage = this.credentialForm.id ? 'Credencial SAT guardada. Ya puedes cargar o actualizar archivos.' : 'Credencial SAT guardada.';
+                    if (!keepOpen) this.hideModal('modal-credential');
                 });
             },
             uploadCredentialFile(event, fileType) {
@@ -599,7 +613,7 @@ window.onload = function() {
                 event.target.value = '';
                 if (!file) return;
                 if (!this.credentialForm.id) {
-                    alert('Guarda primero la credencial y despues carga el archivo.');
+                    alert('Guarda primero la credencial con RFC, tipo y password. Despues se habilita la carga del archivo.');
                     return;
                 }
                 const form = new FormData();
