@@ -267,6 +267,112 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
         }
     }
 
+    /**
+     * MATERIALIZE BATCH
+     *
+     * CREA/ACTUALIZA TERCEROS Y PRODUCTOS BASE DESDE VARIOS CFDI
+     *
+     * @access  public
+     * @return  Response
+     */
+    public function action_materialize_batch()
+    {
+        $this->require_access('sat.access[edit]');
+
+        try {
+            $this->assert_schema_ready();
+            $payload = (array) \Input::json();
+            $ids = array_values(array_unique(array_filter(array_map('intval', (array) \Arr::get($payload, 'cfdi_ids', [])))));
+            $mode = (string) \Arr::get($payload, 'mode', 'both');
+            $mode = in_array($mode, ['party', 'products', 'both'], true) ? $mode : 'both';
+
+            if (empty($ids)) {
+                return $this->json_response(['error' => 'Selecciona al menos un CFDI.'], 422);
+            }
+            if (count($ids) > 300) {
+                return $this->json_response(['error' => 'Procesa maximo 300 CFDI por lote. Usa filtros si necesitas partir la carga.'], 422);
+            }
+            if (in_array($mode, ['party', 'both'], true)) {
+                $this->require_access('parties.access[edit]');
+            }
+            if (in_array($mode, ['products', 'both'], true)) {
+                $this->require_access('commerce.access[edit]');
+            }
+            if (in_array($mode, ['party', 'both'], true) && !\DBUtil::table_exists('core_parties')) {
+                return $this->json_response(['error' => 'Faltan migraciones de terceros.'], 422);
+            }
+            if (in_array($mode, ['products', 'both'], true) && !\DBUtil::table_exists('core_commerce_products')) {
+                return $this->json_response(['error' => 'Faltan migraciones de productos.'], 422);
+            }
+
+            $result = [
+                'processed' => 0,
+                'skipped' => 0,
+                'errors' => [],
+                'parties_created' => 0,
+                'parties_updated' => 0,
+                'products_created' => 0,
+                'products_updated' => 0,
+                'products_skipped' => 0,
+            ];
+
+            foreach ($ids as $id) {
+                $cfdi = \Model_Core_Sat_Cfdi::find((int) $id);
+                if (!$cfdi || !$this->can_access_cfdi((int) $id)) {
+                    $result['skipped']++;
+                    $result['errors'][] = 'CFDI '.$id.' no encontrado o sin permiso.';
+                    continue;
+                }
+
+                \DB::start_transaction();
+                try {
+                    if (in_array($mode, ['party', 'both'], true)) {
+                        $party_result = $this->materialize_cfdi_party($cfdi);
+                        $result['parties_created'] += $party_result['created'];
+                        $result['parties_updated'] += $party_result['updated'];
+                    }
+                    if (in_array($mode, ['products', 'both'], true)) {
+                        foreach ($this->details((int) $cfdi->id) as $line) {
+                            if ((string) $line['line_type'] !== 'concept') {
+                                continue;
+                            }
+                            $product_result = $this->materialize_cfdi_product($cfdi, $line);
+                            $result[$product_result]++;
+                        }
+                    }
+                    $cfdi->reviewed_by = (int) $this->user_id;
+                    $cfdi->reviewed_at = time();
+                    $cfdi->save();
+                    \DB::commit_transaction();
+                    $result['processed']++;
+                } catch (\Exception $item_error) {
+                    \DB::rollback_transaction();
+                    $result['skipped']++;
+                    $result['errors'][] = 'CFDI '.$cfdi->uuid.': '.$item_error->getMessage();
+                }
+            }
+
+            \Helper_Core_Audit::log([
+                'module' => 'sat',
+                'action' => 'materialize_batch',
+                'business_event' => 'sat.materialize_batch',
+                'entity_type' => 'sat_cfdi_batch',
+                'entity_id' => 0,
+                'summary' => 'Procesamiento lote SAT: '.$result['processed'].' procesados, '.$result['skipped'].' omitidos',
+                'new_values' => $result,
+            ]);
+
+            return $this->json_response([
+                'status' => 'ok',
+                'message' => 'Lote procesado: '.$result['processed'].' CFDI. Terceros creados '.$result['parties_created'].', actualizados '.$result['parties_updated'].'. Productos creados '.$result['products_created'].', actualizados '.$result['products_updated'].'. Omitidos '.$result['skipped'].'.',
+                'summary' => $result,
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error procesando lote SAT: '.$e->getMessage());
+            return $this->json_response(['error' => $e->getMessage()], 400);
+        }
+    }
+
     protected function filters()
     {
         $month = trim((string) \Input::get('month', date('Y-m')));

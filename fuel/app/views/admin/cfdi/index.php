@@ -131,10 +131,35 @@
                 </table>
             </div>
 
-            <div v-if="filters.tab !== 'reports' && !isPpdTab(filters.tab)" class="table-responsive">
+            <div v-if="filters.tab !== 'reports' && !isPpdTab(filters.tab)">
+                <div class="d-flex flex-wrap align-items-center mb-2">
+                    <div class="custom-control custom-checkbox mr-3">
+                        <input type="checkbox" class="custom-control-input" id="cfdi-select-visible" :checked="allVisibleSelected" @change="toggleVisibleSelection">
+                        <label class="custom-control-label" for="cfdi-select-visible">Seleccionar visibles</label>
+                    </div>
+                    <span class="text-muted small mr-3">{{ selectedIds.length }} seleccionados</span>
+                    <div class="btn-group btn-group-sm">
+                        <button class="btn btn-outline-success" @click="materializeBatch('party')" :disabled="batchSaving || selectedIds.length === 0">
+                            <i class="bi bi-person-plus"></i> Crear terceros
+                        </button>
+                        <button class="btn btn-outline-info" @click="materializeBatch('products')" :disabled="batchSaving || selectedIds.length === 0">
+                            <i class="bi bi-box-seam"></i> Crear productos
+                        </button>
+                        <button class="btn btn-outline-primary" @click="materializeBatch('both')" :disabled="batchSaving || selectedIds.length === 0">
+                            <i class="bi bi-box-arrow-in-down"></i> Terceros + productos
+                        </button>
+                    </div>
+                    <button class="btn btn-sm btn-outline-secondary ml-2" @click="selectedIds = []" :disabled="selectedIds.length === 0">Limpiar</button>
+                </div>
+                <div v-if="batchSummary.errors && batchSummary.errors.length" class="alert alert-warning py-2">
+                    <strong>Omitidos:</strong>
+                    <div v-for="err in batchSummary.errors.slice(0, 5)" class="small">{{ err }}</div>
+                </div>
+                <div class="table-responsive">
                 <table class="table table-sm table-hover">
                     <thead>
                         <tr>
+                            <th style="width: 36px;"></th>
                             <th>Fecha</th>
                             <th>Tipo</th>
                             <th>Serie/Folio</th>
@@ -148,6 +173,9 @@
                     <tbody>
                         <template v-for="item in items">
                             <tr :key="'row-' + item.id" :class="{ 'table-active': selected && selected.id === item.id }" @click="openDetails(item)">
+                                <td @click.stop>
+                                    <input type="checkbox" v-model="selectedIds" :value="item.id">
+                                </td>
                                 <td>{{ item.issued_label }}</td>
                                 <td><span class="badge badge-secondary">{{ item.type_label }}</span></td>
                                 <td>{{ item.serie || '-' }} {{ item.folio || '' }}</td>
@@ -182,7 +210,7 @@
                                 </td>
                             </tr>
                             <tr v-if="selected && selected.id === item.id" :key="'detail-' + item.id">
-                                <td colspan="8" class="bg-light">
+                                <td colspan="9" class="bg-light">
                                     <div class="row">
                                         <div class="col-lg-8">
                                             <div class="d-flex justify-content-between align-items-center mb-2">
@@ -245,10 +273,11 @@
                             </tr>
                         </template>
                         <tr v-if="items.length === 0">
-                            <td colspan="8" class="text-center text-muted py-4">Sin CFDI en el periodo seleccionado.</td>
+                            <td colspan="9" class="text-center text-muted py-4">Sin CFDI en el periodo seleccionado.</td>
                         </tr>
                     </tbody>
                 </table>
+                </div>
             </div>
             <div class="text-muted small">Mostrando maximo 300 registros. Usa filtros por mes, tipo y busqueda para auditorias grandes.</div>
         </div>
@@ -429,6 +458,9 @@ window.onload = function() {
             selectedContext: { details: [], payments: [], relations: [], linked: [] },
             convertForm: { item: null, mappings: [], saving: false },
             catalogForm: { item: null, mode: 'party', saving: false, party: {} },
+            selectedIds: [],
+            batchSaving: false,
+            batchSummary: { errors: [] },
             message: '',
             error: '',
             tabs: [
@@ -489,6 +521,11 @@ window.onload = function() {
             },
             ppdEmptyLabel: function() {
                 return this.filters.tab === 'ppd_issued' ? 'Sin facturas PPD emitidas en el periodo.' : 'Sin facturas PPD recibidas en el periodo.';
+            },
+            allVisibleSelected: function() {
+                if (!this.items.length) return false;
+                var selected = this.selectedIds.map(function(id) { return parseInt(id); });
+                return this.items.every(function(item) { return selected.indexOf(parseInt(item.id)) !== -1; });
             }
         },
         mounted: function() { this.load(); },
@@ -519,12 +556,20 @@ window.onload = function() {
                         if (data.error) { this.error = data.error; return; }
                         this.stats = data.stats || {};
                         this.items = data.items || [];
+                        if (!extra || !extra.cfdi_id) this.selectedIds = [];
                         this.reports = data.reports || { summary: {}, customers: [], suppliers: [], missing_xml: [] };
                         this.ppdAudit = data.ppd_audit || { summary: {}, items: [] };
                         this.options = data.options || { products: [], warehouses: [], departments: [], sat_cfdi_uses: [], sat_tax_regimes: [] };
                         this.selectedContext = data.selected || { details: [], payments: [], relations: [], linked: [] };
                     })
                     .catch(() => { this.error = 'No se pudo cargar Auditoria SAT.'; });
+            },
+            toggleVisibleSelection: function(event) {
+                if (event.target.checked) {
+                    this.selectedIds = this.items.map(function(item) { return item.id; });
+                } else {
+                    this.selectedIds = [];
+                }
             },
             openDetails: function(item) {
                 this.selected = item;
@@ -640,6 +685,32 @@ window.onload = function() {
                     .catch(() => {
                         this.catalogForm.saving = false;
                         this.error = 'No se pudieron crear catalogos desde CFDI.';
+                    });
+            },
+            materializeBatch: function(mode) {
+                if (!this.selectedIds.length) return;
+                var label = mode === 'party' ? 'terceros' : (mode === 'products' ? 'productos' : 'terceros y productos');
+                if (!confirm('Procesar ' + this.selectedIds.length + ' CFDI para crear/actualizar ' + label + '?')) return;
+                this.error = '';
+                this.message = '';
+                this.batchSaving = true;
+                this.batchSummary = { errors: [] };
+                fetch('<?php echo Uri::create('admin/cfdi/materialize_batch'); ?>', window.coreAppFetchOptions({
+                    cfdi_ids: this.selectedIds,
+                    mode: mode || 'both'
+                }))
+                    .then(window.coreAppParseJsonResponse)
+                    .then(data => {
+                        this.batchSaving = false;
+                        if (data.error) { this.error = data.error; return; }
+                        this.message = data.message || 'Lote procesado.';
+                        this.batchSummary = data.summary || { errors: [] };
+                        this.selectedIds = [];
+                        this.load();
+                    })
+                    .catch(() => {
+                        this.batchSaving = false;
+                        this.error = 'No se pudo procesar el lote SAT.';
                     });
             },
             findProductBySku: function(sku) {
