@@ -193,34 +193,50 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
     public function action_materialize_catalogs()
     {
         $this->require_access('sat.access[edit]');
-        $this->require_access('parties.access[edit]');
-        $this->require_access('commerce.access[edit]');
 
         $transaction_started = false;
         try {
             $this->assert_schema_ready();
             $payload = (array) \Input::json();
             $id = (int) \Arr::get($payload, 'cfdi_id', 0);
+            $mode = (string) \Arr::get($payload, 'mode', 'both');
+            $mode = in_array($mode, ['party', 'products', 'both'], true) ? $mode : 'both';
+            $party_data = (array) \Arr::get($payload, 'party', []);
+
+            if (in_array($mode, ['party', 'both'], true)) {
+                $this->require_access('parties.access[edit]');
+            }
+            if (in_array($mode, ['products', 'both'], true)) {
+                $this->require_access('commerce.access[edit]');
+            }
+
             $cfdi = \Model_Core_Sat_Cfdi::find($id);
             if (!$cfdi || !$this->can_access_cfdi((int) $cfdi->id)) {
                 return $this->json_response(['error' => 'CFDI no encontrado o sin permiso.'], 404);
             }
-            if (!\DBUtil::table_exists('core_parties') || !\DBUtil::table_exists('core_commerce_products')) {
-                return $this->json_response(['error' => 'Faltan migraciones de terceros o productos.'], 422);
+            if (in_array($mode, ['party', 'both'], true) && !\DBUtil::table_exists('core_parties')) {
+                return $this->json_response(['error' => 'Faltan migraciones de terceros.'], 422);
+            }
+            if (in_array($mode, ['products', 'both'], true) && !\DBUtil::table_exists('core_commerce_products')) {
+                return $this->json_response(['error' => 'Faltan migraciones de productos.'], 422);
             }
 
             $result = ['parties_created' => 0, 'parties_updated' => 0, 'products_created' => 0, 'products_updated' => 0, 'products_skipped' => 0];
             \DB::start_transaction();
             $transaction_started = true;
-            $party_result = $this->materialize_cfdi_party($cfdi);
-            $result['parties_created'] += $party_result['created'];
-            $result['parties_updated'] += $party_result['updated'];
-            foreach ($this->details((int) $cfdi->id) as $line) {
-                if ((string) $line['line_type'] !== 'concept') {
-                    continue;
+            if (in_array($mode, ['party', 'both'], true)) {
+                $party_result = $this->materialize_cfdi_party($cfdi, $party_data);
+                $result['parties_created'] += $party_result['created'];
+                $result['parties_updated'] += $party_result['updated'];
+            }
+            if (in_array($mode, ['products', 'both'], true)) {
+                foreach ($this->details((int) $cfdi->id) as $line) {
+                    if ((string) $line['line_type'] !== 'concept') {
+                        continue;
+                    }
+                    $product_result = $this->materialize_cfdi_product($cfdi, $line);
+                    $result[$product_result]++;
                 }
-                $product_result = $this->materialize_cfdi_product($cfdi, $line);
-                $result[$product_result]++;
             }
             $cfdi->reviewed_by = (int) $this->user_id;
             $cfdi->reviewed_at = time();
@@ -581,6 +597,7 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
         return [
             'products' => $this->product_options(),
             'warehouses' => $this->warehouse_options(),
+            'departments' => $this->department_options(),
         ];
     }
 
@@ -609,6 +626,20 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
             ->from('core_inventory_warehouses')
             ->where('active', '=', 1)
             ->order_by('is_default', 'desc')
+            ->order_by('name', 'asc')
+            ->execute()
+            ->as_array();
+    }
+
+    protected function department_options()
+    {
+        if (!\DBUtil::table_exists('core_departments')) {
+            return [];
+        }
+
+        return \DB::select('id', 'name')
+            ->from('core_departments')
+            ->where('active', '=', 1)
             ->order_by('name', 'asc')
             ->execute()
             ->as_array();
@@ -963,7 +994,7 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
         return (int) $product->id;
     }
 
-    protected function materialize_cfdi_party(\Model_Core_Sat_Cfdi $cfdi)
+    protected function materialize_cfdi_party(\Model_Core_Sat_Cfdi $cfdi, array $party_data = [])
     {
         $is_issued = (string) $cfdi->direction === 'issued';
         $rfc = strtoupper(trim((string) ($is_issued ? $cfdi->receiver_rfc : $cfdi->emitter_rfc)));
@@ -977,8 +1008,13 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
         if ($row) {
             $party = \Model_Core_Party::find((int) $row['id']);
             $party->party_type = $this->merge_party_type((string) $party->party_type, $type);
-            $party->name = $party->name ?: ($name ?: $rfc);
-            $party->legal_name = $party->legal_name ?: $name;
+            $party->department_id = (int) \Arr::get($party_data, 'department_id', $party->department_id ?: 0);
+            $party->name = trim((string) \Arr::get($party_data, 'name', '')) ?: ($party->name ?: ($name ?: $rfc));
+            $party->legal_name = trim((string) \Arr::get($party_data, 'legal_name', '')) ?: ($party->legal_name ?: $name);
+            $party->email = trim((string) \Arr::get($party_data, 'email', $party->email ?: ''));
+            $party->phone = trim((string) \Arr::get($party_data, 'phone', $party->phone ?: ''));
+            $party->sat_cfdi_use_code = trim((string) \Arr::get($party_data, 'sat_cfdi_use_code', $party->sat_cfdi_use_code ?: ($type === 'customer' ? 'S01' : 'G03')));
+            $party->sat_tax_regime_code = trim((string) \Arr::get($party_data, 'sat_tax_regime_code', $party->sat_tax_regime_code ?: '601'));
             $party->active = 1;
             $party->save();
             $this->link_cfdi_party($cfdi, (int) $party->id, $type);
@@ -987,15 +1023,29 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
 
         $party = \Model_Core_Party::forge([
             'party_type' => $type,
-            'code' => $this->unique_party_code($rfc ?: $name),
-            'name' => $name ?: $rfc,
-            'legal_name' => $name,
+            'department_id' => (int) \Arr::get($party_data, 'department_id', 0),
+            'sales_user_id' => (int) \Arr::get($party_data, 'sales_user_id', 0),
+            'default_seller_id' => (int) \Arr::get($party_data, 'default_seller_id', 0),
+            'buyer_user_id' => (int) \Arr::get($party_data, 'buyer_user_id', 0),
+            'code' => $this->unique_party_code((string) \Arr::get($party_data, 'code', '') ?: ($rfc ?: $name)),
+            'name' => trim((string) \Arr::get($party_data, 'name', '')) ?: ($name ?: $rfc),
+            'legal_name' => trim((string) \Arr::get($party_data, 'legal_name', '')) ?: $name,
             'rfc' => $rfc,
-            'email' => '',
-            'phone' => '',
-            'sat_cfdi_use_code' => $type === 'customer' ? 'S01' : 'G03',
-            'sat_tax_regime_code' => '601',
+            'email' => trim((string) \Arr::get($party_data, 'email', '')),
+            'phone' => trim((string) \Arr::get($party_data, 'phone', '')),
+            'price_list_id' => (int) \Arr::get($party_data, 'price_list_id', 0),
+            'payment_term_id' => (int) \Arr::get($party_data, 'payment_term_id', 0),
+            'sat_cfdi_use_code' => trim((string) \Arr::get($party_data, 'sat_cfdi_use_code', $type === 'customer' ? 'S01' : 'G03')),
+            'sat_tax_regime_code' => trim((string) \Arr::get($party_data, 'sat_tax_regime_code', '601')),
+            'fiscal_operation_type_id' => (int) \Arr::get($party_data, 'fiscal_operation_type_id', 0),
+            'shipping_method_id' => (int) \Arr::get($party_data, 'shipping_method_id', 0),
+            'credit_limit' => (float) \Arr::get($party_data, 'credit_limit', 0),
+            'credit_days' => (int) \Arr::get($party_data, 'credit_days', 0),
             'notes' => 'Creado desde CFDI SAT '.$cfdi->uuid,
+            'onboarding_status' => 'approved',
+            'onboarding_notes' => '',
+            'reviewed_by' => 0,
+            'reviewed_at' => 0,
             'active' => 1,
         ]);
         $party->save();

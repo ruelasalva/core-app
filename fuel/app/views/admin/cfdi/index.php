@@ -173,8 +173,11 @@
                                     <button v-if="item.convertible_purchase == 1" class="btn btn-xs btn-outline-primary" @click.stop="convertPurchase(item)">
                                         <i class="bi bi-cart-check"></i>
                                     </button>
-                                    <button class="btn btn-xs btn-outline-success" @click.stop="materializeCatalogs(item)" title="Crear cliente/proveedor y productos base">
-                                        <i class="bi bi-box-arrow-in-down"></i>
+                                    <button class="btn btn-xs btn-outline-success" @click.stop="openCatalogPartyModal(item, 'party')" title="Guardar tercero">
+                                        <i class="bi bi-person-plus"></i>
+                                    </button>
+                                    <button class="btn btn-xs btn-outline-info" @click.stop="materializeCatalogs(item, 'products')" title="Guardar productos">
+                                        <i class="bi bi-box-seam"></i>
                                     </button>
                                 </td>
                             </tr>
@@ -227,7 +230,13 @@
                                             <button v-if="selected.convertible_purchase == 1" class="btn btn-sm btn-primary btn-block" @click="convertPurchase(selected)">
                                                 <i class="bi bi-cart-check"></i> Convertir a compra
                                             </button>
-                                            <button class="btn btn-sm btn-outline-success btn-block" @click="materializeCatalogs(selected)">
+                                            <button class="btn btn-sm btn-outline-success btn-block" @click="openCatalogPartyModal(selected, 'party')">
+                                                <i class="bi bi-person-plus"></i> Guardar tercero
+                                            </button>
+                                            <button class="btn btn-sm btn-outline-info btn-block" @click="materializeCatalogs(selected, 'products')">
+                                                <i class="bi bi-box-seam"></i> Guardar productos
+                                            </button>
+                                            <button class="btn btn-sm btn-outline-primary btn-block" @click="openCatalogPartyModal(selected, 'both')">
                                                 <i class="bi bi-box-arrow-in-down"></i> Guardar tercero y productos
                                             </button>
                                         </div>
@@ -326,6 +335,77 @@
             </div>
         </div>
     </div>
+    <div class="modal fade" id="cfdi-catalog-party-modal" tabindex="-1" role="dialog" aria-hidden="true">
+        <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title">{{ catalogForm.mode === 'both' ? 'Guardar tercero y productos' : 'Guardar tercero' }}</h5>
+                    <button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button>
+                </div>
+                <div class="modal-body">
+                    <div v-if="catalogForm.item" class="alert alert-light border py-2">
+                        <strong>{{ catalogForm.party.rfc }}</strong>
+                        <span class="text-muted ml-2">{{ catalogForm.party.name }}</span>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-4">
+                            <label>Tipo</label>
+                            <input class="form-control" :value="catalogForm.party.party_type === 'customer' ? 'Cliente' : 'Proveedor'" readonly>
+                        </div>
+                        <div class="col-md-4">
+                            <label>Codigo</label>
+                            <input class="form-control" v-model="catalogForm.party.code">
+                        </div>
+                        <div class="col-md-4">
+                            <label>Departamento</label>
+                            <select class="form-control" v-model="catalogForm.party.department_id">
+                                <option value="0">Sin departamento</option>
+                                <option v-for="department in options.departments" :value="department.id">{{ department.name }}</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mt-2">
+                            <label>Nombre comercial</label>
+                            <input class="form-control" v-model="catalogForm.party.name">
+                        </div>
+                        <div class="col-md-6 mt-2">
+                            <label>Razon social</label>
+                            <input class="form-control" v-model="catalogForm.party.legal_name">
+                        </div>
+                        <div class="col-md-4 mt-2">
+                            <label>RFC</label>
+                            <input class="form-control" v-model="catalogForm.party.rfc" readonly>
+                        </div>
+                        <div class="col-md-4 mt-2">
+                            <label>Correo</label>
+                            <input class="form-control" v-model="catalogForm.party.email">
+                        </div>
+                        <div class="col-md-4 mt-2">
+                            <label>Telefono</label>
+                            <input class="form-control" v-model="catalogForm.party.phone">
+                        </div>
+                        <div class="col-md-6 mt-2">
+                            <label>Uso CFDI</label>
+                            <input class="form-control" v-model="catalogForm.party.sat_cfdi_use_code">
+                        </div>
+                        <div class="col-md-6 mt-2">
+                            <label>Regimen fiscal</label>
+                            <input class="form-control" v-model="catalogForm.party.sat_tax_regime_code">
+                        </div>
+                    </div>
+                    <div v-if="catalogForm.mode === 'both'" class="alert alert-info mt-3 mb-0 py-2">
+                        Al guardar tambien se intentaran crear o actualizar productos base desde los conceptos del CFDI.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-success" @click="submitCatalogParty" :disabled="catalogForm.saving">
+                        <i class="bi bi-save"></i> Guardar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
 </div>
 
 <script>
@@ -336,12 +416,13 @@ window.onload = function() {
             filters: { month: '<?php echo date('Y-m'); ?>', tab: 'received', doc_type: 'invoices', q: '' },
             stats: {},
             items: [],
-            options: { products: [], warehouses: [] },
+            options: { products: [], warehouses: [], departments: [] },
             reports: { summary: {}, customers: [], suppliers: [], missing_xml: [] },
             ppdAudit: { summary: {}, items: [] },
             selected: null,
             selectedContext: { details: [], payments: [], relations: [], linked: [] },
             convertForm: { item: null, mappings: [], saving: false },
+            catalogForm: { item: null, mode: 'party', saving: false, party: {} },
             message: '',
             error: '',
             tabs: [
@@ -434,7 +515,7 @@ window.onload = function() {
                         this.items = data.items || [];
                         this.reports = data.reports || { summary: {}, customers: [], suppliers: [], missing_xml: [] };
                         this.ppdAudit = data.ppd_audit || { summary: {}, items: [] };
-                        this.options = data.options || { products: [], warehouses: [] };
+                        this.options = data.options || { products: [], warehouses: [], departments: [] };
                         this.selectedContext = data.selected || { details: [], payments: [], relations: [], linked: [] };
                     })
                     .catch(() => { this.error = 'No se pudo cargar Auditoria SAT.'; });
@@ -504,18 +585,55 @@ window.onload = function() {
                         this.error = 'No se pudo convertir el CFDI.';
                     });
             },
-            materializeCatalogs: function(item) {
+            openCatalogPartyModal: function(item, mode) {
+                if (!item) return;
+                this.catalogForm = {
+                    item: item,
+                    mode: mode || 'party',
+                    saving: false,
+                    party: this.buildPartyForm(item)
+                };
+                $('#cfdi-catalog-party-modal').modal('show');
+            },
+            buildPartyForm: function(item) {
+                var issued = item.direction === 'issued';
+                var rfc = issued ? item.receiver_rfc : item.emitter_rfc;
+                var name = issued ? item.receiver_name : item.emitter_name;
+                return {
+                    party_type: issued ? 'customer' : 'supplier',
+                    code: (rfc || name || '').toString().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
+                    department_id: 0,
+                    name: name || rfc || '',
+                    legal_name: name || '',
+                    rfc: rfc || '',
+                    email: '',
+                    phone: '',
+                    sat_cfdi_use_code: issued ? 'S01' : 'G03',
+                    sat_tax_regime_code: '601'
+                };
+            },
+            submitCatalogParty: function() {
+                if (!this.catalogForm.item) return;
+                this.materializeCatalogs(this.catalogForm.item, this.catalogForm.mode, this.catalogForm.party);
+            },
+            materializeCatalogs: function(item, mode, party) {
                 if (!item) return;
                 this.error = '';
                 this.message = '';
-                fetch('<?php echo Uri::create('admin/cfdi/materialize_catalogs'); ?>', window.coreAppFetchOptions({ cfdi_id: item.id }))
+                this.catalogForm.saving = true;
+                fetch('<?php echo Uri::create('admin/cfdi/materialize_catalogs'); ?>', window.coreAppFetchOptions({ cfdi_id: item.id, mode: mode || 'both', party: party || {} }))
                     .then(window.coreAppParseJsonResponse)
                     .then(data => {
+                        this.catalogForm.saving = false;
                         if (data.error) { this.error = data.error; return; }
                         this.message = data.message || 'Catalogos actualizados desde CFDI.';
+                        $('#cfdi-catalog-party-modal').modal('hide');
                         this.openDetails(item);
                     })
-                    .catch(() => { this.error = 'No se pudieron crear catalogos desde CFDI.'; });
+                    .catch(() => {
+                        this.catalogForm.saving = false;
+                        this.error = 'No se pudieron crear catalogos desde CFDI.';
+                    });
             },
             findProductBySku: function(sku) {
                 sku = (sku || '').toString().trim().toLowerCase();
