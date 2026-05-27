@@ -72,6 +72,8 @@
                                     <span v-if="item.sales_status === 'linked'" class="badge badge-primary">Venta</span>
                                     <span v-if="item.has_payment_complement == 1" class="badge badge-info">REP</span>
                                     <span v-if="item.has_waybill == 1" class="badge badge-warning">Carta porte</span>
+                                    <span v-if="item.xml_status === 'available'" class="badge badge-success" title="XML disponible"><i class="bi bi-filetype-xml"></i> XML</span>
+                                    <span v-else class="badge badge-warning" title="Registro creado desde metadata, falta descargar XML"><i class="bi bi-file-earmark-x"></i> Sin XML</span>
                                 </td>
                                 <td class="text-right">
                                     <button class="btn btn-xs btn-outline-secondary" @click.stop="openDetails(item)">

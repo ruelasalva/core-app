@@ -27,6 +27,7 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
         try {
             $this->assert_schema_ready();
             $filters = $this->filters();
+            $this->normalize_month_directions($filters);
 
             return $this->json_response([
                 'filters' => $filters,
@@ -306,11 +307,75 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
         foreach ($query->order_by('issued_at', 'desc')->limit(300)->execute() as $row) {
             $row['issued_label'] = $row['issued_at'] ? date('d/m/Y H:i', strtotime($row['issued_at'])) : '';
             $row['type_label'] = $this->voucher_label((string) $row['voucher_type']);
+            $row['xml_status'] = ((string) $row['xml_path'] !== '' && (int) $row['missing_xml'] === 0) ? 'available' : 'missing';
             $row['convertible_purchase'] = $this->is_purchase_convertible($row) ? 1 : 0;
             $items[] = $row;
         }
 
         return $items;
+    }
+
+    protected function normalize_month_directions(array $filters)
+    {
+        $rfcs = $this->company_rfcs();
+        if (empty($rfcs)) {
+            return;
+        }
+
+        $start = $filters['month'].'-01 00:00:00';
+        $end = date('Y-m-t 23:59:59', strtotime($filters['month'].'-01'));
+
+        \DB::update('core_sat_cfdi')
+            ->set(['direction' => 'issued', 'supplier_party_id' => 0])
+            ->where('issued_at', '>=', $start)
+            ->where('issued_at', '<=', $end)
+            ->where('emitter_rfc', 'in', $rfcs)
+            ->execute();
+
+        \DB::update('core_sat_cfdi')
+            ->set(['direction' => 'received', 'customer_party_id' => 0])
+            ->where('issued_at', '>=', $start)
+            ->where('issued_at', '<=', $end)
+            ->where('receiver_rfc', 'in', $rfcs)
+            ->where('emitter_rfc', 'not in', $rfcs)
+            ->execute();
+
+        \DB::update('core_sat_cfdi')
+            ->set(['missing_xml' => 1])
+            ->where('issued_at', '>=', $start)
+            ->where('issued_at', '<=', $end)
+            ->where('origin', '=', 'metadata')
+            ->where('xml_path', '=', '')
+            ->execute();
+
+        \DB::update('core_sat_cfdi')
+            ->set(['missing_xml' => 0])
+            ->where('issued_at', '>=', $start)
+            ->where('issued_at', '<=', $end)
+            ->where('xml_path', '!=', '')
+            ->execute();
+    }
+
+    protected function company_rfcs()
+    {
+        $rfcs = [];
+        if (\DBUtil::table_exists('core_companies')) {
+            foreach (\DB::select('rfc')->from('core_companies')->execute() as $row) {
+                $rfc = strtoupper(trim((string) $row['rfc']));
+                if ($rfc !== '') {
+                    $rfcs[$rfc] = $rfc;
+                }
+            }
+        }
+        if (\DBUtil::table_exists('core_sat_credentials')) {
+            foreach (\DB::select('rfc')->from('core_sat_credentials')->where('active', '=', 1)->execute() as $row) {
+                $rfc = strtoupper(trim((string) $row['rfc']));
+                if ($rfc !== '') {
+                    $rfcs[$rfc] = $rfc;
+                }
+            }
+        }
+        return array_values($rfcs);
     }
 
     protected function selected_context()

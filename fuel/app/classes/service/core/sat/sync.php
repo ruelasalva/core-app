@@ -251,7 +251,7 @@ class Service_Core_Sat_Sync
                 if ($local_path !== '') {
                     $package->path = $package->path ?: $this->package_relative_path($request, $package);
                     $package->status = 'downloaded';
-                    $package->xml_count = $this->process_package($package, $local_path);
+                    $package->xml_count = $this->process_package($package, $local_path, $request);
                     $package->status = 'processed';
                     $package->save();
 
@@ -287,7 +287,7 @@ class Service_Core_Sat_Sync
                 $package->sha256_hash = hash('sha256', $zip_content);
                 $package->status = 'downloaded';
                 $package->save();
-                $package->xml_count = $this->process_package($package, $absolute_path);
+                $package->xml_count = $this->process_package($package, $absolute_path, $request);
                 $package->status = 'processed';
                 $package->save();
 
@@ -476,10 +476,10 @@ class Service_Core_Sat_Sync
             ->get_one();
     }
 
-    protected function process_package(Model_Core_Sat_Package $package, $absolute_path)
+    protected function process_package(Model_Core_Sat_Package $package, $absolute_path, Model_Core_Sat_Sync_Request $request = null)
     {
         if ($package->package_type === 'metadata') {
-            return $this->process_metadata_package($absolute_path);
+            return $this->process_metadata_package($absolute_path, $request);
         }
 
         $reader = \PhpCfdi\SatWsDescargaMasiva\PackageReader\CfdiPackageReader::createFromFile($absolute_path);
@@ -497,7 +497,7 @@ class Service_Core_Sat_Sync
         return $count;
     }
 
-    protected function process_metadata_package($absolute_path)
+    protected function process_metadata_package($absolute_path, Model_Core_Sat_Sync_Request $request = null)
     {
         $reader = \PhpCfdi\SatWsDescargaMasiva\PackageReader\MetadataPackageReader::createFromFile($absolute_path);
         $count = 0;
@@ -514,7 +514,9 @@ class Service_Core_Sat_Sync
 
             $emitter_party = $this->party_by_rfc((string) $item->rfcEmisor);
             $receiver_party = $this->party_by_rfc((string) $item->rfcReceptor);
-            $direction = $this->direction_from_rfc((string) $item->rfcEmisor);
+            $direction = $request && in_array((string) $request->direction, ['issued', 'received'], true)
+                ? (string) $request->direction
+                : $this->direction_from_rfc((string) $item->rfcEmisor, (string) $item->rfcReceptor);
             $sat_status = strtolower((string) $item->estatus) === 'cancelado' ? 'cancelado' : 'vigente';
 
             $cfdi->set([
@@ -686,11 +688,40 @@ class Service_Core_Sat_Sync
         return $row ?: null;
     }
 
-    protected function direction_from_rfc($emitter_rfc)
+    protected function direction_from_rfc($emitter_rfc, $receiver_rfc = '')
     {
-        $row = \DB::select('rfc')->from('core_companies')->order_by('id', 'asc')->execute()->current();
-        $company_rfc = strtoupper((string) \Arr::get($row ?: [], 'rfc', ''));
-        return $company_rfc !== '' && strtoupper((string) $emitter_rfc) === $company_rfc ? 'issued' : 'received';
+        $rfcs = $this->company_rfcs();
+        $emitter_rfc = strtoupper(trim((string) $emitter_rfc));
+        $receiver_rfc = strtoupper(trim((string) $receiver_rfc));
+        if ($emitter_rfc !== '' && in_array($emitter_rfc, $rfcs, true)) {
+            return 'issued';
+        }
+        if ($receiver_rfc !== '' && in_array($receiver_rfc, $rfcs, true)) {
+            return 'received';
+        }
+        return 'received';
+    }
+
+    protected function company_rfcs()
+    {
+        $rfcs = [];
+        if (\DBUtil::table_exists('core_companies')) {
+            foreach (\DB::select('rfc')->from('core_companies')->execute() as $row) {
+                $rfc = strtoupper(trim((string) $row['rfc']));
+                if ($rfc !== '') {
+                    $rfcs[$rfc] = $rfc;
+                }
+            }
+        }
+        if (\DBUtil::table_exists('core_sat_credentials')) {
+            foreach (\DB::select('rfc')->from('core_sat_credentials')->where('active', '=', 1)->execute() as $row) {
+                $rfc = strtoupper(trim((string) $row['rfc']));
+                if ($rfc !== '') {
+                    $rfcs[$rfc] = $rfc;
+                }
+            }
+        }
+        return array_values($rfcs);
     }
 
     protected function datetime($value)
