@@ -179,7 +179,7 @@ class Controller_Admin_Integrations extends Controller_Adminbase
                 'enabled' => $this->bool_value(\Arr::get($val, 'enabled', false)),
                 'active' => $this->bool_value(\Arr::get($val, 'active', true)),
             ];
-            if ($provider_code === 'inegi_denue') {
+            if (in_array($provider_code, ['inegi_denue', 'sat'], true)) {
                 $data['public_key'] = '';
                 $data['public_value'] = '';
             }
@@ -200,7 +200,9 @@ class Controller_Admin_Integrations extends Controller_Adminbase
 
             # SE CIFRAN SECRETOS SOLO SI SE CAPTURAN VALORES NUEVOS
             $secret_value = trim((string) \Arr::get($val, 'secret_value', ''));
-            if ($provider_code === 'inegi_denue' && $secret_value === '') {
+            if ($provider_code === 'sat') {
+                $secret_value = '';
+            } elseif ($provider_code === 'inegi_denue' && $secret_value === '') {
                 $secret_value = trim((string) \Arr::get($val, 'public_key', ''));
             }
             if ($secret_value !== '') {
@@ -208,6 +210,9 @@ class Controller_Admin_Integrations extends Controller_Adminbase
             }
 
             $webhook_secret = trim((string) \Arr::get($val, 'webhook_secret', ''));
+            if ($provider_code === 'sat') {
+                $webhook_secret = '';
+            }
             if ($webhook_secret !== '') {
                 $connection->webhook_secret = \Crypt::encode($webhook_secret);
             }

@@ -90,8 +90,8 @@
                         <td><strong>{{ connection.name }}</strong><div class="text-muted small">{{ connection.code }}</div></td>
                         <td>{{ providerName(connection.provider_id) }}</td>
                         <td><span class="badge badge-light">{{ connection.environment }}</span></td>
-                        <td>{{ isTokenOnly(connection.provider_id) ? 'No aplica' : (connection.public_key || '-') }}</td>
-                        <td>{{ connection.has_secret ? 'Configurado' : 'Pendiente' }}</td>
+                        <td>{{ usesInternalCredentials(connection.provider_id) || isTokenOnly(connection.provider_id) ? 'No aplica' : (connection.public_key || '-') }}</td>
+                        <td>{{ usesInternalCredentials(connection.provider_id) ? 'No requiere' : (connection.has_secret ? 'Configurado' : 'Pendiente') }}</td>
                         <td>
                             <span class="badge" :class="connection.enabled == 1 ? 'badge-success' : 'badge-secondary'">Habilitada: {{ connection.enabled == 1 ? 'Si' : 'No' }}</span>
                             <span class="badge" :class="connection.active == 1 ? 'badge-success' : 'badge-secondary'">Activa: {{ connection.active == 1 ? 'Si' : 'No' }}</span>
@@ -168,9 +168,12 @@
                         <div class="col-md-4"><div class="form-group"><label>Codigo</label><input class="form-control" v-model="connectionForm.code"></div></div>
                         <div class="col-md-4"><div class="form-group"><label>Nombre</label><input class="form-control" v-model="connectionForm.name"></div></div>
                         <div class="col-md-4"><div class="form-group"><label>Ambiente</label><select class="form-control" v-model="connectionForm.environment"><option value="sandbox">Sandbox</option><option value="production">Produccion</option></select></div></div>
-                        <div class="col-md-8" v-if="!isTokenOnly(connectionForm.provider_id)"><div class="form-group"><label>Public key</label><input class="form-control" v-model="connectionForm.public_key"></div></div>
-                        <div :class="isTokenOnly(connectionForm.provider_id) ? 'col-md-8' : 'col-md-6'"><div class="form-group"><label>{{ secretLabel(connectionForm.provider_id) }}</label><input type="password" class="form-control" v-model="connectionForm.secret_value" :placeholder="connectionForm.has_secret ? 'Ya hay un valor guardado; captura uno nuevo solo si deseas cambiarlo' : ''"></div></div>
-                        <div class="col-md-6" v-if="!isTokenOnly(connectionForm.provider_id)"><div class="form-group"><label>Webhook secret</label><input type="password" class="form-control" v-model="connectionForm.webhook_secret"></div></div>
+                        <div class="col-md-12" v-if="usesInternalCredentials(connectionForm.provider_id)">
+                            <div class="alert alert-info small">Esta integracion usa las credenciales fiscales guardadas en SAT &gt; Credenciales. No requiere public key ni secret value aqui.</div>
+                        </div>
+                        <div class="col-md-8" v-if="requiresVisibleCredential(connectionForm.provider_id)"><div class="form-group"><label>Public key <span class="text-muted font-weight-normal">(opcional)</span></label><input class="form-control" v-model="connectionForm.public_key"></div></div>
+                        <div :class="isTokenOnly(connectionForm.provider_id) ? 'col-md-8' : 'col-md-6'" v-if="requiresSecretCredential(connectionForm.provider_id)"><div class="form-group"><label>{{ secretLabel(connectionForm.provider_id) }}</label><input type="password" class="form-control" v-model="connectionForm.secret_value" :placeholder="connectionForm.has_secret ? 'Ya hay un valor guardado; captura uno nuevo solo si deseas cambiarlo' : ''"></div></div>
+                        <div class="col-md-6" v-if="requiresVisibleCredential(connectionForm.provider_id)"><div class="form-group"><label>Webhook secret <span class="text-muted font-weight-normal">(opcional)</span></label><input type="password" class="form-control" v-model="connectionForm.webhook_secret"></div></div>
                         <div class="col-md-12"><div class="form-group"><label>Configuracion JSON</label><textarea class="form-control" rows="3" v-model="connectionForm.config_json"></textarea></div></div>
                         <div class="col-md-6"><div class="custom-control custom-switch"><input type="checkbox" class="custom-control-input" id="connection-enabled" v-model="connectionForm.enabled"><label class="custom-control-label" for="connection-enabled">Habilitada</label></div></div>
                         <div class="col-md-6"><div class="custom-control custom-switch"><input type="checkbox" class="custom-control-input" id="connection-active" v-model="connectionForm.active"><label class="custom-control-label" for="connection-active">Activa</label></div></div>
@@ -203,9 +206,26 @@ window.onload = function() {
             this.loadData();
         },
         methods: {
+            parseJsonResponse(response) {
+                return response.text().then(text => {
+                    let data = {};
+                    try {
+                        data = text ? JSON.parse(text) : {};
+                    } catch (e) {
+                        data = { error: 'El servidor rechazo la solicitud. Recarga la pantalla e intenta de nuevo.' };
+                    }
+                    if (data && data.csrf_token) {
+                        window.coreAppCsrfToken = data.csrf_token;
+                    }
+                    if (!response.ok && !data.error) {
+                        data.error = 'No se pudo completar la operacion.';
+                    }
+                    return data;
+                });
+            },
             loadData() {
                 fetch('<?php echo Uri::create('admin/integrations/data'); ?>')
-                    .then(res => res.json())
+                    .then(this.parseJsonResponse)
                     .then(data => {
                         if (data.error) { this.error = data.error; return; }
                         this.providers = data.providers || [];
@@ -226,14 +246,26 @@ window.onload = function() {
             isTokenOnly(providerId) {
                 return this.providerCode(providerId) === 'inegi_denue';
             },
+            usesInternalCredentials(providerId) {
+                return this.providerCode(providerId) === 'sat';
+            },
+            requiresVisibleCredential(providerId) {
+                return !this.isTokenOnly(providerId) && !this.usesInternalCredentials(providerId);
+            },
+            requiresSecretCredential(providerId) {
+                return !this.usesInternalCredentials(providerId);
+            },
             secretLabel(providerId) {
                 return this.isTokenOnly(providerId) ? 'Token DENUE INEGI' : 'Secret value';
             },
             credentialHelp(providerId) {
+                if (this.usesInternalCredentials(providerId)) {
+                    return 'SAT descarga masiva usa FIEL/CSD capturados en el modulo SAT. Aqui solo habilitas la conexion operativa.';
+                }
                 if (this.isTokenOnly(providerId)) {
                     return 'DENUE solo usa un token. Capturalo aqui; se guarda cifrado y no se muestra de vuelta.';
                 }
-                return 'Los secretos se cifran y no se muestran de vuelta. Para cambiarlos, captura un valor nuevo.';
+                return 'Los secretos se cifran y no se muestran de vuelta. Public key, secret y webhook secret son opcionales segun el proveedor.';
             },
             openProvider(provider) {
                 this.providerForm = Object.assign({ id: 0, code: '', name: '', category: 'general', description: '', website_url: '', adapter_class: '', requires_install: false, install_notes: '', config_schema_json: '', sort_order: 0, active: true }, provider);
@@ -258,9 +290,10 @@ window.onload = function() {
             },
             saveProvider() {
                 fetch('<?php echo Uri::create('admin/integrations/save_provider'); ?>', window.coreAppFetchOptions(this.providerForm))
-                    .then(res => res.json())
+                    .then(this.parseJsonResponse)
                     .then(data => {
                         if (data.error) { this.error = data.error; return; }
+                        this.error = '';
                         this.providers = data.providers || [];
                         this.stats = data.stats || this.stats;
                         this.hideModal('modal-provider');
@@ -268,9 +301,10 @@ window.onload = function() {
             },
             saveConnection() {
                 fetch('<?php echo Uri::create('admin/integrations/save_connection'); ?>', window.coreAppFetchOptions(this.connectionForm))
-                    .then(res => res.json())
+                    .then(this.parseJsonResponse)
                     .then(data => {
                         if (data.error) { this.error = data.error; return; }
+                        this.error = '';
                         this.connections = data.connections || [];
                         this.stats = data.stats || this.stats;
                         this.hideModal('modal-connection');
