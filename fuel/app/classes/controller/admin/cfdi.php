@@ -305,7 +305,8 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
 
             \DB::start_transaction();
             $transaction_started = true;
-            $invoice = $this->create_billing_invoice_from_cfdi($cfdi, $party_id);
+            $line_mappings = $this->normalize_sale_mappings($cfdi, (array) \Arr::get($payload, 'mappings', []));
+            $invoice = $this->create_billing_invoice_from_cfdi($cfdi, $party_id, $line_mappings);
             $cfdi->sales_status = 'linked';
             $cfdi->portal_visible_customer = 1;
             $cfdi->reviewed_by = (int) $this->user_id;
@@ -845,6 +846,7 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
                 'relations' => [],
                 'linked' => [],
                 'supplier_mappings' => [],
+                'sales_mappings' => [],
             ];
         }
 
@@ -854,6 +856,7 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
             'relations' => $this->relations($cfdi_id),
             'linked' => $this->linked_records($cfdi_id),
             'supplier_mappings' => $this->supplier_product_mappings($cfdi_id),
+            'sales_mappings' => $this->sales_product_mappings($cfdi_id),
         ];
     }
 
@@ -971,6 +974,47 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
             ->where_close();
         } else {
             $query->where('supplier_description_hash', '=', $description_hash);
+        }
+
+        $row = $query->order_by('updated_at', 'desc')->execute()->current();
+        return $row ?: null;
+    }
+
+    protected function sales_product_mappings($cfdi_id)
+    {
+        if (!\DBUtil::table_exists('core_sales_cfdi_product_mappings')) {
+            return [];
+        }
+
+        $found = [];
+        foreach ($this->details((int) $cfdi_id) as $line) {
+            if ((string) $line['line_type'] !== 'concept') {
+                continue;
+            }
+            $mapping = $this->find_sales_product_mapping($line);
+            if ($mapping) {
+                $found[(int) $line['id']] = $mapping;
+            }
+        }
+        return $found;
+    }
+
+    protected function find_sales_product_mapping(array $line)
+    {
+        if (!\DBUtil::table_exists('core_sales_cfdi_product_mappings')) {
+            return null;
+        }
+
+        $sku = trim((string) $line['identification_number']);
+        $description_hash = $this->supplier_description_hash((string) $line['description']);
+        $query = \DB::select()->from('core_sales_cfdi_product_mappings')->where('active', '=', 1);
+        if ($sku !== '') {
+            $query->where_open()
+                ->where('fiscal_sku', '=', $sku)
+                ->or_where('fiscal_description_hash', '=', $description_hash)
+            ->where_close();
+        } else {
+            $query->where('fiscal_description_hash', '=', $description_hash);
         }
 
         $row = $query->order_by('updated_at', 'desc')->execute()->current();
@@ -1310,6 +1354,54 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
         ];
     }
 
+    protected function normalize_sale_mappings(Model_Core_Sat_Cfdi $cfdi, array $mappings)
+    {
+        $concept_ids = [];
+        foreach ($this->details((int) $cfdi->id) as $line) {
+            if ((string) $line['line_type'] === 'concept') {
+                $concept_ids[(int) $line['id']] = $line;
+            }
+        }
+
+        $normalized = [];
+        foreach ($mappings as $mapping) {
+            $mapping = (array) $mapping;
+            $detail_id = (int) \Arr::get($mapping, 'cfdi_detail_id', 0);
+            if (!isset($concept_ids[$detail_id])) {
+                continue;
+            }
+            $normalized[$detail_id] = [
+                'cfdi_detail_id' => $detail_id,
+                'product_id' => max(0, (int) \Arr::get($mapping, 'product_id', 0)),
+                'create_product' => (int) \Arr::get($mapping, 'create_product', 0) === 1 ? 1 : 0,
+                'new_sku' => trim((string) \Arr::get($mapping, 'new_sku', '')),
+                'new_name' => trim((string) \Arr::get($mapping, 'new_name', '')),
+                'save_mapping' => (int) \Arr::get($mapping, 'save_mapping', 1) === 1 ? 1 : 0,
+            ];
+        }
+
+        foreach ($concept_ids as $detail_id => $line) {
+            if (!isset($normalized[$detail_id])) {
+                $saved = $this->find_sales_product_mapping($line);
+                $product_id = $saved ? (int) $saved['product_id'] : 0;
+                if ($product_id < 1) {
+                    $product = $this->product_for_cfdi_line($line, false);
+                    $product_id = $product ? (int) $product->id : 0;
+                }
+                $normalized[$detail_id] = [
+                    'cfdi_detail_id' => $detail_id,
+                    'product_id' => $product_id,
+                    'create_product' => 0,
+                    'new_sku' => (string) $line['identification_number'],
+                    'new_name' => (string) $line['description'],
+                    'save_mapping' => $product_id > 0 ? 1 : 0,
+                ];
+            }
+        }
+
+        return $normalized;
+    }
+
     protected function create_product_from_cfdi_line(Model_Core_Sat_Cfdi $cfdi, array $line, array $mapping)
     {
         $sku = $this->unique_product_sku($mapping['new_sku'] ?: (string) $line['identification_number'] ?: 'XML-'.$cfdi->id.'-'.$line['id']);
@@ -1588,6 +1680,55 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
         return sha1($clean);
     }
 
+    protected function save_sales_product_mapping(array $line, array $mapping)
+    {
+        if (!\DBUtil::table_exists('core_sales_cfdi_product_mappings')) {
+            return;
+        }
+
+        $product = (int) \Arr::get($mapping, 'product_id', 0) > 0 ? Model_Core_Commerce_Product::find((int) $mapping['product_id']) : null;
+        if (!$product) {
+            return;
+        }
+
+        $sku = trim((string) $line['identification_number']);
+        $description_hash = $this->supplier_description_hash((string) $line['description']);
+        $now = time();
+
+        $query = \DB::select('id')->from('core_sales_cfdi_product_mappings');
+        if ($sku !== '') {
+            $query->where('fiscal_sku', '=', $sku);
+        } else {
+            $query->where('fiscal_description_hash', '=', $description_hash);
+        }
+        $row = $query->execute()->current();
+
+        $data = [
+            'fiscal_sku' => $sku,
+            'fiscal_description' => substr((string) $line['description'], 0, 255),
+            'fiscal_description_hash' => $description_hash,
+            'sat_product_service_code' => (string) $line['product_service_code'],
+            'sat_unit_code' => (string) $line['unit_code'],
+            'product_id' => (int) $product->id,
+            'internal_sku' => (string) $product->sku,
+            'internal_name' => (string) $product->name,
+            'unit_code' => (string) $product->unit_code ?: ((string) $line['unit_code'] ?: 'H87'),
+            'last_unit_price' => max(0, (float) $line['unit_value']),
+            'last_seen_at' => $now,
+            'active' => 1,
+            'updated_at' => $now,
+        ];
+
+        if ($row) {
+            \DB::update('core_sales_cfdi_product_mappings')->set($data)->where('id', '=', (int) $row['id'])->execute();
+            return;
+        }
+
+        $data['created_by'] = (int) $this->user_id;
+        $data['created_at'] = $now;
+        \DB::insert('core_sales_cfdi_product_mappings')->set($data)->execute();
+    }
+
     protected function save_cfdi_line_mapping(Model_Core_Sat_Cfdi $cfdi, array $line, array $mapping, $order_id, $item_id, $movement_id)
     {
         $product = (int) $mapping['product_id'] > 0 ? Model_Core_Commerce_Product::find((int) $mapping['product_id']) : null;
@@ -1775,7 +1916,7 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
         return $invoice;
     }
 
-    protected function create_billing_invoice_from_cfdi(Model_Core_Sat_Cfdi $cfdi, $party_id)
+    protected function create_billing_invoice_from_cfdi(Model_Core_Sat_Cfdi $cfdi, $party_id, array $line_mappings = [])
     {
         $invoice = Model_Core_Billing_Invoice::forge([
             'folio' => $this->next_folio('FAC-SAT', 'core_billing_invoices'),
@@ -1829,7 +1970,22 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
             if ((string) $line['line_type'] !== 'concept') {
                 continue;
             }
-            $product = $this->product_for_cfdi_line($line);
+            $mapping = isset($line_mappings[(int) $line['id']]) ? $line_mappings[(int) $line['id']] : [];
+            $product = null;
+            if ((int) \Arr::get($mapping, 'product_id', 0) > 0) {
+                $product = Model_Core_Commerce_Product::find((int) $mapping['product_id']);
+            }
+            if (!$product && (int) \Arr::get($mapping, 'create_product', 0) === 1) {
+                $product_id = $this->create_product_from_cfdi_line($cfdi, $line, $mapping);
+                $product = Model_Core_Commerce_Product::find($product_id);
+                $mapping['product_id'] = $product_id;
+            }
+            if (!$product) {
+                $product = $this->product_for_cfdi_line($line);
+                if ($product) {
+                    $mapping['product_id'] = (int) $product->id;
+                }
+            }
             $quantity = max(0.0001, (float) $line['quantity']);
             $unit_price = max(0, (float) $line['unit_value']);
             $discount = max(0, (float) $line['discount']);
@@ -1858,14 +2014,29 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
                 'sort_order' => $sort,
                 'active' => 1,
             ])->save();
+            if ($product && (int) \Arr::get($mapping, 'save_mapping', 1) === 1) {
+                $this->save_sales_product_mapping($line, [
+                    'product_id' => (int) $product->id,
+                ]);
+            }
             $sort += 10;
         }
 
         return $this->recalculate_billing_invoice((int) $invoice->id);
     }
 
-    protected function product_for_cfdi_line(array $line)
+    protected function product_for_cfdi_line(array $line, $use_saved_mapping = true)
     {
+        if ($use_saved_mapping) {
+            $saved = $this->find_sales_product_mapping($line);
+            if ($saved && (int) $saved['product_id'] > 0) {
+                $product = Model_Core_Commerce_Product::find((int) $saved['product_id']);
+                if ($product) {
+                    return $product;
+                }
+            }
+        }
+
         $sku = trim((string) $line['identification_number']);
         if ($sku !== '') {
             $row = \DB::select('id')->from('core_commerce_products')

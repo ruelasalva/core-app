@@ -64,6 +64,7 @@ return array (
         58 => '059_create_budget_control_tables',
         59 => '060_add_employee_compensation_type',
         60 => '061_create_purchase_supplier_product_mappings',
+        61 => '062_create_sales_cfdi_product_mappings',
       ),
     ),
     'module' => array(    

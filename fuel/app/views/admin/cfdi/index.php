@@ -382,6 +382,78 @@
             </div>
         </div>
     </div>
+    <div class="modal fade" id="cfdi-sale-modal" tabindex="-1" role="dialog" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Guardar CFDI como venta/factura</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar"><span aria-hidden="true">&times;</span></button>
+                </div>
+                <div class="modal-body">
+                    <div v-if="saleForm.item" class="alert alert-light border py-2">
+                        <strong>{{ saleForm.item.uuid }}</strong>
+                        <span class="text-muted ml-2">{{ counterpartyName(saleForm.item) }}</span>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered align-middle">
+                            <thead>
+                                <tr>
+                                    <th style="min-width: 280px;">Concepto fiscal</th>
+                                    <th style="min-width: 260px;">Producto interno</th>
+                                    <th style="width: 140px;">Equivalencia</th>
+                                    <th style="min-width: 220px;">Crear producto</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="row in saleForm.mappings" :key="'sale-map-' + row.cfdi_detail_id">
+                                    <td>
+                                        <strong>{{ row.fiscal_sku || 'Sin clave' }}</strong>
+                                        <div>{{ row.fiscal_description }}</div>
+                                        <div class="text-muted small">{{ row.quantity }} {{ row.unit_code }} x {{ money(row.unit_price, saleForm.item ? saleForm.item.currency : 'MXN') }}</div>
+                                    </td>
+                                    <td>
+                                        <select class="form-control form-control-sm" v-model="row.product_id" :disabled="row.create_product">
+                                            <option value="">Dejar solo concepto fiscal</option>
+                                            <option v-for="product in options.products" :key="product.id" :value="product.id">
+                                                {{ product.sku }} - {{ product.name }}
+                                            </option>
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <div class="custom-control custom-checkbox">
+                                            <input type="checkbox" class="custom-control-input" :id="'save-sale-map-' + row.cfdi_detail_id" v-model="row.save_mapping">
+                                            <label class="custom-control-label" :for="'save-sale-map-' + row.cfdi_detail_id">Guardar</label>
+                                        </div>
+                                        <span v-if="row.saved_mapping_id" class="badge badge-info mt-1">Sugerida</span>
+                                    </td>
+                                    <td>
+                                        <div class="custom-control custom-checkbox mb-1">
+                                            <input type="checkbox" class="custom-control-input" :id="'create-sale-product-' + row.cfdi_detail_id" v-model="row.create_product">
+                                            <label class="custom-control-label" :for="'create-sale-product-' + row.cfdi_detail_id">Crear producto</label>
+                                        </div>
+                                        <input type="text" class="form-control form-control-sm mb-1" placeholder="SKU nuevo" v-model="row.new_sku" :disabled="!row.create_product">
+                                        <input type="text" class="form-control form-control-sm" placeholder="Nombre interno" v-model="row.new_name" :disabled="!row.create_product">
+                                    </td>
+                                </tr>
+                                <tr v-if="saleForm.mappings.length === 0">
+                                    <td colspan="4" class="text-muted text-center">Este CFDI no tiene conceptos para facturar.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="text-muted small">
+                        Esta accion crea la factura operativa en Facturacion y conserva el CFDI SAT como documento fiscal ya timbrado.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-primary" @click="submitConvertSale" :disabled="saleForm.saving || saleForm.mappings.length === 0">
+                        <i class="bi bi-receipt"></i> Crear factura
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
     <div class="modal fade" id="cfdi-catalog-party-modal" tabindex="-1" role="dialog" aria-hidden="true">
         <div class="modal-dialog modal-lg" role="document">
             <div class="modal-content">
@@ -473,8 +545,9 @@ window.onload = function() {
             reports: { summary: {}, customers: [], suppliers: [], missing_xml: [] },
             ppdAudit: { summary: {}, items: [] },
             selected: null,
-            selectedContext: { details: [], payments: [], relations: [], linked: [], supplier_mappings: {} },
+            selectedContext: { details: [], payments: [], relations: [], linked: [], supplier_mappings: {}, sales_mappings: {} },
             convertForm: { item: null, mappings: [], saving: false },
+            saleForm: { item: null, mappings: [], saving: false },
             catalogForm: { item: null, mode: 'party', saving: false, party: {} },
             selectedIds: [],
             batchSaving: false,
@@ -552,7 +625,7 @@ window.onload = function() {
                 this.filters.tab = tab;
                 if (tab === 'payments') this.filters.doc_type = 'payments';
                 this.selected = null;
-                this.selectedContext = { details: [], payments: [], relations: [], linked: [], supplier_mappings: {} };
+                this.selectedContext = { details: [], payments: [], relations: [], linked: [], supplier_mappings: {}, sales_mappings: {} };
                 this.load();
             },
             isPpdTab: function(tab) {
@@ -561,7 +634,7 @@ window.onload = function() {
             selectDocType: function(type) {
                 this.filters.doc_type = type;
                 this.selected = null;
-                this.selectedContext = { details: [], payments: [], relations: [], linked: [], supplier_mappings: {} };
+                this.selectedContext = { details: [], payments: [], relations: [], linked: [], supplier_mappings: {}, sales_mappings: {} };
                 this.load();
             },
             load: function(extra) {
@@ -578,7 +651,7 @@ window.onload = function() {
                         this.reports = data.reports || { summary: {}, customers: [], suppliers: [], missing_xml: [] };
                         this.ppdAudit = data.ppd_audit || { summary: {}, items: [] };
                         this.options = data.options || { products: [], warehouses: [], departments: [], sat_cfdi_uses: [], sat_tax_regimes: [] };
-                        this.selectedContext = data.selected || { details: [], payments: [], relations: [], linked: [], supplier_mappings: {} };
+                        this.selectedContext = data.selected || { details: [], payments: [], relations: [], linked: [], supplier_mappings: {}, sales_mappings: {} };
                     })
                     .catch(() => { this.error = 'No se pudo cargar Auditoria SAT.'; });
             },
@@ -702,17 +775,64 @@ window.onload = function() {
             },
             convertSale: function(item) {
                 if (!item) return;
-                if (!confirm('Crear factura de venta en Facturacion desde este CFDI emitido?')) return;
                 this.error = '';
                 this.message = '';
-                fetch('<?php echo Uri::create('admin/cfdi/convert_sale'); ?>', window.coreAppFetchOptions({ cfdi_id: item.id }))
+                this.selected = item;
+                this.load({ cfdi_id: item.id }).then(() => {
+                    this.saleForm = {
+                        item: item,
+                        mappings: this.selectedContext.details
+                            .filter(line => line.line_type === 'concept')
+                            .map(line => this.buildSaleMappingRow(line)),
+                        saving: false
+                    };
+                    $('#cfdi-sale-modal').modal('show');
+                });
+            },
+            buildSaleMappingRow: function(line) {
+                var saved = (this.selectedContext.sales_mappings || {})[line.id] || null;
+                var match = saved ? this.findProductById(saved.product_id || 0) : this.findProductBySku(line.identification_number || '');
+                return {
+                    cfdi_detail_id: line.id,
+                    product_id: saved ? saved.product_id : (match ? match.id : ''),
+                    create_product: false,
+                    save_mapping: !!(saved || match),
+                    saved_mapping_id: saved ? saved.id : 0,
+                    new_sku: line.identification_number || '',
+                    new_name: line.description || '',
+                    fiscal_sku: line.identification_number || '',
+                    fiscal_description: line.description || 'Concepto CFDI',
+                    quantity: line.quantity || 0,
+                    unit_code: line.unit_code || 'H87',
+                    unit_price: line.unit_value || 0
+                };
+            },
+            submitConvertSale: function() {
+                if (!this.saleForm.item) return;
+                this.error = '';
+                this.message = '';
+                this.saleForm.saving = true;
+                fetch('<?php echo Uri::create('admin/cfdi/convert_sale'); ?>', window.coreAppFetchOptions({
+                    cfdi_id: this.saleForm.item.id,
+                    mappings: this.saleForm.mappings.map(row => ({
+                        cfdi_detail_id: row.cfdi_detail_id,
+                        product_id: row.product_id || 0,
+                        create_product: row.create_product ? 1 : 0,
+                        new_sku: row.new_sku || '',
+                        new_name: row.new_name || '',
+                        save_mapping: row.save_mapping ? 1 : 0
+                    }))
+                }))
                     .then(window.coreAppParseJsonResponse)
                     .then(data => {
+                        this.saleForm.saving = false;
                         if (data.error) { this.error = data.error; return; }
                         this.message = data.message || 'Factura de venta creada.';
-                        this.openDetails(item);
+                        $('#cfdi-sale-modal').modal('hide');
+                        this.openDetails(this.saleForm.item);
                     })
                     .catch(() => {
+                        this.saleForm.saving = false;
                         this.error = 'No se pudo crear la factura de venta desde el CFDI.';
                     });
             },
