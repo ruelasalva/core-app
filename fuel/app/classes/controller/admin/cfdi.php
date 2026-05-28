@@ -183,6 +183,71 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
     }
 
     /**
+     * SAVE SUPPLIER PRODUCT MAPPINGS
+     *
+     * GUARDA EQUIVALENCIAS REUTILIZABLES ENTRE CONCEPTOS XML Y SKU INTERNOS.
+     *
+     * @access  public
+     * @return  Response
+     */
+    public function action_save_supplier_mappings()
+    {
+        $this->require_access('sat.access[edit]');
+        $this->require_access('purchases.access[edit]');
+
+        try {
+            $this->assert_schema_ready();
+            if (!\DBUtil::table_exists('core_purchase_supplier_product_mappings')) {
+                throw new \RuntimeException('Falta ejecutar migraciones de equivalencias de proveedor.');
+            }
+
+            $payload = (array) \Input::json();
+            $id = (int) \Arr::get($payload, 'cfdi_id', 0);
+            $cfdi = Model_Core_Sat_Cfdi::find($id);
+            if (!$cfdi || !$this->can_access_cfdi((int) $cfdi->id)) {
+                return $this->json_response(['error' => 'CFDI no encontrado o sin permiso.'], 404);
+            }
+            if ((string) $cfdi->direction !== 'received') {
+                return $this->json_response(['error' => 'Las equivalencias aplican a CFDI recibidos de proveedores.'], 422);
+            }
+
+            $line_mappings = $this->normalize_purchase_mappings($cfdi, (array) \Arr::get($payload, 'mappings', []));
+            $saved = 0;
+            foreach ($this->details((int) $cfdi->id) as $line) {
+                $detail_id = (int) $line['id'];
+                if ((string) $line['line_type'] !== 'concept' || !isset($line_mappings[$detail_id])) {
+                    continue;
+                }
+                $mapping = $line_mappings[$detail_id];
+                if ((string) $mapping['line_class'] !== 'inventory_product' || (int) $mapping['product_id'] < 1 || (int) $mapping['save_mapping'] !== 1) {
+                    continue;
+                }
+                $this->save_supplier_product_mapping($cfdi, $line, $mapping);
+                $saved++;
+            }
+
+            Helper_Core_Audit::log([
+                'module' => 'sat',
+                'action' => 'save_supplier_product_mappings',
+                'business_event' => 'sat.save_supplier_product_mappings',
+                'entity_type' => 'sat_cfdi',
+                'entity_id' => (int) $cfdi->id,
+                'summary' => 'Equivalencias guardadas desde CFDI '.$cfdi->uuid,
+                'new_values' => ['saved' => $saved],
+            ]);
+
+            return $this->json_response([
+                'status' => 'ok',
+                'message' => $saved > 0 ? 'Equivalencias guardadas: '.$saved.'.' : 'No habia equivalencias validas para guardar.',
+                'saved' => $saved,
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error guardando equivalencias de proveedor: '.$e->getMessage());
+            return $this->json_response(['error' => $e->getMessage()], 400);
+        }
+    }
+
+    /**
      * MATERIALIZE CATALOGS
      *
      * CREA/ACTUALIZA TERCERO FISCAL Y PRODUCTOS BASE DESDE UN CFDI
@@ -688,6 +753,7 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
                 'payments' => [],
                 'relations' => [],
                 'linked' => [],
+                'supplier_mappings' => [],
             ];
         }
 
@@ -696,6 +762,7 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
             'payments' => $this->payments($cfdi_id),
             'relations' => $this->relations($cfdi_id),
             'linked' => $this->linked_records($cfdi_id),
+            'supplier_mappings' => $this->supplier_product_mappings($cfdi_id),
         ];
     }
 
@@ -762,6 +829,61 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
             ->order_by('line_number', 'asc')
             ->execute()
             ->as_array();
+    }
+
+    protected function supplier_product_mappings($cfdi_id)
+    {
+        if (!\DBUtil::table_exists('core_purchase_supplier_product_mappings')) {
+            return [];
+        }
+
+        $cfdi = Model_Core_Sat_Cfdi::find((int) $cfdi_id);
+        if (!$cfdi) {
+            return [];
+        }
+
+        $party_id = (int) $cfdi->supplier_party_id ?: (int) $cfdi->emitter_party_id;
+        $supplier_rfc = strtoupper(trim((string) $cfdi->emitter_rfc));
+        $found = [];
+        foreach ($this->details((int) $cfdi->id) as $line) {
+            if ((string) $line['line_type'] !== 'concept') {
+                continue;
+            }
+            $mapping = $this->find_supplier_product_mapping($party_id, $supplier_rfc, $line);
+            if ($mapping) {
+                $found[(int) $line['id']] = $mapping;
+            }
+        }
+        return $found;
+    }
+
+    protected function find_supplier_product_mapping($party_id, $supplier_rfc, array $line)
+    {
+        if (!\DBUtil::table_exists('core_purchase_supplier_product_mappings')) {
+            return null;
+        }
+
+        $supplier_sku = trim((string) $line['identification_number']);
+        $description_hash = $this->supplier_description_hash((string) $line['description']);
+
+        $query = \DB::select()->from('core_purchase_supplier_product_mappings')
+            ->where('active', '=', 1)
+            ->where_open()
+                ->where('party_id', '=', (int) $party_id)
+                ->or_where('supplier_rfc', '=', strtoupper(trim((string) $supplier_rfc)))
+            ->where_close();
+
+        if ($supplier_sku !== '') {
+            $query->where_open()
+                ->where('supplier_sku', '=', $supplier_sku)
+                ->or_where('supplier_description_hash', '=', $description_hash)
+            ->where_close();
+        } else {
+            $query->where('supplier_description_hash', '=', $description_hash);
+        }
+
+        $row = $query->order_by('updated_at', 'desc')->execute()->current();
+        return $row ?: null;
     }
 
     protected function payments($cfdi_id)
@@ -1013,6 +1135,9 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
                     ->execute();
             }
             $this->save_cfdi_line_mapping($cfdi, $line, $mapping, (int) $order->id, $item_id, $movement_id);
+            if ($line_class === 'inventory_product' && (int) $mapping['product_id'] > 0 && (int) $mapping['save_mapping'] === 1) {
+                $this->save_supplier_product_mapping($cfdi, $line, $mapping);
+            }
             $sort += 10;
         }
 
@@ -1049,6 +1174,8 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
                 'create_product' => (int) \Arr::get($mapping, 'create_product', 0) === 1 ? 1 : 0,
                 'new_sku' => trim((string) \Arr::get($mapping, 'new_sku', '')),
                 'new_name' => trim((string) \Arr::get($mapping, 'new_name', '')),
+                'save_mapping' => (int) \Arr::get($mapping, 'save_mapping', 1) === 1 ? 1 : 0,
+                'conversion_factor' => max(0.000001, (float) \Arr::get($mapping, 'conversion_factor', 1)),
             ];
         }
 
@@ -1071,6 +1198,8 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
             'create_product' => 0,
             'new_sku' => (string) $line['identification_number'],
             'new_name' => (string) $line['description'],
+            'save_mapping' => 1,
+            'conversion_factor' => 1,
         ];
     }
 
@@ -1283,6 +1412,73 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
             $code = substr($base, 0, 60 - strlen($suffix)).$suffix;
         }
         return $code;
+    }
+
+    protected function save_supplier_product_mapping(Model_Core_Sat_Cfdi $cfdi, array $line, array $mapping)
+    {
+        if (!\DBUtil::table_exists('core_purchase_supplier_product_mappings')) {
+            return;
+        }
+
+        $product = (int) $mapping['product_id'] > 0 ? Model_Core_Commerce_Product::find((int) $mapping['product_id']) : null;
+        if (!$product) {
+            return;
+        }
+
+        $party_id = (int) $cfdi->supplier_party_id ?: (int) $cfdi->emitter_party_id;
+        $supplier_rfc = strtoupper(trim((string) $cfdi->emitter_rfc));
+        $supplier_sku = trim((string) $line['identification_number']);
+        $description_hash = $this->supplier_description_hash((string) $line['description']);
+        $now = time();
+
+        $query = \DB::select('id')->from('core_purchase_supplier_product_mappings')
+            ->where_open()
+                ->where('party_id', '=', $party_id)
+                ->or_where('supplier_rfc', '=', $supplier_rfc)
+            ->where_close();
+        if ($supplier_sku !== '') {
+            $query->where('supplier_sku', '=', $supplier_sku);
+        } else {
+            $query->where('supplier_description_hash', '=', $description_hash);
+        }
+        $row = $query->execute()->current();
+
+        $data = [
+            'party_id' => $party_id,
+            'supplier_rfc' => $supplier_rfc,
+            'supplier_sku' => $supplier_sku,
+            'supplier_description' => substr((string) $line['description'], 0, 255),
+            'supplier_description_hash' => $description_hash,
+            'sat_product_service_code' => (string) $line['product_service_code'],
+            'sat_unit_code' => (string) $line['unit_code'],
+            'product_id' => (int) $product->id,
+            'internal_sku' => (string) $product->sku,
+            'internal_name' => (string) $product->name,
+            'unit_code' => (string) $product->unit_code ?: ((string) $line['unit_code'] ?: 'H87'),
+            'conversion_factor' => max(0.000001, (float) \Arr::get($mapping, 'conversion_factor', 1)),
+            'last_unit_cost' => max(0, (float) $line['unit_value']),
+            'last_seen_at' => $now,
+            'active' => 1,
+            'updated_at' => $now,
+        ];
+
+        if ($row) {
+            \DB::update('core_purchase_supplier_product_mappings')
+                ->set($data)
+                ->where('id', '=', (int) $row['id'])
+                ->execute();
+            return;
+        }
+
+        $data['created_by'] = (int) $this->user_id;
+        $data['created_at'] = $now;
+        \DB::insert('core_purchase_supplier_product_mappings')->set($data)->execute();
+    }
+
+    protected function supplier_description_hash($description)
+    {
+        $clean = strtolower(trim(preg_replace('/\s+/', ' ', (string) $description)));
+        return sha1($clean);
     }
 
     protected function save_cfdi_line_mapping(Model_Core_Sat_Cfdi $cfdi, array $line, array $mapping, $order_id, $item_id, $movement_id)

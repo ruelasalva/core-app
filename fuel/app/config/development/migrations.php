@@ -63,6 +63,7 @@ return array (
         57 => '058_create_treasury_cashflow_tables',
         58 => '059_create_budget_control_tables',
         59 => '060_add_employee_compensation_type',
+        60 => '061_create_purchase_supplier_product_mappings',
       ),
     ),
     'module' => array(    

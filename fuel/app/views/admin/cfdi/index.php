@@ -303,6 +303,7 @@
                                     <th style="width: 180px;">Uso</th>
                                     <th style="min-width: 220px;">SKU interno</th>
                                     <th style="width: 180px;">Almacen</th>
+                                    <th style="width: 140px;">Equivalencia</th>
                                     <th style="min-width: 210px;">Crear producto</th>
                                 </tr>
                             </thead>
@@ -338,6 +339,14 @@
                                     </td>
                                     <td>
                                         <div class="custom-control custom-checkbox mb-1">
+                                            <input type="checkbox" class="custom-control-input" :id="'save-map-' + row.cfdi_detail_id" v-model="row.save_mapping" :disabled="row.line_class !== 'inventory_product' || row.create_product">
+                                            <label class="custom-control-label" :for="'save-map-' + row.cfdi_detail_id">Guardar</label>
+                                        </div>
+                                        <input type="number" step="0.000001" min="0.000001" class="form-control form-control-sm" title="Factor proveedor a unidad interna" v-model="row.conversion_factor" :disabled="row.line_class !== 'inventory_product'">
+                                        <span v-if="row.saved_mapping_id" class="badge badge-info mt-1">Sugerida</span>
+                                    </td>
+                                    <td>
+                                        <div class="custom-control custom-checkbox mb-1">
                                             <input type="checkbox" class="custom-control-input" :id="'create-product-' + row.cfdi_detail_id" v-model="row.create_product" :disabled="row.line_class !== 'inventory_product'">
                                             <label class="custom-control-label" :for="'create-product-' + row.cfdi_detail_id">Crear pendiente</label>
                                         </div>
@@ -346,7 +355,7 @@
                                     </td>
                                 </tr>
                                 <tr v-if="convertForm.mappings.length === 0">
-                                    <td colspan="5" class="text-muted text-center">Este CFDI no tiene conceptos para convertir.</td>
+                                    <td colspan="6" class="text-muted text-center">Este CFDI no tiene conceptos para convertir.</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -357,6 +366,9 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-outline-info" @click="saveSupplierMappings" :disabled="convertForm.saving || convertForm.mappings.length === 0">
+                        <i class="bi bi-link-45deg"></i> Guardar equivalencias
+                    </button>
                     <button type="button" class="btn btn-primary" @click="submitConvertPurchase" :disabled="convertForm.saving || convertForm.mappings.length === 0">
                         <i class="bi bi-cart-check"></i> Crear compra
                     </button>
@@ -455,7 +467,7 @@ window.onload = function() {
             reports: { summary: {}, customers: [], suppliers: [], missing_xml: [] },
             ppdAudit: { summary: {}, items: [] },
             selected: null,
-            selectedContext: { details: [], payments: [], relations: [], linked: [] },
+            selectedContext: { details: [], payments: [], relations: [], linked: [], supplier_mappings: {} },
             convertForm: { item: null, mappings: [], saving: false },
             catalogForm: { item: null, mode: 'party', saving: false, party: {} },
             selectedIds: [],
@@ -534,7 +546,7 @@ window.onload = function() {
                 this.filters.tab = tab;
                 if (tab === 'payments') this.filters.doc_type = 'payments';
                 this.selected = null;
-                this.selectedContext = { details: [], payments: [], relations: [], linked: [] };
+                this.selectedContext = { details: [], payments: [], relations: [], linked: [], supplier_mappings: {} };
                 this.load();
             },
             isPpdTab: function(tab) {
@@ -543,7 +555,7 @@ window.onload = function() {
             selectDocType: function(type) {
                 this.filters.doc_type = type;
                 this.selected = null;
-                this.selectedContext = { details: [], payments: [], relations: [], linked: [] };
+                this.selectedContext = { details: [], payments: [], relations: [], linked: [], supplier_mappings: {} };
                 this.load();
             },
             load: function(extra) {
@@ -560,7 +572,7 @@ window.onload = function() {
                         this.reports = data.reports || { summary: {}, customers: [], suppliers: [], missing_xml: [] };
                         this.ppdAudit = data.ppd_audit || { summary: {}, items: [] };
                         this.options = data.options || { products: [], warehouses: [], departments: [], sat_cfdi_uses: [], sat_tax_regimes: [] };
-                        this.selectedContext = data.selected || { details: [], payments: [], relations: [], linked: [] };
+                        this.selectedContext = data.selected || { details: [], payments: [], relations: [], linked: [], supplier_mappings: {} };
                     })
                     .catch(() => { this.error = 'No se pudo cargar Auditoria SAT.'; });
             },
@@ -591,13 +603,18 @@ window.onload = function() {
                 });
             },
             buildMappingRow: function(line) {
-                var match = this.findProductBySku(line.identification_number || '');
+                var saved = (this.selectedContext.supplier_mappings || {})[line.id] || null;
+                var match = saved ? this.findProductById(saved.product_id || 0) : this.findProductBySku(line.identification_number || '');
+                var mappedProductId = saved ? saved.product_id : (match ? match.id : '');
                 return {
                     cfdi_detail_id: line.id,
-                    line_class: match ? 'inventory_product' : 'internal_purchase',
-                    product_id: match ? match.id : '',
+                    line_class: (saved || match) ? 'inventory_product' : 'internal_purchase',
+                    product_id: mappedProductId,
                     warehouse_id: this.defaultWarehouseId(),
                     create_product: false,
+                    save_mapping: true,
+                    saved_mapping_id: saved ? saved.id : 0,
+                    conversion_factor: saved ? saved.conversion_factor : 1,
                     new_sku: line.identification_number || '',
                     new_name: line.description || '',
                     supplier_sku: line.identification_number || '',
@@ -620,7 +637,9 @@ window.onload = function() {
                         warehouse_id: row.warehouse_id || 0,
                         create_product: row.create_product ? 1 : 0,
                         new_sku: row.new_sku || '',
-                        new_name: row.new_name || ''
+                        new_name: row.new_name || '',
+                        save_mapping: row.save_mapping ? 1 : 0,
+                        conversion_factor: row.conversion_factor || 1
                     }))
                 }))
                     .then(window.coreAppParseJsonResponse)
@@ -634,6 +653,42 @@ window.onload = function() {
                     .catch(() => {
                         this.convertForm.saving = false;
                         this.error = 'No se pudo convertir el CFDI.';
+                    });
+            },
+            saveSupplierMappings: function() {
+                if (!this.convertForm.item) return;
+                this.error = '';
+                this.message = '';
+                this.convertForm.saving = true;
+                fetch('<?php echo Uri::create('admin/cfdi/save_supplier_mappings'); ?>', window.coreAppFetchOptions({
+                    cfdi_id: this.convertForm.item.id,
+                    mappings: this.convertForm.mappings.map(row => ({
+                        cfdi_detail_id: row.cfdi_detail_id,
+                        line_class: row.line_class,
+                        product_id: row.product_id || 0,
+                        warehouse_id: row.warehouse_id || 0,
+                        save_mapping: row.save_mapping ? 1 : 0,
+                        conversion_factor: row.conversion_factor || 1
+                    }))
+                    }))
+                    .then(window.coreAppParseJsonResponse)
+                    .then(data => {
+                        if (data.error) {
+                            this.convertForm.saving = false;
+                            this.error = data.error;
+                            return;
+                        }
+                        this.message = data.message || 'Equivalencias guardadas.';
+                        return this.load({ cfdi_id: this.convertForm.item.id }).then(() => {
+                            this.convertForm.mappings = this.selectedContext.details
+                                .filter(line => line.line_type === 'concept')
+                                .map(line => this.buildMappingRow(line));
+                            this.convertForm.saving = false;
+                        });
+                    })
+                    .catch(() => {
+                        this.convertForm.saving = false;
+                        this.error = 'No se pudieron guardar las equivalencias.';
                     });
             },
             openCatalogPartyModal: function(item, mode) {
@@ -717,6 +772,11 @@ window.onload = function() {
                 sku = (sku || '').toString().trim().toLowerCase();
                 if (!sku) return null;
                 return this.options.products.find(product => (product.sku || '').toString().trim().toLowerCase() === sku) || null;
+            },
+            findProductById: function(id) {
+                id = parseInt(id || 0);
+                if (id < 1) return null;
+                return this.options.products.find(product => parseInt(product.id || 0) === id) || null;
             },
             defaultWarehouseId: function() {
                 var found = this.options.warehouses.find(warehouse => parseInt(warehouse.is_default || 0) === 1);
