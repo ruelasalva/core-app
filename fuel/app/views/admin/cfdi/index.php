@@ -201,6 +201,9 @@
                                     <button v-if="item.convertible_purchase == 1" class="btn btn-xs btn-outline-primary" @click.stop="convertPurchase(item)">
                                         <i class="bi bi-cart-check"></i>
                                     </button>
+                                    <button v-if="item.convertible_sale == 1" class="btn btn-xs btn-outline-primary" @click.stop="convertSale(item)" title="Guardar como factura de venta">
+                                        <i class="bi bi-receipt"></i>
+                                    </button>
                                     <button class="btn btn-xs btn-outline-success" @click.stop="openCatalogPartyModal(item, 'party')" title="Guardar tercero">
                                         <i class="bi bi-person-plus"></i>
                                     </button>
@@ -257,6 +260,9 @@
                                             </div>
                                             <button v-if="selected.convertible_purchase == 1" class="btn btn-sm btn-primary btn-block" @click="convertPurchase(selected)">
                                                 <i class="bi bi-cart-check"></i> Convertir a compra
+                                            </button>
+                                            <button v-if="selected.convertible_sale == 1" class="btn btn-sm btn-primary btn-block" @click="convertSale(selected)">
+                                                <i class="bi bi-receipt"></i> Guardar como venta/factura
                                             </button>
                                             <button class="btn btn-sm btn-outline-success btn-block" @click="openCatalogPartyModal(selected, 'party')">
                                                 <i class="bi bi-person-plus"></i> Guardar tercero
@@ -667,6 +673,9 @@ window.onload = function() {
                         line_class: row.line_class,
                         product_id: row.product_id || 0,
                         warehouse_id: row.warehouse_id || 0,
+                        create_product: row.create_product ? 1 : 0,
+                        new_sku: row.new_sku || '',
+                        new_name: row.new_name || '',
                         save_mapping: row.save_mapping ? 1 : 0,
                         conversion_factor: row.conversion_factor || 1
                     }))
@@ -689,6 +698,22 @@ window.onload = function() {
                     .catch(() => {
                         this.convertForm.saving = false;
                         this.error = 'No se pudieron guardar las equivalencias.';
+                    });
+            },
+            convertSale: function(item) {
+                if (!item) return;
+                if (!confirm('Crear factura de venta en Facturacion desde este CFDI emitido?')) return;
+                this.error = '';
+                this.message = '';
+                fetch('<?php echo Uri::create('admin/cfdi/convert_sale'); ?>', window.coreAppFetchOptions({ cfdi_id: item.id }))
+                    .then(window.coreAppParseJsonResponse)
+                    .then(data => {
+                        if (data.error) { this.error = data.error; return; }
+                        this.message = data.message || 'Factura de venta creada.';
+                        this.openDetails(item);
+                    })
+                    .catch(() => {
+                        this.error = 'No se pudo crear la factura de venta desde el CFDI.';
                     });
             },
             openCatalogPartyModal: function(item, mode) {

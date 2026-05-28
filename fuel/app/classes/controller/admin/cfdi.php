@@ -219,7 +219,13 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
                     continue;
                 }
                 $mapping = $line_mappings[$detail_id];
-                if ((string) $mapping['line_class'] !== 'inventory_product' || (int) $mapping['product_id'] < 1 || (int) $mapping['save_mapping'] !== 1) {
+                if ((string) $mapping['line_class'] !== 'inventory_product' || (int) $mapping['save_mapping'] !== 1) {
+                    continue;
+                }
+                if ((int) $mapping['product_id'] < 1 && (int) $mapping['create_product'] === 1) {
+                    $mapping['product_id'] = $this->create_product_from_cfdi_line($cfdi, $line, $mapping);
+                }
+                if ((int) $mapping['product_id'] < 1) {
                     continue;
                 }
                 $this->save_supplier_product_mapping($cfdi, $line, $mapping);
@@ -243,6 +249,90 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
             ]);
         } catch (\Exception $e) {
             \Log::error('Error guardando equivalencias de proveedor: '.$e->getMessage());
+            return $this->json_response(['error' => $e->getMessage()], 400);
+        }
+    }
+
+    /**
+     * CONVERT TO SALE INVOICE
+     *
+     * CREA FACTURA OPERATIVA DESDE CFDI EMITIDO YA EXISTENTE EN SAT.
+     *
+     * @access  public
+     * @return  Response
+     */
+    public function action_convert_sale()
+    {
+        $this->require_access('sat.access[edit]');
+        $this->require_access('billing.access[edit]');
+
+        $transaction_started = false;
+        try {
+            $this->assert_schema_ready();
+            if (!\DBUtil::table_exists('core_billing_invoices') || !\DBUtil::table_exists('core_billing_invoice_items')) {
+                throw new \RuntimeException('Falta ejecutar migraciones de Facturacion.');
+            }
+
+            $payload = (array) \Input::json();
+            $id = (int) \Arr::get($payload, 'cfdi_id', 0);
+            $cfdi = Model_Core_Sat_Cfdi::find($id);
+            if (!$cfdi || !$this->can_access_cfdi((int) $cfdi->id)) {
+                return $this->json_response(['error' => 'CFDI no encontrado o sin permiso.'], 404);
+            }
+            if ((string) $cfdi->direction !== 'issued') {
+                return $this->json_response(['error' => 'Solo CFDI emitidos pueden convertirse a factura de venta.'], 422);
+            }
+            if (!in_array((string) $cfdi->voucher_type, ['I', 'E'], true)) {
+                return $this->json_response(['error' => 'Solo facturas y notas emitidas generan documento de venta.'], 422);
+            }
+            if ((string) $cfdi->sat_status === 'cancelado') {
+                return $this->json_response(['error' => 'No se puede convertir un CFDI cancelado.'], 422);
+            }
+
+            $existing = \DB::select('id')->from('core_billing_invoices')->where('cfdi_id', '=', (int) $cfdi->id)->where('active', '=', 1)->execute()->current();
+            if ($existing) {
+                return $this->json_response(['error' => 'Este CFDI ya esta ligado a una factura de venta.'], 422);
+            }
+
+            $party_id = (int) $cfdi->customer_party_id ?: (int) $cfdi->receiver_party_id;
+            if ($party_id < 1) {
+                $party_result = $this->materialize_cfdi_party($cfdi);
+                $party_id = (int) $cfdi->customer_party_id ?: (int) $cfdi->receiver_party_id;
+                if ($party_id < 1 || ((int) $party_result['created'] + (int) $party_result['updated']) < 1) {
+                    return $this->json_response(['error' => 'No se pudo ligar el RFC receptor a un cliente.'], 422);
+                }
+            }
+
+            \DB::start_transaction();
+            $transaction_started = true;
+            $invoice = $this->create_billing_invoice_from_cfdi($cfdi, $party_id);
+            $cfdi->sales_status = 'linked';
+            $cfdi->portal_visible_customer = 1;
+            $cfdi->reviewed_by = (int) $this->user_id;
+            $cfdi->reviewed_at = time();
+            $cfdi->save();
+            \DB::commit_transaction();
+
+            Helper_Core_Audit::log([
+                'module' => 'sat',
+                'action' => 'convert_cfdi_to_sale',
+                'business_event' => 'sat.convert_sale',
+                'entity_type' => 'sat_cfdi',
+                'entity_id' => (int) $cfdi->id,
+                'summary' => 'CFDI '.$cfdi->uuid.' convertido a factura '.$invoice->folio,
+                'new_values' => ['billing_invoice_id' => (int) $invoice->id],
+            ]);
+
+            return $this->json_response([
+                'status' => 'ok',
+                'message' => 'Factura creada en Facturacion: '.$invoice->folio,
+                'invoice_id' => (int) $invoice->id,
+            ]);
+        } catch (\Exception $e) {
+            if ($transaction_started) {
+                \DB::rollback_transaction();
+            }
+            \Log::error('Error convirtiendo CFDI a venta: '.$e->getMessage());
             return $this->json_response(['error' => $e->getMessage()], 400);
         }
     }
@@ -503,6 +593,7 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
             $row['type_label'] = $this->voucher_label((string) $row['voucher_type']);
             $row['xml_status'] = ((string) $row['xml_path'] !== '' && (int) $row['missing_xml'] === 0) ? 'available' : 'missing';
             $row['convertible_purchase'] = $this->is_purchase_convertible($row) ? 1 : 0;
+            $row['convertible_sale'] = $this->is_sale_convertible($row) ? 1 : 0;
             $items[] = $row;
         }
 
@@ -929,6 +1020,13 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
                 $items[] = $row;
             }
         }
+        if (\DBUtil::table_exists('core_billing_invoices')) {
+            foreach (\DB::select('id', 'folio', 'status', 'sat_status', 'total')->from('core_billing_invoices')->where('cfdi_id', '=', $cfdi_id)->where('active', '=', 1)->execute() as $row) {
+                $row['module'] = 'Facturacion';
+                $row['type'] = 'Factura venta';
+                $items[] = $row;
+            }
+        }
         return $items;
     }
 
@@ -1042,6 +1140,15 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
             && $row['sat_status'] !== 'cancelado'
             && (int) $row['missing_xml'] === 0
             && (string) $row['purchase_status'] !== 'linked';
+    }
+
+    protected function is_sale_convertible(array $row)
+    {
+        return $row['direction'] === 'issued'
+            && in_array($row['voucher_type'], ['I', 'E'], true)
+            && $row['sat_status'] !== 'cancelado'
+            && (int) $row['missing_xml'] === 0
+            && (string) $row['sales_status'] !== 'linked';
     }
 
     protected function create_purchase_order_from_cfdi(Model_Core_Sat_Cfdi $cfdi, $party_id, array $line_mappings = [])
@@ -1665,6 +1772,151 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
             'active' => 1,
         ]);
         $invoice->save();
+        return $invoice;
+    }
+
+    protected function create_billing_invoice_from_cfdi(Model_Core_Sat_Cfdi $cfdi, $party_id)
+    {
+        $invoice = Model_Core_Billing_Invoice::forge([
+            'folio' => $this->next_folio('FAC-SAT', 'core_billing_invoices'),
+            'invoice_type' => (string) $cfdi->voucher_type === 'E' ? 'credit_note' : 'sale',
+            'party_id' => (int) $party_id,
+            'cfdi_id' => (int) $cfdi->id,
+            'fiscal_document_id' => 0,
+            'fiscal_mode' => 'fiscal_required',
+            'requires_waybill' => (int) $cfdi->has_waybill,
+            'pac_provider_code' => '',
+            'pac_connection_id' => 0,
+            'pac_series_id' => '',
+            'pac_receptor_uid' => '',
+            'pac_uid' => '',
+            'uuid' => (string) $cfdi->uuid,
+            'sat_status' => (string) $cfdi->sat_status,
+            'stamped_at' => $cfdi->stamped_at ? strtotime((string) $cfdi->stamped_at) : 0,
+            'cancelled_at' => 0,
+            'cancel_motive' => '',
+            'cancel_substitute_uuid' => '',
+            'pac_request_json' => null,
+            'pac_response_json' => null,
+            'xml_path' => (string) $cfdi->xml_path,
+            'pdf_path' => '',
+            'source_module' => 'sat_cfdi',
+            'source_entity_type' => 'sat_cfdi',
+            'source_entity_id' => (int) $cfdi->id,
+            'issue_date' => substr((string) $cfdi->issued_at, 0, 10),
+            'due_date' => '',
+            'currency_code' => (string) $cfdi->currency ?: 'MXN',
+            'exchange_rate' => (float) $cfdi->exchange_rate > 0 ? (float) $cfdi->exchange_rate : 1,
+            'payment_term_id' => 0,
+            'sat_cfdi_use_code' => (string) $cfdi->cfdi_use ?: 'G03',
+            'sat_payment_form_code' => (string) $cfdi->payment_form ?: '99',
+            'sat_payment_method_code' => (string) $cfdi->payment_method ?: 'PPD',
+            'subtotal' => 0,
+            'discount_total' => 0,
+            'tax_total' => 0,
+            'retention_total' => 0,
+            'total' => 0,
+            'balance_due' => 0,
+            'status' => 'stamped',
+            'notes' => 'Factura importada desde Auditoria SAT.',
+            'created_by' => (int) $this->user_id,
+            'active' => 1,
+        ]);
+        $invoice->save();
+
+        $sort = 10;
+        foreach ($this->details((int) $cfdi->id) as $line) {
+            if ((string) $line['line_type'] !== 'concept') {
+                continue;
+            }
+            $product = $this->product_for_cfdi_line($line);
+            $quantity = max(0.0001, (float) $line['quantity']);
+            $unit_price = max(0, (float) $line['unit_value']);
+            $discount = max(0, (float) $line['discount']);
+            $base = max(0, ($quantity * $unit_price) - $discount);
+            $tax_rate = max(0, (float) $line['vat_rate']);
+            $tax_amount = max(0, (float) $line['vat_amount']);
+            $retention = max(0, (float) $line['retention_amount']);
+            Model_Core_Billing_Invoice_Item::forge([
+                'invoice_id' => (int) $invoice->id,
+                'product_id' => $product ? (int) $product->id : 0,
+                'sat_product_service_code' => (string) $line['product_service_code'] ?: '01010101',
+                'description' => (string) $line['description'] ?: 'Concepto CFDI',
+                'quantity' => $quantity,
+                'unit_code' => (string) $line['unit_code'] ?: 'H87',
+                'sat_object_tax_code' => '02',
+                'unit_price' => $unit_price,
+                'discount_amount' => $discount,
+                'tax_code' => $tax_rate > 0 ? 'iva_16' : '',
+                'tax_factor_type' => $tax_rate > 0 ? 'Tasa' : 'Exento',
+                'tax_rate' => $tax_rate,
+                'tax_amount' => $tax_amount > 0 ? $tax_amount : round($base * $tax_rate, 2),
+                'retention_amount' => $retention,
+                'retention_tax_code' => '',
+                'retention_rate' => 0,
+                'line_total' => max(0, (float) $line['amount'] + $tax_amount - $retention),
+                'sort_order' => $sort,
+                'active' => 1,
+            ])->save();
+            $sort += 10;
+        }
+
+        return $this->recalculate_billing_invoice((int) $invoice->id);
+    }
+
+    protected function product_for_cfdi_line(array $line)
+    {
+        $sku = trim((string) $line['identification_number']);
+        if ($sku !== '') {
+            $row = \DB::select('id')->from('core_commerce_products')
+                ->where('sku', '=', strtoupper($sku))
+                ->execute()
+                ->current();
+            if ($row) {
+                return Model_Core_Commerce_Product::find((int) $row['id']);
+            }
+        }
+
+        $name = trim((string) $line['description']);
+        if ($name === '') {
+            return null;
+        }
+        $row = \DB::select('id')->from('core_commerce_products')
+            ->where('name', '=', $name)
+            ->where('sat_product_service_code', '=', (string) $line['product_service_code'])
+            ->execute()
+            ->current();
+        return $row ? Model_Core_Commerce_Product::find((int) $row['id']) : null;
+    }
+
+    protected function recalculate_billing_invoice($invoice_id)
+    {
+        $invoice = Model_Core_Billing_Invoice::find((int) $invoice_id);
+        if (!$invoice) {
+            throw new \RuntimeException('Factura no encontrada.');
+        }
+
+        $subtotal = 0;
+        $discount = 0;
+        $tax = 0;
+        $retention = 0;
+        $total = 0;
+        foreach (Model_Core_Billing_Invoice_Item::query()->where('invoice_id', '=', (int) $invoice_id)->where('active', '=', 1)->get() as $item) {
+            $subtotal += ((float) $item->quantity * (float) $item->unit_price);
+            $discount += (float) $item->discount_amount;
+            $tax += (float) $item->tax_amount;
+            $retention += (float) $item->retention_amount;
+            $total += (float) $item->line_total;
+        }
+
+        $invoice->subtotal = round($subtotal, 2);
+        $invoice->discount_total = round($discount, 2);
+        $invoice->tax_total = round($tax, 2);
+        $invoice->retention_total = round($retention, 2);
+        $invoice->total = round($total, 2);
+        $invoice->balance_due = (string) $invoice->sat_payment_method_code === 'PUE' ? 0 : round($total, 2);
+        $invoice->save();
+
         return $invoice;
     }
 

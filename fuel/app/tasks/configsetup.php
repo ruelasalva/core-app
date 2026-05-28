@@ -3059,6 +3059,18 @@ class Configsetup
             'updated_at' => time(),
         ]);
 
+        $this->upsert_seed('core_knowledge_articles', 'code', 'sat_cfdi_a_ventas_facturacion', [
+            'code' => 'sat_cfdi_a_ventas_facturacion',
+            'title' => 'CFDI emitidos a Facturacion',
+            'category' => 'SAT',
+            'summary' => 'Como guardar un CFDI emitido descargado del SAT como factura operativa en Facturacion.',
+            'content' => '<h3>Objetivo</h3><p>Cuando ya existen XML emitidos en Auditoria SAT, Core-App puede crear la factura operativa en <strong>Facturacion</strong> sin volver a timbrar. SAT conserva la verdad fiscal y Facturacion conserva el documento operativo para cobranza, reportes y relacion con pagos.</p><h4>Flujo</h4><ol><li>Entra a <strong>Admin &gt; Auditoria SAT</strong>.</li><li>Filtra la pestana <strong>Emitidos</strong> y abre el CFDI.</li><li>Si el XML esta disponible y no esta cancelado, presiona <strong>Guardar como venta/factura</strong>.</li><li>El sistema crea o vincula el cliente por RFC, crea una factura en <strong>Facturacion</strong>, copia los conceptos y guarda <code>cfdi_id</code>, UUID, XML, metodo de pago y estado SAT.</li><li>Abre <strong>Admin &gt; Facturacion</strong> para revisar la factura importada.</li></ol><h4>Reglas</h4><ul><li>No se timbra de nuevo un CFDI importado desde SAT.</li><li>Los productos se relacionan por SKU/no identificacion o descripcion cuando ya existen en Comercial.</li><li>Si falta producto, el concepto queda en la factura con <code>product_id = 0</code>; despues Comercial puede corregir catalogo y futuras facturas mapearan mejor.</li><li>Facturas PUE quedan con saldo cero; facturas PPD quedan con saldo por cobrar para pagos y conciliacion.</li></ul>',
+            'sort_order' => 55,
+            'active' => 1,
+            'created_at' => time(),
+            'updated_at' => time(),
+        ]);
+
         $this->upsert_seed('core_knowledge_articles', 'code', 'auditoria_funcional_core_app', [
             'code' => 'auditoria_funcional_core_app',
             'title' => 'Auditoria funcional del sistema',
