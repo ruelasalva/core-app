@@ -339,6 +339,10 @@ class Controller_Admin_Payments extends Controller_Adminbase
             $statement->duplicate_count = $duplicates;
             $statement->save();
             $this->generate_reconciliation_suggestions();
+            $response_filters = [
+                'start_date' => $statement->period_start ?: date('Y-m-01'),
+                'end_date' => $statement->period_end ?: date('Y-m-t'),
+            ];
 
             Helper_Core_Audit::log([
                 'module' => 'payments',
@@ -352,10 +356,12 @@ class Controller_Admin_Payments extends Controller_Adminbase
             return $this->json_response([
                 'status' => 'ok',
                 'message' => 'Estado de cuenta importado: '.$imported.' movimientos nuevos, '.$duplicates.' duplicados.',
-                'movements' => $this->get_movements(),
-                'statement_imports' => $this->get_statement_imports(),
+                'movements' => $this->get_movements($response_filters),
+                'statement_imports' => $this->get_statement_imports($response_filters),
+                'statement_import' => $this->get_statement_import_summary($statement),
                 'suggestions' => $this->get_reconciliation_suggestions(),
-                'stats' => $this->get_stats(),
+                'stats' => $this->get_stats($response_filters),
+                'period_filters' => $response_filters,
             ]);
         } catch (\Exception $e) {
             \Log::error('Error importando estado de cuenta: '.$e->getMessage());
@@ -380,6 +386,7 @@ class Controller_Admin_Payments extends Controller_Adminbase
             return $this->json_response([
                 'status' => 'ok',
                 'message' => 'Sugerencias generadas: '.$created,
+                'statement_imports' => $this->get_statement_imports(),
                 'suggestions' => $this->get_reconciliation_suggestions(),
                 'stats' => $this->get_stats(),
             ]);
@@ -465,6 +472,7 @@ class Controller_Admin_Payments extends Controller_Adminbase
                 'receivables' => $this->get_receivables(),
                 'payables' => $this->get_payables(),
                 'movements' => $this->get_movements(),
+                'statement_imports' => $this->get_statement_imports(),
                 'suggestions' => $this->get_reconciliation_suggestions(),
                 'stats' => $this->get_stats(),
             ]);
@@ -619,11 +627,54 @@ class Controller_Admin_Payments extends Controller_Adminbase
         $filters = $filters ?: $this->period_filters();
         $items = [];
         foreach (Model_Core_Bank_Statement_Import::query()->where('period_start', '<=', $filters['end_date'])->where('period_end', '>=', $filters['start_date'])->order_by('id', 'desc')->limit(50)->get() as $statement) {
-            $row = $statement->to_array();
-            $row['created_at_label'] = $statement->created_at ? date('d/m/Y H:i', (int) $statement->created_at) : '';
-            $items[] = $row;
+            $items[] = $this->get_statement_import_summary($statement);
         }
         return $items;
+    }
+
+    /**
+     * GET STATEMENT IMPORT SUMMARY
+     *
+     * AGREGA TOTALES DE MOVIMIENTOS, CONCILIADOS Y SUGERENCIAS POR ESTADO.
+     *
+     * @access  protected
+     * @return  Array
+     */
+    protected function get_statement_import_summary(Model_Core_Bank_Statement_Import $statement)
+    {
+        $row = $statement->to_array();
+        $row['created_at_label'] = $statement->created_at ? date('d/m/Y H:i', (int) $statement->created_at) : '';
+        $row['period_label'] = trim(($statement->period_start ?: '-').' a '.($statement->period_end ?: '-'));
+
+        $movement_totals = \DB::select(
+                \DB::expr('COUNT(*) as movements_count'),
+                \DB::expr('COALESCE(SUM(CASE WHEN reconciled = 1 THEN 1 ELSE 0 END), 0) as reconciled_count'),
+                \DB::expr('COALESCE(SUM(CASE WHEN reconciled = 0 THEN 1 ELSE 0 END), 0) as pending_count'),
+                \DB::expr("COALESCE(SUM(CASE WHEN movement_type = 'deposit' THEN amount ELSE 0 END), 0) as deposits_total"),
+                \DB::expr("COALESCE(SUM(CASE WHEN movement_type = 'withdrawal' THEN amount ELSE 0 END), 0) as withdrawals_total")
+            )
+            ->from('core_bank_movements')
+            ->where('statement_import_id', '=', (int) $statement->id)
+            ->execute()
+            ->current();
+
+        $suggestion_totals = \DB::select(\DB::expr('COUNT(*) as suggestions_count'))
+            ->from(['core_bank_reconciliation_suggestions', 's'])
+            ->join(['core_bank_movements', 'm'], 'left')->on('s.movement_id', '=', 'm.id')
+            ->where('m.statement_import_id', '=', (int) $statement->id)
+            ->where('s.status', '=', 'pending')
+            ->execute()
+            ->current();
+
+        $row['movements_count'] = (int) \Arr::get($movement_totals, 'movements_count', 0);
+        $row['reconciled_count'] = (int) \Arr::get($movement_totals, 'reconciled_count', 0);
+        $row['pending_count'] = (int) \Arr::get($movement_totals, 'pending_count', 0);
+        $row['deposits_total'] = (float) \Arr::get($movement_totals, 'deposits_total', 0);
+        $row['withdrawals_total'] = (float) \Arr::get($movement_totals, 'withdrawals_total', 0);
+        $row['suggestions_count'] = (int) \Arr::get($suggestion_totals, 'suggestions_count', 0);
+        $row['reconciliation_progress'] = $row['movements_count'] > 0 ? round(($row['reconciled_count'] / $row['movements_count']) * 100) : 0;
+
+        return $row;
     }
 
     protected function get_reconciliation_suggestions()
@@ -1186,6 +1237,8 @@ class Controller_Admin_Payments extends Controller_Adminbase
                     'score' => (int) $candidate['score'],
                     'reasons_json' => json_encode($candidate['reasons'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
                     'status' => 'pending',
+                    'applied_by' => 0,
+                    'applied_at' => 0,
                     'created_by' => (int) $this->user_id,
                 ])->save();
                 $created++;

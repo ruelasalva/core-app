@@ -46,20 +46,44 @@
             </div>
             <div class="table-responsive mt-2">
                 <table class="table table-sm table-bordered">
-                    <thead><tr><th>Archivo</th><th>Cuenta</th><th>Periodo</th><th>Filas</th><th>Nuevos</th><th>Duplicados</th><th>Carga</th></tr></thead>
+                    <thead><tr><th>Archivo</th><th>Cuenta</th><th>Periodo</th><th>Importado</th><th>Conciliado</th><th>Pendiente</th><th>Sugerencias</th><th>Totales</th><th>Carga</th><th class="text-center">Acciones</th></tr></thead>
                     <tbody>
                         <tr v-for="statement in statement_imports" :key="statement.id">
                             <td>{{ statement.original_name }}</td>
                             <td>{{ label(options.bank_accounts, statement.bank_account_id) }}</td>
-                            <td>{{ statement.period_start || '-' }} a {{ statement.period_end || '-' }}</td>
-                            <td>{{ statement.rows_count }}</td>
-                            <td>{{ statement.imported_count }}</td>
-                            <td>{{ statement.duplicate_count }}</td>
+                            <td>{{ statement.period_label || '-' }}</td>
+                            <td>
+                                <strong>{{ statement.movements_count || 0 }}</strong>
+                                <div class="text-muted small">{{ statement.duplicate_count || 0 }} duplicados</div>
+                            </td>
+                            <td>
+                                <span class="badge badge-success">{{ statement.reconciled_count || 0 }}</span>
+                                <div class="progress progress-xs mt-1">
+                                    <div class="progress-bar bg-success" :style="{ width: (statement.reconciliation_progress || 0) + '%' }"></div>
+                                </div>
+                            </td>
+                            <td><span class="badge badge-warning">{{ statement.pending_count || 0 }}</span></td>
+                            <td><span class="badge badge-info">{{ statement.suggestions_count || 0 }}</span></td>
+                            <td>
+                                <div class="small text-success">Cobros {{ money(statement.deposits_total) }}</div>
+                                <div class="small text-danger">Pagos {{ money(statement.withdrawals_total) }}</div>
+                            </td>
                             <td>{{ statement.created_at_label }}</td>
+                            <td class="text-center">
+                                <button class="btn btn-xs btn-outline-primary" @click="selectStatementImport(statement)">
+                                    <i class="bi bi-calendar-range"></i> Ver periodo
+                                </button>
+                            </td>
                         </tr>
-                        <tr v-if="statement_imports.length === 0"><td colspan="7" class="text-center text-muted">Sin estados de cuenta importados</td></tr>
+                        <tr v-if="statement_imports.length === 0"><td colspan="10" class="text-center text-muted">Sin estados de cuenta importados</td></tr>
                     </tbody>
                 </table>
+            </div>
+            <div v-if="selectedStatementImport" class="alert alert-light border mt-2 mb-0">
+                <strong>Estado seleccionado:</strong> {{ selectedStatementImport.original_name }}
+                <span class="mx-2">Periodo {{ selectedStatementImport.period_label }}</span>
+                <span class="badge badge-success">{{ selectedStatementImport.reconciled_count || 0 }} conciliados</span>
+                <span class="badge badge-warning">{{ selectedStatementImport.pending_count || 0 }} pendientes</span>
             </div>
         </div>
     </div>
@@ -238,7 +262,7 @@
 window.onload = function() {
     new Vue({
         el: '#app-payments',
-        data: { error: '', message: '', payments: [], receivables: [], payables: [], movements: [], reconciliations: [], statement_imports: [], suggestions: [], periodFilters: { start_date: '', end_date: '' }, options: { parties: [], bank_accounts: [], currencies: [], sat_payment_forms: [], integrations: [] }, stats: {}, paymentForm: {}, movementForm: {}, statementForm: { bank_account_id: 0, file: null } },
+        data: { error: '', message: '', payments: [], receivables: [], payables: [], movements: [], reconciliations: [], statement_imports: [], selectedStatementImport: null, suggestions: [], periodFilters: { start_date: '', end_date: '' }, options: { parties: [], bank_accounts: [], currencies: [], sat_payment_forms: [], integrations: [] }, stats: {}, paymentForm: {}, movementForm: {}, statementForm: { bank_account_id: 0, file: null } },
         mounted() { this.loadData(); },
         methods: {
             loadData() {
@@ -255,6 +279,7 @@ window.onload = function() {
                     this.movements = data.movements || [];
                     this.reconciliations = data.reconciliations || [];
                     this.statement_imports = data.statement_imports || [];
+                    if (this.selectedStatementImport) this.refreshSelectedStatementImport();
                     this.suggestions = data.suggestions || [];
                     this.periodFilters = data.period_filters || this.periodFilters;
                     this.options = data.options || this.options;
@@ -266,6 +291,16 @@ window.onload = function() {
                 if ((!this.statementForm.bank_account_id || this.statementForm.bank_account_id == 0) && this.options.bank_accounts && this.options.bank_accounts.length === 1) {
                     this.statementForm.bank_account_id = this.options.bank_accounts[0].value;
                 }
+            },
+            selectStatementImport(statement) {
+                this.selectedStatementImport = statement;
+                if (statement.period_start) this.periodFilters.start_date = statement.period_start;
+                if (statement.period_end) this.periodFilters.end_date = statement.period_end;
+                this.loadData();
+            },
+            refreshSelectedStatementImport() {
+                const currentId = this.selectedStatementImport ? this.selectedStatementImport.id : 0;
+                this.selectedStatementImport = (this.statement_imports || []).find(statement => String(statement.id) === String(currentId)) || null;
             },
             openPayment(payment) {
                 this.paymentForm = Object.assign({ id: 0, payment_type: 'received', party_id: 0, bank_account_id: 0, integration_connection_id: 0, fiscal_document_id: 0, fiscal_mode: 'system_only', rep_status: 'not_required', payment_date: new Date().toISOString().slice(0, 10), currency_code: 'MXN', exchange_rate: 1, amount: 0, sat_payment_form_code: '99', reference: '', external_id: '', status: 'pending', notes: '', allocation_entity_type: '', allocation_entity_id: 0, active: true }, payment);
@@ -370,7 +405,9 @@ window.onload = function() {
                     if (data.error) { this.error = data.error; return; }
                     this.message = data.message || 'Estado importado.';
                     this.movements = data.movements || this.movements;
+                    this.periodFilters = data.period_filters || this.periodFilters;
                     this.statement_imports = data.statement_imports || [];
+                    this.selectedStatementImport = data.statement_import || this.statement_imports[0] || null;
                     this.suggestions = data.suggestions || [];
                     this.stats = data.stats || this.stats;
                     this.statementForm.file = null;
@@ -382,6 +419,8 @@ window.onload = function() {
                 fetch('<?php echo Uri::create('admin/payments/suggest_reconciliation'); ?>', window.coreAppFetchOptions({})).then(res => res.json()).then(data => {
                     if (data.error) { this.error = data.error; return; }
                     this.message = data.message || 'Sugerencias actualizadas.';
+                    this.statement_imports = data.statement_imports || this.statement_imports;
+                    if (this.selectedStatementImport) this.refreshSelectedStatementImport();
                     this.suggestions = data.suggestions || [];
                     this.stats = data.stats || this.stats;
                 });
@@ -397,6 +436,8 @@ window.onload = function() {
                     this.receivables = data.receivables || this.receivables;
                     this.payables = data.payables || this.payables;
                     this.movements = data.movements || this.movements;
+                    this.statement_imports = data.statement_imports || this.statement_imports;
+                    if (this.selectedStatementImport) this.refreshSelectedStatementImport();
                     this.suggestions = data.suggestions || [];
                     this.stats = data.stats || this.stats;
                 });
