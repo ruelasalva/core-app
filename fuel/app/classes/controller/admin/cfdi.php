@@ -1478,6 +1478,8 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
                 'tax_amount' => max(0, (float) $line['vat_amount']),
                 'retention_amount' => max(0, (float) $line['retention_amount']),
                 'line_total' => max(0, (float) $line['amount'] + (float) $line['vat_amount'] - (float) $line['retention_amount']),
+                'received_quantity' => $line_class === 'inventory_product' ? max(0.0001, (float) $line['quantity']) : 0,
+                'invoiced_quantity' => max(0.0001, (float) $line['quantity']),
                 'sort_order' => $sort,
                 'active' => 1,
             ])->save();
