@@ -63,7 +63,7 @@ class Controller_Admin_Payments extends Controller_Adminbase
                 'payables' => $this->get_payables(),
                 'movements' => $this->get_movements($filters),
                 'reconciliations' => $this->get_reconciliations($filters),
-                'statement_imports' => $this->get_statement_imports($filters),
+                'statement_imports' => $this->get_statement_imports([], false),
                 'suggestions' => $this->get_reconciliation_suggestions(),
                 'options' => $this->get_options(),
                 'stats' => $this->get_stats($filters),
@@ -374,7 +374,7 @@ class Controller_Admin_Payments extends Controller_Adminbase
                 'status' => 'ok',
                 'message' => $message,
                 'movements' => $this->get_movements($response_filters),
-                'statement_imports' => $this->get_statement_imports($response_filters),
+                'statement_imports' => $this->get_statement_imports([], false),
                 'statement_import' => $this->get_statement_import_summary($statement),
                 'suggestions' => $this->get_reconciliation_suggestions(),
                 'stats' => $this->get_stats($response_filters),
@@ -403,7 +403,7 @@ class Controller_Admin_Payments extends Controller_Adminbase
             return $this->json_response([
                 'status' => 'ok',
                 'message' => 'Sugerencias generadas: '.$created,
-                'statement_imports' => $this->get_statement_imports(),
+                'statement_imports' => $this->get_statement_imports([], false),
                 'suggestions' => $this->get_reconciliation_suggestions(),
                 'stats' => $this->get_stats(),
             ]);
@@ -489,13 +489,88 @@ class Controller_Admin_Payments extends Controller_Adminbase
                 'receivables' => $this->get_receivables(),
                 'payables' => $this->get_payables(),
                 'movements' => $this->get_movements(),
-                'statement_imports' => $this->get_statement_imports(),
+                'statement_imports' => $this->get_statement_imports([], false),
                 'suggestions' => $this->get_reconciliation_suggestions(),
                 'stats' => $this->get_stats(),
             ]);
         } catch (\Exception $e) {
             \Log::error('Error aplicando sugerencia de conciliacion: '.$e->getMessage());
             return $this->json_response(['error' => 'No se pudo aplicar la sugerencia.'], 400);
+        }
+    }
+
+    /**
+     * DELETE STATEMENT IMPORT
+     *
+     * ELIMINA UN ESTADO IMPORTADO SI NO TIENE MOVIMIENTOS CONCILIADOS.
+     *
+     * @access  public
+     * @return  Response
+     */
+    public function action_delete_statement_import()
+    {
+        $this->require_access('payments.access[edit]');
+        $val = (array) \Input::json();
+
+        try {
+            $statement = Model_Core_Bank_Statement_Import::find((int) \Arr::get($val, 'id', 0));
+            if (!$statement) {
+                return $this->json_response(['error' => 'Estado de cuenta no encontrado.'], 404);
+            }
+
+            $locked = \DB::select('id')
+                ->from('core_bank_movements')
+                ->where('statement_import_id', '=', (int) $statement->id)
+                ->and_where_open()
+                    ->where('reconciled', '=', 1)
+                    ->or_where('payment_id', '>', 0)
+                ->and_where_close()
+                ->execute()
+                ->current();
+            if ($locked) {
+                return $this->json_response(['error' => 'No se puede eliminar: el estado tiene movimientos conciliados o ligados a pagos.'], 422);
+            }
+
+            $movement_ids = [];
+            foreach (\DB::select('id')->from('core_bank_movements')->where('statement_import_id', '=', (int) $statement->id)->execute() as $row) {
+                $movement_ids[] = (int) $row['id'];
+            }
+
+            if ($movement_ids) {
+                \DB::delete('core_bank_reconciliation_suggestions')->where('movement_id', 'in', $movement_ids)->execute();
+                \DB::delete('core_bank_movements')->where('id', 'in', $movement_ids)->execute();
+            }
+
+            $old = $statement->to_array();
+            $file_path = trim((string) $statement->file_path);
+            $statement->delete();
+            if ($file_path !== '') {
+                $absolute_file = DOCROOT.str_replace(['/', '\\'], DS, $file_path);
+                if (strpos(realpath(dirname($absolute_file)) ?: '', realpath(DOCROOT.'assets'.DS.'uploads') ?: DOCROOT) === 0 && is_file($absolute_file)) {
+                    @unlink($absolute_file);
+                }
+            }
+
+            Helper_Core_Audit::log([
+                'module' => 'payments',
+                'action' => 'delete_bank_statement_import',
+                'entity_type' => 'bank_statement_import',
+                'entity_id' => (int) \Arr::get($old, 'id', 0),
+                'summary' => 'Estado de cuenta importado eliminado: '.\Arr::get($old, 'original_name', ''),
+                'old_values' => $old,
+            ]);
+
+            return $this->json_response([
+                'status' => 'ok',
+                'message' => 'Estado de cuenta eliminado.',
+                'movements' => $this->get_movements(),
+                'statement_imports' => $this->get_statement_imports([], false),
+                'suggestions' => $this->get_reconciliation_suggestions(),
+                'stats' => $this->get_stats(),
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error eliminando estado de cuenta importado: '.$e->getMessage());
+            return $this->json_response(['error' => 'No se pudo eliminar el estado de cuenta.'], 400);
         }
     }
 
@@ -635,15 +710,20 @@ class Controller_Admin_Payments extends Controller_Adminbase
         return $items;
     }
 
-    protected function get_statement_imports(array $filters = [])
+    protected function get_statement_imports(array $filters = [], $use_period = true)
     {
         if (!\DBUtil::table_exists('core_bank_statement_imports')) {
             return [];
         }
 
-        $filters = $filters ?: $this->period_filters();
         $items = [];
-        foreach (Model_Core_Bank_Statement_Import::query()->where('period_start', '<=', $filters['end_date'])->where('period_end', '>=', $filters['start_date'])->order_by('id', 'desc')->limit(50)->get() as $statement) {
+        $query = Model_Core_Bank_Statement_Import::query()->order_by('id', 'desc')->limit(100);
+        if ($use_period) {
+            $filters = $filters ?: $this->period_filters();
+            $query->where('period_start', '<=', $filters['end_date'])->where('period_end', '>=', $filters['start_date']);
+        }
+
+        foreach ($query->get() as $statement) {
             $items[] = $this->get_statement_import_summary($statement);
         }
         return $items;
@@ -662,6 +742,7 @@ class Controller_Admin_Payments extends Controller_Adminbase
         $row = $statement->to_array();
         $row['created_at_label'] = $statement->created_at ? date('d/m/Y H:i', (int) $statement->created_at) : '';
         $row['period_label'] = trim(($statement->period_start ?: '-').' a '.($statement->period_end ?: '-'));
+        $row['account_label'] = $this->bank_account_label((int) $statement->bank_account_id);
 
         $movement_totals = \DB::select(
                 \DB::expr('COUNT(*) as movements_count'),
@@ -740,7 +821,7 @@ class Controller_Admin_Payments extends Controller_Adminbase
     {
         return [
             'parties' => $this->select_options('core_parties', 'id', 'name'),
-            'bank_accounts' => $this->select_options('core_catalog_bank_accounts', 'id', 'name'),
+            'bank_accounts' => $this->bank_account_options(),
             'currencies' => $this->select_options('core_catalog_currencies', 'code', 'name'),
             'sat_payment_forms' => Helper_Core_Sat_Catalog::options('core_sat_payment_forms'),
             'integrations' => $this->select_options('core_integration_connections', 'id', 'name'),
@@ -786,6 +867,73 @@ class Controller_Admin_Payments extends Controller_Adminbase
             $options[] = ['value' => (string) $row[$value_field], 'label' => (string) $row[$label_field]];
         }
         return $options;
+    }
+
+    /**
+     * BANK ACCOUNT OPTIONS
+     *
+     * ENTREGA CUENTAS BANCARIAS CON BANCO, MONEDA Y DIGITOS VISIBLES.
+     *
+     * @access  protected
+     * @return  Array
+     */
+    protected function bank_account_options()
+    {
+        if (!\DBUtil::table_exists('core_catalog_bank_accounts')) {
+            return [];
+        }
+
+        $rows = \DB::select(
+                ['a.id', 'id'],
+                ['a.name', 'name'],
+                ['a.account_number', 'account_number'],
+                ['a.clabe', 'clabe'],
+                ['a.currency_code', 'currency_code'],
+                ['b.name', 'bank_name']
+            )
+            ->from(['core_catalog_bank_accounts', 'a'])
+            ->join(['core_catalog_banks', 'b'], 'left')->on('a.bank_id', '=', 'b.id')
+            ->where('a.active', '=', 1)
+            ->order_by('a.name', 'asc')
+            ->execute();
+
+        $options = [];
+        foreach ($rows as $row) {
+            $last_digits = $this->last_digits((string) ($row['account_number'] ?: $row['clabe']));
+            $label_parts = array_filter([
+                (string) $row['name'],
+                (string) $row['bank_name'],
+                $last_digits ? '****'.$last_digits : '',
+                (string) $row['currency_code'],
+            ]);
+            $options[] = [
+                'value' => (string) $row['id'],
+                'label' => implode(' | ', $label_parts),
+                'name' => (string) $row['name'],
+                'bank_name' => (string) $row['bank_name'],
+                'account_number' => (string) $row['account_number'],
+                'clabe' => (string) $row['clabe'],
+                'currency_code' => (string) $row['currency_code'],
+                'last_digits' => $last_digits,
+            ];
+        }
+        return $options;
+    }
+
+    protected function bank_account_label($bank_account_id)
+    {
+        foreach ($this->bank_account_options() as $option) {
+            if ((string) $option['value'] === (string) $bank_account_id) {
+                return $option['label'];
+            }
+        }
+        return '';
+    }
+
+    protected function last_digits($value)
+    {
+        $digits = preg_replace('/\D+/', '', (string) $value);
+        return $digits ? substr($digits, -4) : '';
     }
 
     protected function next_payment_folio()

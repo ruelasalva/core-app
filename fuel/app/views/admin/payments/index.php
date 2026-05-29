@@ -31,6 +31,11 @@
                             <option value="0">Selecciona</option>
                             <option v-for="option in options.bank_accounts" :value="option.value">{{ option.label }}</option>
                         </select>
+                        <div v-if="accountOption(statementForm.bank_account_id)" class="small text-muted mt-1">
+                            {{ accountOption(statementForm.bank_account_id).bank_name || 'Banco sin nombre' }}
+                            <span class="mx-1">|</span>{{ accountOption(statementForm.bank_account_id).currency_code || 'MXN' }}
+                            <span v-if="accountOption(statementForm.bank_account_id).last_digits" class="mx-1">| ****{{ accountOption(statementForm.bank_account_id).last_digits }}</span>
+                        </div>
                     </div>
                 </div>
                 <div class="col-md-4">
@@ -50,7 +55,7 @@
                     <tbody>
                         <tr v-for="statement in statement_imports" :key="statement.id">
                             <td>{{ statement.original_name }}</td>
-                            <td>{{ label(options.bank_accounts, statement.bank_account_id) }}</td>
+                            <td>{{ statement.account_label || label(options.bank_accounts, statement.bank_account_id) }}</td>
                             <td>{{ statement.period_label || '-' }}</td>
                             <td>
                                 <strong>{{ statement.movements_count || 0 }}</strong>
@@ -73,6 +78,10 @@
                                 <button class="btn btn-xs btn-outline-primary" @click="selectStatementImport(statement)">
                                     <i class="bi bi-calendar-range"></i> Ver periodo
                                 </button>
+                                <button class="btn btn-xs btn-outline-danger ml-1" @click="deleteStatementImport(statement)" :disabled="(statement.reconciled_count || 0) > 0">
+                                    <i class="bi bi-trash"></i> Eliminar
+                                </button>
+                                <div v-if="(statement.reconciled_count || 0) > 0" class="text-muted small">Protegido</div>
                             </td>
                         </tr>
                         <tr v-if="statement_imports.length === 0"><td colspan="10" class="text-center text-muted">Sin estados de cuenta importados</td></tr>
@@ -442,9 +451,26 @@ window.onload = function() {
                     this.stats = data.stats || this.stats;
                 });
             },
+            deleteStatementImport(statement) {
+                if (!confirm('Eliminar este estado de cuenta importado? Solo se permite si no tiene movimientos conciliados.')) return;
+                this.error = '';
+                this.message = '';
+                fetch('<?php echo Uri::create('admin/payments/delete_statement_import'); ?>', window.coreAppFetchOptions({ id: statement.id })).then(res => res.json()).then(data => {
+                    if (data.error) { this.error = data.error; return; }
+                    this.message = data.message || 'Estado de cuenta eliminado.';
+                    this.movements = data.movements || this.movements;
+                    this.statement_imports = data.statement_imports || [];
+                    this.refreshSelectedStatementImport();
+                    this.suggestions = data.suggestions || [];
+                    this.stats = data.stats || this.stats;
+                });
+            },
             label(options, value) {
                 const found = (options || []).find(option => String(option.value) === String(value));
                 return found ? found.label : '';
+            },
+            accountOption(value) {
+                return (this.options.bank_accounts || []).find(option => String(option.value) === String(value)) || null;
             },
             paymentMethodLabel(value) {
                 return ({ PUE: 'PUE - Pago en una sola exhibicion', PPD: 'PPD - Pago en parcialidades o diferido' })[value] || value || '-';
