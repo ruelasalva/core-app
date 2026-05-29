@@ -148,6 +148,9 @@
                         <button class="btn btn-outline-primary" @click="materializeBatch('both')" :disabled="batchSaving || selectedIds.length === 0">
                             <i class="bi bi-box-arrow-in-down"></i> Terceros + productos
                         </button>
+                        <button class="btn btn-primary" @click="importSelectedDocuments" :disabled="batchSaving || selectedIds.length === 0">
+                            <i class="bi bi-journal-arrow-down"></i> Importar a compras/ventas
+                        </button>
                     </div>
                     <button class="btn btn-sm btn-outline-secondary ml-2" @click="selectedIds = []" :disabled="selectedIds.length === 0">Limpiar</button>
                 </div>
@@ -911,6 +914,30 @@ window.onload = function() {
                     .catch(() => {
                         this.batchSaving = false;
                         this.error = 'No se pudo procesar el lote SAT.';
+                    });
+            },
+            importSelectedDocuments: function() {
+                if (!this.selectedIds.length) return;
+                if (!confirm('Importar ' + this.selectedIds.length + ' CFDI seleccionados a Compras/Facturacion usando solo el concepto fiscal? No se crearan productos ni entradas de almacen.')) return;
+                this.error = '';
+                this.message = '';
+                this.batchSaving = true;
+                this.batchSummary = { errors: [] };
+                fetch('<?php echo Uri::create('admin/cfdi/import_selected_documents'); ?>', window.coreAppFetchOptions({
+                    cfdi_ids: this.selectedIds
+                }))
+                    .then(window.coreAppParseJsonResponse)
+                    .then(data => {
+                        this.batchSaving = false;
+                        if (data.error) { this.error = data.error; return; }
+                        this.message = data.message || 'Documentos importados.';
+                        this.batchSummary = data.summary || { errors: [] };
+                        this.selectedIds = [];
+                        this.load();
+                    })
+                    .catch(() => {
+                        this.batchSaving = false;
+                        this.error = 'No se pudieron importar los CFDI seleccionados.';
                     });
             },
             findProductBySku: function(sku) {

@@ -529,6 +529,93 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
         }
     }
 
+    /**
+     * IMPORT SELECTED DOCUMENTS
+     *
+     * CONVIERTE CFDI SELECCIONADOS A COMPRAS O FACTURAS SIN CREAR PRODUCTOS.
+     *
+     * @access  public
+     * @return  Response
+     */
+    public function action_import_selected_documents()
+    {
+        $this->require_access('sat.access[edit]');
+        $this->require_access('parties.access[edit]');
+        $this->require_access('purchases.access[create]');
+        $this->require_access('billing.access[edit]');
+
+        try {
+            $this->assert_schema_ready();
+            if (!\DBUtil::table_exists('core_purchase_orders') || !\DBUtil::table_exists('core_purchase_invoices')) {
+                throw new \RuntimeException('Falta ejecutar migraciones de Compras.');
+            }
+            if (!\DBUtil::table_exists('core_billing_invoices') || !\DBUtil::table_exists('core_billing_invoice_items')) {
+                throw new \RuntimeException('Falta ejecutar migraciones de Facturacion.');
+            }
+
+            $payload = (array) \Input::json();
+            $ids = array_values(array_unique(array_filter(array_map('intval', (array) \Arr::get($payload, 'cfdi_ids', [])))));
+            if (empty($ids)) {
+                return $this->json_response(['error' => 'Selecciona al menos un CFDI.'], 422);
+            }
+            if (count($ids) > 300) {
+                return $this->json_response(['error' => 'Procesa maximo 300 CFDI por lote. Usa filtros para partir la carga.'], 422);
+            }
+
+            $result = [
+                'processed' => 0,
+                'sales_created' => 0,
+                'purchases_created' => 0,
+                'skipped' => 0,
+                'errors' => [],
+            ];
+
+            foreach ($ids as $id) {
+                $cfdi = Model_Core_Sat_Cfdi::find((int) $id);
+                if (!$cfdi || !$this->can_access_cfdi((int) $id)) {
+                    $result['skipped']++;
+                    $result['errors'][] = 'CFDI '.$id.' no encontrado o sin permiso.';
+                    continue;
+                }
+
+                \DB::start_transaction();
+                try {
+                    $created = $this->import_cfdi_document_without_products($cfdi);
+                    \DB::commit_transaction();
+                    if ($created === 'sale') {
+                        $result['sales_created']++;
+                    } elseif ($created === 'purchase') {
+                        $result['purchases_created']++;
+                    }
+                    $result['processed']++;
+                } catch (\Exception $item_error) {
+                    \DB::rollback_transaction();
+                    $result['skipped']++;
+                    $result['errors'][] = 'CFDI '.$cfdi->uuid.': '.$item_error->getMessage();
+                }
+            }
+
+            Helper_Core_Audit::log([
+                'module' => 'sat',
+                'action' => 'import_selected_cfdi_documents',
+                'business_event' => 'sat.import_selected_documents',
+                'entity_type' => 'sat_cfdi_batch',
+                'entity_id' => 0,
+                'summary' => 'Importacion administrativa CFDI: '.$result['processed'].' procesados, '.$result['skipped'].' omitidos',
+                'new_values' => $result,
+            ]);
+
+            return $this->json_response([
+                'status' => 'ok',
+                'message' => 'CFDI importados: '.$result['processed'].'. Ventas '.$result['sales_created'].', compras '.$result['purchases_created'].'. Omitidos '.$result['skipped'].'.',
+                'summary' => $result,
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error importando documentos CFDI seleccionados: '.$e->getMessage());
+            return $this->json_response(['error' => $e->getMessage()], 400);
+        }
+    }
+
     protected function filters()
     {
         $month = trim((string) \Input::get('month', date('Y-m')));
@@ -1193,6 +1280,121 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
             && $row['sat_status'] !== 'cancelado'
             && (int) $row['missing_xml'] === 0
             && (string) $row['sales_status'] !== 'linked';
+    }
+
+    /**
+     * IMPORT CFDI DOCUMENT WITHOUT PRODUCTS
+     *
+     * CREA DOCUMENTO ADMINISTRATIVO PARA AUDITORIA SIN AFECTAR PRODUCTOS.
+     *
+     * @access  protected
+     * @return  String
+     */
+    protected function import_cfdi_document_without_products(Model_Core_Sat_Cfdi $cfdi)
+    {
+        if ((int) $cfdi->missing_xml === 1 || (string) $cfdi->xml_path === '') {
+            throw new \RuntimeException('falta XML completo.');
+        }
+        if ((string) $cfdi->sat_status === 'cancelado') {
+            throw new \RuntimeException('CFDI cancelado.');
+        }
+
+        if ((string) $cfdi->direction === 'issued') {
+            if (!in_array((string) $cfdi->voucher_type, ['I', 'E'], true)) {
+                throw new \RuntimeException('solo facturas/notas emitidas generan venta.');
+            }
+            $existing = \DB::select('id')->from('core_billing_invoices')->where('cfdi_id', '=', (int) $cfdi->id)->where('active', '=', 1)->execute()->current();
+            if ($existing) {
+                throw new \RuntimeException('ya existe factura de venta ligada.');
+            }
+            if ((int) $cfdi->customer_party_id < 1 && (int) $cfdi->receiver_party_id < 1) {
+                $this->materialize_cfdi_party($cfdi);
+            }
+            $party_id = (int) $cfdi->customer_party_id ?: (int) $cfdi->receiver_party_id;
+            if ($party_id < 1) {
+                throw new \RuntimeException('no se pudo ligar cliente.');
+            }
+            $invoice = $this->create_billing_invoice_from_cfdi($cfdi, $party_id, [], true);
+            $cfdi->sales_status = 'linked';
+            $cfdi->portal_visible_customer = 1;
+            $cfdi->reviewed_by = (int) $this->user_id;
+            $cfdi->reviewed_at = time();
+            $cfdi->save();
+
+            Helper_Core_Audit::log([
+                'module' => 'sat',
+                'action' => 'import_cfdi_sale_without_products',
+                'business_event' => 'sat.import_sale',
+                'entity_type' => 'sat_cfdi',
+                'entity_id' => (int) $cfdi->id,
+                'summary' => 'CFDI '.$cfdi->uuid.' importado a factura '.$invoice->folio.' sin productos',
+                'new_values' => ['billing_invoice_id' => (int) $invoice->id],
+            ]);
+            return 'sale';
+        }
+
+        if ((string) $cfdi->direction === 'received') {
+            if (!in_array((string) $cfdi->voucher_type, ['I', 'T'], true)) {
+                throw new \RuntimeException('solo CFDI recibidos de ingreso/traslado generan compra.');
+            }
+            $existing = \DB::select('id')->from('core_purchase_invoices')->where('cfdi_id', '=', (int) $cfdi->id)->where('active', '=', 1)->execute()->current();
+            if ($existing) {
+                throw new \RuntimeException('ya existe factura de compra ligada.');
+            }
+            if ((int) $cfdi->supplier_party_id < 1 && (int) $cfdi->emitter_party_id < 1) {
+                $this->materialize_cfdi_party($cfdi);
+            }
+            $party_id = (int) $cfdi->supplier_party_id ?: (int) $cfdi->emitter_party_id;
+            if ($party_id < 1) {
+                throw new \RuntimeException('no se pudo ligar proveedor.');
+            }
+            $order = $this->create_purchase_order_from_cfdi($cfdi, $party_id, $this->fiscal_only_purchase_mappings($cfdi));
+            $invoice = $this->create_purchase_invoice_from_cfdi($cfdi, $party_id, (int) $order->id);
+            $this->link_purchase_mappings_to_invoice((int) $cfdi->id, (int) $invoice->id);
+            $this->recalculate_purchase_order((int) $order->id);
+            $cfdi->purchase_status = 'linked';
+            $cfdi->reviewed_by = (int) $this->user_id;
+            $cfdi->reviewed_at = time();
+            $cfdi->save();
+
+            Helper_Core_Audit::log([
+                'module' => 'sat',
+                'action' => 'import_cfdi_purchase_without_products',
+                'business_event' => 'sat.import_purchase',
+                'entity_type' => 'sat_cfdi',
+                'entity_id' => (int) $cfdi->id,
+                'summary' => 'CFDI '.$cfdi->uuid.' importado a compra '.$order->folio.' / '.$invoice->folio.' sin productos',
+                'new_values' => [
+                    'purchase_order_id' => (int) $order->id,
+                    'purchase_invoice_id' => (int) $invoice->id,
+                ],
+            ]);
+            return 'purchase';
+        }
+
+        throw new \RuntimeException('direccion CFDI no soportada.');
+    }
+
+    protected function fiscal_only_purchase_mappings(Model_Core_Sat_Cfdi $cfdi)
+    {
+        $mappings = [];
+        foreach ($this->details((int) $cfdi->id) as $line) {
+            if ((string) $line['line_type'] !== 'concept') {
+                continue;
+            }
+            $mappings[(int) $line['id']] = [
+                'cfdi_detail_id' => (int) $line['id'],
+                'line_class' => 'internal_purchase',
+                'product_id' => 0,
+                'warehouse_id' => 0,
+                'create_product' => 0,
+                'new_sku' => '',
+                'new_name' => (string) $line['description'],
+                'save_mapping' => 0,
+                'conversion_factor' => 1,
+            ];
+        }
+        return $mappings;
     }
 
     protected function create_purchase_order_from_cfdi(Model_Core_Sat_Cfdi $cfdi, $party_id, array $line_mappings = [])
@@ -1916,7 +2118,7 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
         return $invoice;
     }
 
-    protected function create_billing_invoice_from_cfdi(Model_Core_Sat_Cfdi $cfdi, $party_id, array $line_mappings = [])
+    protected function create_billing_invoice_from_cfdi(Model_Core_Sat_Cfdi $cfdi, $party_id, array $line_mappings = [], $fiscal_only = false)
     {
         $invoice = Model_Core_Billing_Invoice::forge([
             'folio' => $this->next_folio('FAC-SAT', 'core_billing_invoices'),
@@ -1972,15 +2174,15 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
             }
             $mapping = isset($line_mappings[(int) $line['id']]) ? $line_mappings[(int) $line['id']] : [];
             $product = null;
-            if ((int) \Arr::get($mapping, 'product_id', 0) > 0) {
+            if (!$fiscal_only && (int) \Arr::get($mapping, 'product_id', 0) > 0) {
                 $product = Model_Core_Commerce_Product::find((int) $mapping['product_id']);
             }
-            if (!$product && (int) \Arr::get($mapping, 'create_product', 0) === 1) {
+            if (!$fiscal_only && !$product && (int) \Arr::get($mapping, 'create_product', 0) === 1) {
                 $product_id = $this->create_product_from_cfdi_line($cfdi, $line, $mapping);
                 $product = Model_Core_Commerce_Product::find($product_id);
                 $mapping['product_id'] = $product_id;
             }
-            if (!$product) {
+            if (!$fiscal_only && !$product) {
                 $product = $this->product_for_cfdi_line($line);
                 if ($product) {
                     $mapping['product_id'] = (int) $product->id;
@@ -2014,7 +2216,7 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
                 'sort_order' => $sort,
                 'active' => 1,
             ])->save();
-            if ($product && (int) \Arr::get($mapping, 'save_mapping', 1) === 1) {
+            if (!$fiscal_only && $product && (int) \Arr::get($mapping, 'save_mapping', 1) === 1) {
                 $this->save_sales_product_mapping($line, [
                     'product_id' => (int) $product->id,
                 ]);
