@@ -565,6 +565,7 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
             $result = [
                 'processed' => 0,
                 'sales_created' => 0,
+                'sales_updated' => 0,
                 'purchases_created' => 0,
                 'skipped' => 0,
                 'errors' => [],
@@ -584,6 +585,8 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
                     \DB::commit_transaction();
                     if ($created === 'sale') {
                         $result['sales_created']++;
+                    } elseif ($created === 'sale_updated') {
+                        $result['sales_updated']++;
                     } elseif ($created === 'purchase') {
                         $result['purchases_created']++;
                     }
@@ -607,7 +610,7 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
 
             return $this->json_response([
                 'status' => 'ok',
-                'message' => 'CFDI importados: '.$result['processed'].'. Ventas '.$result['sales_created'].', compras '.$result['purchases_created'].'. Omitidos '.$result['skipped'].'.',
+                'message' => 'CFDI importados: '.$result['processed'].'. Ventas '.$result['sales_created'].', ventas actualizadas '.$result['sales_updated'].', compras '.$result['purchases_created'].'. Omitidos '.$result['skipped'].'.',
                 'summary' => $result,
             ]);
         } catch (\Exception $e) {
@@ -1305,7 +1308,12 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
             }
             $existing = \DB::select('id')->from('core_billing_invoices')->where('cfdi_id', '=', (int) $cfdi->id)->where('active', '=', 1)->execute()->current();
             if ($existing) {
-                throw new \RuntimeException('ya existe factura de venta ligada.');
+                $invoice = Model_Core_Billing_Invoice::find((int) $existing['id']);
+                if ($invoice) {
+                    $this->restore_imported_invoice_balance($invoice);
+                    $this->apply_existing_rep_payments_to_invoice($invoice);
+                }
+                return 'sale_updated';
             }
             if ((int) $cfdi->customer_party_id < 1 && (int) $cfdi->receiver_party_id < 1) {
                 $this->materialize_cfdi_party($cfdi);
@@ -1315,6 +1323,7 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
                 throw new \RuntimeException('no se pudo ligar cliente.');
             }
             $invoice = $this->create_billing_invoice_from_cfdi($cfdi, $party_id, [], true);
+            $this->apply_existing_rep_payments_to_invoice($invoice);
             $cfdi->sales_status = 'linked';
             $cfdi->portal_visible_customer = 1;
             $cfdi->reviewed_by = (int) $this->user_id;
@@ -1373,6 +1382,31 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
         }
 
         throw new \RuntimeException('direccion CFDI no soportada.');
+    }
+
+    protected function restore_imported_invoice_balance(Model_Core_Billing_Invoice $invoice)
+    {
+        $allocated = 0;
+        if (\DBUtil::table_exists('core_payment_allocations')) {
+            $row = \DB::select([\DB::expr('COALESCE(SUM(amount),0)'), 'allocated'])
+                ->from('core_payment_allocations')
+                ->where('entity_type', '=', 'billing_invoice')
+                ->where('entity_id', '=', (int) $invoice->id)
+                ->where('active', '=', 1)
+                ->execute()
+                ->current();
+            $allocated = (float) ($row['allocated'] ?? 0);
+        }
+
+        $invoice->balance_due = round(max(0, (float) $invoice->total - $allocated), 2);
+        if ($invoice->balance_due <= 0) {
+            $invoice->status = 'paid';
+        } elseif ($allocated > 0) {
+            $invoice->status = 'partial';
+        } elseif ((string) $invoice->status === 'paid') {
+            $invoice->status = 'stamped';
+        }
+        $invoice->save();
     }
 
     protected function fiscal_only_purchase_mappings(Model_Core_Sat_Cfdi $cfdi)
@@ -2235,7 +2269,7 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
             $sort += 10;
         }
 
-        return $this->recalculate_billing_invoice((int) $invoice->id);
+        return $this->recalculate_billing_invoice((int) $invoice->id, $fiscal_only);
     }
 
     protected function product_for_cfdi_line(array $line, $use_saved_mapping = true)
@@ -2273,7 +2307,7 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
         return $row ? Model_Core_Commerce_Product::find((int) $row['id']) : null;
     }
 
-    protected function recalculate_billing_invoice($invoice_id)
+    protected function recalculate_billing_invoice($invoice_id, $force_open_balance = false)
     {
         $invoice = Model_Core_Billing_Invoice::find((int) $invoice_id);
         if (!$invoice) {
@@ -2298,10 +2332,96 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
         $invoice->tax_total = round($tax, 2);
         $invoice->retention_total = round($retention, 2);
         $invoice->total = round($total, 2);
-        $invoice->balance_due = (string) $invoice->sat_payment_method_code === 'PUE' ? 0 : round($total, 2);
+        $invoice->balance_due = $force_open_balance || (string) $invoice->sat_payment_method_code !== 'PUE' ? round($total, 2) : 0;
         $invoice->save();
 
         return $invoice;
+    }
+
+    /**
+     * APPLY EXISTING REP PAYMENTS TO INVOICE
+     *
+     * USA LOS REP DESCARGADOS DEL SAT COMO COBROS YA APLICADOS EN SISTEMA.
+     *
+     * @access  protected
+     * @return  Void
+     */
+    protected function apply_existing_rep_payments_to_invoice(Model_Core_Billing_Invoice $invoice)
+    {
+        if (!\DBUtil::table_exists('core_sat_payment_details') || !\DBUtil::table_exists('core_payments') || !\DBUtil::table_exists('core_payment_allocations')) {
+            return;
+        }
+
+        $uuid = strtoupper(trim((string) $invoice->uuid));
+        if ($uuid === '' || (float) $invoice->balance_due <= 0) {
+            return;
+        }
+
+        $rows = \DB::select(
+                ['pd.id', 'payment_detail_id'],
+                ['pd.payment_cfdi_id', 'payment_cfdi_id'],
+                ['pd.paid_amount', 'paid_amount'],
+                ['pd.currency', 'currency'],
+                ['pd.partiality_number', 'partiality_number'],
+                ['p.uuid', 'payment_uuid'],
+                ['p.issued_at', 'payment_date'],
+                ['p.payment_form', 'payment_form']
+            )
+            ->from(['core_sat_payment_details', 'pd'])
+            ->join(['core_sat_cfdi', 'p'], 'left')->on('pd.payment_cfdi_id', '=', 'p.id')
+            ->where('pd.invoice_uuid', '=', $uuid)
+            ->where('pd.paid_amount', '>', 0)
+            ->order_by('pd.id', 'asc')
+            ->execute();
+
+        foreach ($rows as $row) {
+            $external_id = 'sat_rep:'.(int) $row['payment_detail_id'];
+            $exists = \DB::select('id')->from('core_payments')->where('external_id', '=', $external_id)->execute()->current();
+            if ($exists || (float) $invoice->balance_due <= 0) {
+                continue;
+            }
+
+            $amount = min((float) $row['paid_amount'], (float) $invoice->balance_due);
+            if ($amount <= 0) {
+                continue;
+            }
+
+            $payment = Model_Core_Payment::forge([
+                'folio' => $this->next_folio('PAY-REP', 'core_payments'),
+                'payment_type' => 'received',
+                'party_id' => (int) $invoice->party_id,
+                'bank_account_id' => 0,
+                'integration_connection_id' => 0,
+                'fiscal_document_id' => 0,
+                'fiscal_mode' => 'fiscal_required',
+                'rep_status' => 'stamped',
+                'payment_date' => $row['payment_date'] ? substr((string) $row['payment_date'], 0, 10) : (string) $invoice->issue_date,
+                'currency_code' => (string) $row['currency'] ?: (string) $invoice->currency_code,
+                'exchange_rate' => 1,
+                'amount' => round($amount, 2),
+                'sat_payment_form_code' => (string) $row['payment_form'] ?: '99',
+                'reference' => 'REP SAT '.$row['payment_uuid'],
+                'external_id' => $external_id,
+                'status' => 'confirmed',
+                'notes' => 'Cobro creado desde REP SAT importado para factura '.$invoice->folio,
+                'created_by' => (int) $this->user_id,
+                'active' => 1,
+            ]);
+            $payment->save();
+
+            Model_Core_Payment_Allocation::forge([
+                'payment_id' => (int) $payment->id,
+                'entity_type' => 'billing_invoice',
+                'entity_id' => (int) $invoice->id,
+                'amount' => round($amount, 2),
+                'notes' => 'Aplicacion automatica desde REP SAT '.$row['payment_uuid'],
+                'active' => 1,
+            ])->save();
+
+            $invoice->balance_due = round(max(0, (float) $invoice->balance_due - $amount), 2);
+            $invoice->status = $invoice->balance_due <= 0 ? 'paid' : 'partial';
+            $invoice->save();
+        }
     }
 
     protected function recalculate_purchase_order($order_id)

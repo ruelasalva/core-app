@@ -449,6 +449,15 @@ class Controller_Admin_Payments extends Controller_Adminbase
                 }
                 $payment = $this->create_payment_from_movement($movement, 'received', (int) $invoice->party_id, (string) $invoice->folio);
                 $this->apply_payment_to_invoice($payment, (int) $invoice->id);
+                if ((string) $invoice->sat_payment_method_code === 'PPD') {
+                    $payment->fiscal_mode = 'fiscal_required';
+                    $payment->rep_status = 'pending';
+                    $payment->save();
+                    $invoice = Model_Core_Billing_Invoice::find((int) $invoice->id);
+                    if ($invoice) {
+                        $this->create_payment_complement_document($payment, $invoice);
+                    }
+                }
             } elseif ($suggestion->suggested_entity_type === 'purchase_invoice') {
                 $invoice = Model_Core_Purchase_Invoice::find((int) $suggestion->suggested_entity_id);
                 if (!$invoice) {
