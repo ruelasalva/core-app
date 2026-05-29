@@ -661,8 +661,6 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
             $query->where('direction', '=', $filters['tab']);
         } elseif ($filters['tab'] === 'cancelled') {
             $query->where('sat_status', '=', 'cancelado');
-        } elseif ($filters['tab'] === 'payments') {
-            $query->where('has_payment_complement', '=', 1);
         }
 
         $this->apply_doc_type_filter($query, $filters['doc_type']);
@@ -1174,7 +1172,7 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
             'received' => $this->count_month($start, $end, ['direction' => 'received']),
             'issued' => $this->count_month($start, $end, ['direction' => 'issued']),
             'cancelled' => $this->count_month($start, $end, ['sat_status' => 'cancelado']),
-            'payments' => $this->count_month($start, $end, ['has_payment_complement' => 1]),
+            'payments' => $this->count_month($start, $end, ['voucher_type' => 'P']),
             'invoices' => $this->count_month($start, $end, ['voucher_type' => 'I']),
             'credit_notes' => $this->count_month($start, $end, ['voucher_type' => 'E']),
             'transfers' => $this->count_month($start, $end, ['voucher_type' => 'T']),
