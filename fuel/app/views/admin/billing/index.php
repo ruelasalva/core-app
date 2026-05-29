@@ -171,10 +171,10 @@
                                 <td><span class="badge badge-secondary">{{ invoice.status }}</span></td>
                                 <td class="text-right">{{ money(invoice.total, invoice.currency_code) }}</td>
                                 <td class="text-right">
-                                    <button class="btn btn-xs btn-outline-info" @click="prepareCfdi(invoice)" title="Preparar CFDI">
+                                    <button class="btn btn-xs btn-outline-info" @click="prepareCfdi(invoice)" :disabled="isSatImportedInvoice(invoice)" title="Preparar CFDI">
                                         <i class="bi bi-braces"></i>
                                     </button>
-                                    <button class="btn btn-xs btn-outline-success" @click="stampInvoice(invoice)" :disabled="invoice.status === 'stamped' || invoice.status === 'cancelled'" title="Timbrar">
+                                    <button class="btn btn-xs btn-outline-success" @click="stampInvoice(invoice)" :disabled="invoice.status === 'stamped' || invoice.status === 'cancelled' || isSatImportedInvoice(invoice)" title="Timbrar">
                                         <i class="bi bi-patch-check"></i>
                                     </button>
                                     <button class="btn btn-xs btn-outline-danger" @click="openCancel(invoice)" :disabled="invoice.status !== 'stamped'" title="Cancelar">
@@ -200,7 +200,7 @@
                 <div class="border rounded p-3" v-if="selectedInvoice">
                     <div class="d-flex align-items-center mb-2">
                         <h5 class="mb-0">Conceptos de {{ selectedInvoice.folio }}</h5>
-                        <button class="btn btn-outline-primary btn-sm ml-auto" @click="newItem">
+                        <button class="btn btn-outline-primary btn-sm ml-auto" @click="newItem" :disabled="isSatImportedInvoice(selectedInvoice)">
                             <i class="bi bi-plus"></i> Concepto
                         </button>
                     </div>
@@ -220,7 +220,7 @@
                                     <td class="text-right">{{ item.quantity }}</td>
                                     <td class="text-right">{{ money(item.line_total, selectedInvoice.currency_code) }}</td>
                                     <td class="text-right">
-                                        <button class="btn btn-xs btn-outline-primary" @click="editItem(item)">
+                                        <button class="btn btn-xs btn-outline-primary" @click="editItem(item)" :disabled="isSatImportedInvoice(selectedInvoice)">
                                             <i class="bi bi-pencil"></i>
                                         </button>
                                     </td>
@@ -811,6 +811,12 @@ new Vue({
             this.invoiceDraftConcept = this.emptyInvoiceDraftConcept();
             this.invoiceDraftItems = [];
             $('#invoice-modal').modal('show');
+        },
+        isSatImportedInvoice: function(invoice) {
+            if (!invoice) return false;
+            return invoice.source_module === 'sat_cfdi'
+                || invoice.source_entity_type === 'sat_cfdi'
+                || (parseInt(invoice.cfdi_id || 0) > 0 && !!invoice.uuid && invoice.status === 'stamped' && !invoice.pac_uid);
         },
         newRecurringProfile: function() {
             const today = new Date().toISOString().slice(0, 10);

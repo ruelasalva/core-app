@@ -186,8 +186,12 @@ class Controller_Admin_Billing extends Controller_Adminbase
         try {
             # VALIDACIONES MINIMAS
             $invoice_id = (int) \Arr::get($val, 'invoice_id', 0);
-            if ($invoice_id < 1 || !Model_Core_Billing_Invoice::find($invoice_id)) {
+            $invoice = $invoice_id > 0 ? Model_Core_Billing_Invoice::find($invoice_id) : null;
+            if ($invoice_id < 1 || !$invoice) {
                 return $this->json_response(['error' => 'Factura invalida.'], 422);
+            }
+            if ($this->is_sat_imported_invoice($invoice)) {
+                return $this->json_response(['error' => 'Esta factura fue importada desde Auditoria SAT y no permite modificar conceptos.'], 422);
             }
 
             if (trim((string) \Arr::get($val, 'description', '')) === '') {
@@ -271,6 +275,9 @@ class Controller_Admin_Billing extends Controller_Adminbase
 
         try {
             $invoice = $this->invoice_from_request();
+            if ($this->is_sat_imported_invoice($invoice)) {
+                return $this->json_response(['error' => 'Esta factura ya viene timbrada desde Auditoria SAT; no se debe generar CFDI nuevamente.'], 422);
+            }
             $payload = $this->build_cfdi_payload($invoice);
             $fiscal = $this->ensure_fiscal_document_from_invoice($invoice, $payload);
             $invoice->pac_request_json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
@@ -299,6 +306,9 @@ class Controller_Admin_Billing extends Controller_Adminbase
 
         try {
             $invoice = $this->invoice_from_request();
+            if ($this->is_sat_imported_invoice($invoice)) {
+                return $this->json_response(['error' => 'Esta factura fue importada desde Auditoria SAT y no se debe timbrar nuevamente.'], 422);
+            }
             if ($invoice->status === 'stamped') {
                 return $this->json_response(['error' => 'La factura ya esta timbrada.'], 422);
             }
@@ -1481,6 +1491,13 @@ class Controller_Admin_Billing extends Controller_Adminbase
     protected function next_invoice_folio()
     {
         return 'FAC-'.date('Ymd').'-'.str_pad((string) ((int) \DB::count_records('core_billing_invoices') + 1), 5, '0', STR_PAD_LEFT);
+    }
+
+    protected function is_sat_imported_invoice(Model_Core_Billing_Invoice $invoice)
+    {
+        return (string) $invoice->source_module === 'sat_cfdi'
+            || (string) $invoice->source_entity_type === 'sat_cfdi'
+            || ((int) $invoice->cfdi_id > 0 && trim((string) $invoice->uuid) !== '' && (string) $invoice->status === 'stamped' && trim((string) $invoice->pac_uid) === '');
     }
 
     protected function next_fiscal_document_folio($prefix = 'CFDI')
