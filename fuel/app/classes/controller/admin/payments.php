@@ -288,21 +288,29 @@ class Controller_Admin_Payments extends Controller_Adminbase
                 return $this->json_response(['error' => 'No se detectaron movimientos en el archivo.'], 422);
             }
 
-            $statement = Model_Core_Bank_Statement_Import::forge([
-                'bank_account_id' => $bank_account_id,
-                'source_format' => $source_format,
-                'original_name' => (string) \Arr::get($file, 'name', ''),
-                'file_path' => str_replace('\\', '/', $relative_dir.'/'.$filename),
-                'period_start' => $this->statement_period_date($rows, 'min'),
-                'period_end' => $this->statement_period_date($rows, 'max'),
-                'rows_count' => count($rows),
-                'imported_count' => 0,
-                'duplicate_count' => 0,
-                'status' => 'processed',
-                'notes' => trim((string) \Input::post('notes', '')),
-                'created_by' => (int) $this->user_id,
-            ]);
-            $statement->save();
+            $period_start = $this->statement_period_date($rows, 'min');
+            $period_end = $this->statement_period_date($rows, 'max');
+            $original_name = (string) \Arr::get($file, 'name', '');
+            $statement = $this->find_existing_statement_import($bank_account_id, $source_format, $original_name, $period_start, $period_end);
+            $already_loaded = (bool) $statement;
+
+            if (!$statement) {
+                $statement = Model_Core_Bank_Statement_Import::forge([
+                    'bank_account_id' => $bank_account_id,
+                    'source_format' => $source_format,
+                    'original_name' => $original_name,
+                    'file_path' => str_replace('\\', '/', $relative_dir.'/'.$filename),
+                    'period_start' => $period_start,
+                    'period_end' => $period_end,
+                    'rows_count' => count($rows),
+                    'imported_count' => 0,
+                    'duplicate_count' => 0,
+                    'status' => 'processed',
+                    'notes' => trim((string) \Input::post('notes', '')),
+                    'created_by' => (int) $this->user_id,
+                ]);
+                $statement->save();
+            }
 
             $imported = 0;
             $duplicates = 0;
@@ -310,7 +318,7 @@ class Controller_Admin_Payments extends Controller_Adminbase
                 $row['reference'] = $this->limit_text((string) $row['reference'], 120);
                 $row['description'] = $this->limit_text((string) $row['description'], 255);
                 $checksum = $this->movement_checksum($bank_account_id, $row);
-                if (\DB::select('id')->from('core_bank_movements')->where('checksum', '=', $checksum)->execute()->current()) {
+                if ($this->find_existing_bank_movement($bank_account_id, $row, $checksum)) {
                     $duplicates++;
                     continue;
                 }
@@ -335,9 +343,14 @@ class Controller_Admin_Payments extends Controller_Adminbase
                 $imported++;
             }
 
-            $statement->imported_count = $imported;
+            $statement->rows_count = max((int) $statement->rows_count, count($rows));
+            $statement->file_path = $statement->file_path ?: str_replace('\\', '/', $relative_dir.'/'.$filename);
+            $statement->imported_count = (int) $statement->imported_count + $imported;
             $statement->duplicate_count = $duplicates;
             $statement->save();
+            if ($already_loaded && is_file($target)) {
+                @unlink($target);
+            }
             $this->generate_reconciliation_suggestions();
             $response_filters = [
                 'start_date' => $statement->period_start ?: date('Y-m-01'),
@@ -349,13 +362,17 @@ class Controller_Admin_Payments extends Controller_Adminbase
                 'action' => 'import_bank_statement',
                 'entity_type' => 'bank_statement_import',
                 'entity_id' => (int) $statement->id,
-                'summary' => 'Estado de cuenta importado: '.$imported.' movimientos, '.$duplicates.' duplicados',
+                'summary' => ($already_loaded ? 'Estado de cuenta ya cargado revisado: ' : 'Estado de cuenta importado: ').$imported.' movimientos, '.$duplicates.' duplicados',
                 'new_values' => $statement->to_array(),
             ]);
 
+            $message = $already_loaded
+                ? 'Este estado de cuenta ya estaba cargado. Se agregaron '.$imported.' movimientos faltantes y se omitieron '.$duplicates.' duplicados.'
+                : 'Estado de cuenta importado: '.$imported.' movimientos nuevos, '.$duplicates.' duplicados.';
+
             return $this->json_response([
                 'status' => 'ok',
-                'message' => 'Estado de cuenta importado: '.$imported.' movimientos nuevos, '.$duplicates.' duplicados.',
+                'message' => $message,
                 'movements' => $this->get_movements($response_filters),
                 'statement_imports' => $this->get_statement_imports($response_filters),
                 'statement_import' => $this->get_statement_import_summary($statement),
@@ -938,6 +955,80 @@ class Controller_Admin_Payments extends Controller_Adminbase
         }
 
         throw new \RuntimeException('Formato PDF no reconocido. Por ahora se soporta BBVA con texto extraible.');
+    }
+
+    /**
+     * FIND EXISTING STATEMENT IMPORT
+     *
+     * UBICA UN ESTADO YA CARGADO PARA REIMPORTAR SOLO MOVIMIENTOS FALTANTES.
+     *
+     * @access  protected
+     * @return  Model_Core_Bank_Statement_Import|null
+     */
+    protected function find_existing_statement_import($bank_account_id, $source_format, $original_name, $period_start, $period_end)
+    {
+        $statement = Model_Core_Bank_Statement_Import::query()
+            ->where('bank_account_id', (int) $bank_account_id)
+            ->where('source_format', (string) $source_format)
+            ->where('period_start', (string) $period_start)
+            ->where('period_end', (string) $period_end)
+            ->where('original_name', (string) $original_name)
+            ->order_by('id', 'desc')
+            ->get_one();
+        if ($statement) {
+            return $statement;
+        }
+
+        return Model_Core_Bank_Statement_Import::query()
+            ->where('bank_account_id', (int) $bank_account_id)
+            ->where('source_format', (string) $source_format)
+            ->where('period_start', (string) $period_start)
+            ->where('period_end', (string) $period_end)
+            ->order_by('id', 'desc')
+            ->get_one();
+    }
+
+    /**
+     * FIND EXISTING BANK MOVEMENT
+     *
+     * DETECTA DUPLICADOS POR CHECKSUM Y POR LLAVE NORMALIZADA DEL MOVIMIENTO.
+     *
+     * @access  protected
+     * @return  Array|null
+     */
+    protected function find_existing_bank_movement($bank_account_id, array $row, $checksum)
+    {
+        $existing = \DB::select('id')
+            ->from('core_bank_movements')
+            ->where('checksum', '=', (string) $checksum)
+            ->execute()
+            ->current();
+        if ($existing) {
+            return $existing;
+        }
+
+        $candidates = \DB::select('id', 'reference', 'description')
+            ->from('core_bank_movements')
+            ->where('bank_account_id', '=', (int) $bank_account_id)
+            ->where('movement_date', '=', (string) $row['movement_date'])
+            ->where('movement_type', '=', (string) $row['movement_type'])
+            ->where('currency_code', '=', (string) $row['currency_code'])
+            ->where('amount', 'between', [
+                max(0, (float) $row['amount'] - 0.01),
+                (float) $row['amount'] + 0.01,
+            ])
+            ->limit(30)
+            ->execute();
+
+        $reference = $this->codeify((string) $row['reference']);
+        $description = $this->codeify((string) $row['description']);
+        foreach ($candidates as $candidate) {
+            if ($this->codeify((string) $candidate['reference']) === $reference && $this->codeify((string) $candidate['description']) === $description) {
+                return $candidate;
+            }
+        }
+
+        return null;
     }
 
     protected function parse_bbva_statement_text($text)
