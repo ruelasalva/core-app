@@ -62,6 +62,7 @@ class Controller_Admin_Config extends Controller_Adminbase
                 'backends'    => $this->get_backends(),
                 'groups'      => $this->get_groups(),
                 'operations'   => $this->get_operations_settings(),
+                'options'      => $this->get_options(),
             ]);
         } catch (\Exception $e) {
             \Log::error('Error cargando configuracion: '.$e->getMessage());
@@ -387,6 +388,37 @@ class Controller_Admin_Config extends Controller_Adminbase
             ->order_by('id', 'desc')
             ->execute()
             ->as_array();
+    }
+
+    /**
+     * GET OPTIONS
+     *
+     * ENTREGA CATALOGOS Y OPCIONES PARA CAPTURA SEGURA DE CONFIGURACION.
+     *
+     * @access  protected
+     * @return  Array
+     */
+    protected function get_options()
+    {
+        return [
+            'sat_tax_regimes' => \Helper_Core_Sat_Catalog::options('core_sat_tax_regimes'),
+            'weekdays' => [
+                ['value' => 'monday', 'label' => 'Lunes'],
+                ['value' => 'tuesday', 'label' => 'Martes'],
+                ['value' => 'wednesday', 'label' => 'Miercoles'],
+                ['value' => 'thursday', 'label' => 'Jueves'],
+                ['value' => 'friday', 'label' => 'Viernes'],
+                ['value' => 'saturday', 'label' => 'Sabado'],
+                ['value' => 'sunday', 'label' => 'Domingo'],
+            ],
+            'payment_frequencies' => [
+                ['value' => 'weekly', 'label' => 'Semanal'],
+                ['value' => 'biweekly', 'label' => 'Quincenal'],
+                ['value' => 'monthly', 'label' => 'Mensual'],
+                ['value' => 'custom', 'label' => 'Personalizada'],
+            ],
+            'month_days' => range(1, 31),
+        ];
     }
 
     protected function get_operations_settings()
