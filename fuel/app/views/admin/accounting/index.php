@@ -30,7 +30,11 @@
                         <thead><tr><th>Folio</th><th>Fecha</th><th>Tipo</th><th>Origen</th><th>Debe</th><th>Haber</th><th>Estado</th><th>Acciones</th></tr></thead>
                         <tbody>
                             <tr v-for="entry in entries" :key="entry.id" :class="selectedEntry && selectedEntry.id == entry.id ? 'table-info' : ''">
-                                <td><strong>{{ entry.folio }}</strong><div class="text-muted small">{{ entry.description }}</div></td>
+                                <td>
+                                    <strong>{{ entry.folio }}</strong>
+                                    <span v-if="isFiscalDraft(entry)" class="badge badge-info ml-1">Fiscal preliminar</span>
+                                    <div class="text-muted small">{{ entry.description }}</div>
+                                </td>
                                 <td>{{ entry.entry_date }}</td>
                                 <td>{{ entry.entry_type }}</td>
                                 <td>{{ entry.source_module }} <span v-if="entry.source_entity_id">#{{ entry.source_entity_id }}</span></td>
@@ -40,7 +44,7 @@
                                 <td>
                                     <button class="btn btn-xs btn-outline-primary" @click="selectEntry(entry)">Partidas</button>
                                     <button class="btn btn-xs btn-outline-secondary" @click="openEntry(entry)"><i class="bi bi-pencil"></i></button>
-                                    <button class="btn btn-xs btn-success" v-if="entry.status !== 'posted'" @click="postEntry(entry)">Contabilizar</button>
+                                    <button class="btn btn-xs btn-success" v-if="entry.status !== 'posted'" :disabled="isFiscalDraft(entry) && !isBalancedEntry(entry)" :title="isFiscalDraft(entry) && !isBalancedEntry(entry) ? 'La poliza fiscal preliminar no esta cuadrada.' : ''" @click="postEntry(entry)">Contabilizar</button>
                                 </td>
                             </tr>
                             <tr v-if="entries.length === 0"><td colspan="8" class="text-center text-muted">Sin polizas registradas.</td></tr>
@@ -54,6 +58,23 @@
                         <button class="btn btn-secondary btn-sm ml-auto" @click="openLine({ entry_id: selectedEntry.id })"><i class="bi bi-plus"></i> Partida</button>
                     </div>
                     <div class="card-body table-responsive">
+                        <div v-if="isFiscalDraft(selectedEntry)" class="alert alert-warning">
+                            Esta p&oacute;liza fiscal es preliminar. Revise cuentas e importes antes de contabilizar.
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                <span class="text-muted small d-block">Modulo origen</span>
+                                <strong>{{ selectedEntry.source_module || '-' }}</strong>
+                            </div>
+                            <div class="col-md-4">
+                                <span class="text-muted small d-block">Tipo entidad origen</span>
+                                <strong>{{ selectedEntry.source_entity_type || '-' }}</strong>
+                            </div>
+                            <div class="col-md-4">
+                                <span class="text-muted small d-block">ID entidad origen</span>
+                                <strong>{{ selectedEntry.source_entity_id || '-' }}</strong>
+                            </div>
+                        </div>
                         <table class="table table-sm table-bordered">
                             <thead><tr><th>Cuenta</th><th>Tercero</th><th>Centro costo</th><th>Descripcion</th><th>Debe</th><th>Haber</th><th></th></tr></thead>
                             <tbody>
@@ -440,6 +461,15 @@ window.onload = function() {
             saveCostCenter: function() { this.post('save_cost_center', this.costCenterForm, 'modal-cost-center'); },
             saveRule: function() { this.post('save_rule', this.ruleForm, 'modal-rule'); },
             postEntry: function(entry) { this.post('post_entry', { id: entry.id }, '', entry.id); },
+            isFiscalDraft: function(entry) {
+                return entry && entry.source_module === 'fiscal' && entry.status === 'draft';
+            },
+            isBalancedEntry: function(entry) {
+                if (!entry) return false;
+                var debit = Number(entry.total_debit || 0);
+                var credit = Number(entry.total_credit || 0);
+                return Math.abs(debit - credit) <= 0.01 && debit > 0;
+            },
             post: function(action, payload, modal, entryId) {
                 fetch('<?php echo Uri::create('admin/accounting'); ?>/' + action, window.coreAppFetchOptions(payload)).then(function(r) { return r.json(); }).then(data => {
                     if (data.error) { this.error = data.error; return; }

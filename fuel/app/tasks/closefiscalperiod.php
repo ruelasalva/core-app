@@ -39,10 +39,28 @@ class Closefiscalperiod
             \Cli::write(' - RFC: '.$result['rfc']);
             \Cli::write(' - Periodo: '.$result['period']);
             \Cli::write(' - Estado: '.$result['status']);
+            $this->log_event($result['rfc'], $result['period'], 'success', 'Periodo fiscal cerrado.', $result);
         } catch (\Exception $e) {
             \Log::error('Closefiscalperiod: '.$e->getMessage());
+            $this->log_event($rfc, $period, 'error', 'Error cerrando periodo fiscal.', ['error' => $e->getMessage()]);
             \Cli::write('Error cerrando periodo fiscal: '.$e->getMessage());
         }
+    }
+
+    protected function log_event($rfc, $period, $status, $summary, array $details)
+    {
+        \Service_Core_Fiscal_EventLogger::log([
+            'taxpayer_rfc' => $rfc,
+            'fiscal_period' => $period,
+            'event_type' => 'period_close',
+            'event_status' => $status,
+            'source_module' => 'fiscal',
+            'source_entity_type' => 'fiscal_period',
+            'source_entity_id' => (int) \Arr::get($details, 'id', 0),
+            'summary' => $summary,
+            'details' => $details,
+            'executed_by' => 0,
+        ]);
     }
 
     protected function options()

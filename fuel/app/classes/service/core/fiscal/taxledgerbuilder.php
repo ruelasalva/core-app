@@ -41,11 +41,26 @@ class Service_Core_Fiscal_TaxLedgerBuilder
                 'cfdi_count' => 0,
                 'detail_count' => 0,
                 'line_count' => 0,
+                'pue_concept_lines_created' => 0,
+                'ppd_concept_tax_lines_skipped' => 0,
                 'skipped_cancelled' => 0,
                 'skipped_duplicates' => 0,
+                'rep_tax_rows_found' => 0,
+                'rep_tax_lines_inserted' => 0,
+                'rep_tax_duplicates_skipped' => 0,
+                'rep_tax_missing_related_invoice' => 0,
+                'rep_tax_cancelled_skipped' => 0,
+                'rep_tax_errors' => 0,
                 'error_count' => 0,
+                'warnings' => [],
                 'errors' => [],
             ];
+
+            $old_ppd_lines = $this->existing_ppd_concept_lines($rfc, $period);
+            if ($old_ppd_lines > 0) {
+                $result['warnings'][] = 'Existen lineas PPD anteriores en el libro fiscal. Se recomienda reconstruccion controlada del periodo.';
+                \Log::warning('Fiscal Ledger: existen '.$old_ppd_lines.' lineas PPD anteriores RFC='.$rfc.' periodo='.$period.'.');
+            }
 
             $cfdis = $this->cfdis($rfc, $dates);
             foreach ($cfdis as $cfdi) {
@@ -61,6 +76,11 @@ class Service_Core_Fiscal_TaxLedgerBuilder
                         $result['detail_count']++;
                         $movements = $this->tax_movements($detail);
                         foreach ($movements as $movement) {
+                            if ($this->is_ppd_income_cfdi($cfdi)) {
+                                $result['ppd_concept_tax_lines_skipped']++;
+                                continue;
+                            }
+
                             $row = $this->ledger_row($cfdi, $detail, $movement, $period_id, $build_id, $rfc, $period, $now);
                             if ($this->source_exists($row['source_hash'])) {
                                 $result['skipped_duplicates']++;
@@ -68,6 +88,9 @@ class Service_Core_Fiscal_TaxLedgerBuilder
                             }
                             \DB::insert('core_fiscal_ledger_lines')->set($row)->execute();
                             $result['line_count']++;
+                            if ($this->is_pue_income_cfdi($cfdi)) {
+                                $result['pue_concept_lines_created']++;
+                            }
                         }
                     }
                 } catch (\Exception $e) {
@@ -76,6 +99,8 @@ class Service_Core_Fiscal_TaxLedgerBuilder
                     \Log::error('Fiscal Ledger: error CFDI '.$cfdi['uuid'].' - '.$e->getMessage());
                 }
             }
+
+            $this->add_rep_dr_tax_lines($rfc, $period, $dates, $period_id, $build_id, $now, $result);
 
             $this->finish_build($build_id, $result, 'completed', '', $now);
             \DB::commit_transaction();
@@ -404,9 +429,202 @@ class Service_Core_Fiscal_TaxLedgerBuilder
         ]));
     }
 
+    protected function existing_ppd_concept_lines($rfc, $period)
+    {
+        return (int) \DB::query("
+            SELECT COUNT(*) AS total
+            FROM core_fiscal_ledger_lines
+            WHERE taxpayer_rfc = ".$this->sql($rfc)."
+              AND fiscal_period = ".$this->sql($period)."
+              AND cfdi_type = 'I'
+              AND payment_method = 'PPD'
+              AND line_type = 'concept'
+              AND active = 1
+        ")->execute()->get('total', 0);
+    }
+
+    protected function is_ppd_income_cfdi(array $cfdi)
+    {
+        return strtoupper((string) $cfdi['voucher_type']) === 'I'
+            && strtoupper((string) $cfdi['payment_method']) === 'PPD';
+    }
+
+    protected function is_pue_income_cfdi(array $cfdi)
+    {
+        return strtoupper((string) $cfdi['voucher_type']) === 'I'
+            && strtoupper((string) $cfdi['payment_method']) !== 'PPD';
+    }
+
+    /**
+     * ADD REP DR TAX LINES
+     *
+     * AGREGA LINEAS FISCALES EFECTIVAS DESDE IMPUESTOS DR DE REP.
+     * No usa impuestos P y no modifica lineas ya existentes.
+     *
+     * @access  protected
+     * @return  Void
+     */
+    protected function add_rep_dr_tax_lines($rfc, $period, array $dates, $period_id, $build_id, $now, array &$result)
+    {
+        if (!\DBUtil::table_exists('core_sat_payment_taxes') || !\DBUtil::table_exists('core_sat_payment_details')) {
+            \Log::warning('Fiscal Ledger: core_sat_payment_taxes/core_sat_payment_details no disponibles; se omiten impuestos REP DR.');
+            return;
+        }
+
+        $rows = $this->rep_dr_tax_rows($rfc, $dates);
+        foreach ($rows as $row) {
+            $result['rep_tax_rows_found']++;
+
+            try {
+                if ($this->is_cancelled(['sat_status' => (string) $row['rep_sat_status']])) {
+                    $result['rep_tax_cancelled_skipped']++;
+                    continue;
+                }
+
+                if ((int) $row['invoice_cfdi_id'] <= 0 || trim((string) $row['invoice_uuid']) === '' || trim((string) $row['invoice_direction']) === '') {
+                    $result['rep_tax_missing_related_invoice']++;
+                    continue;
+                }
+
+                $ledger_row = $this->rep_dr_ledger_row($row, $period_id, $build_id, $rfc, $period, $now);
+                if ($this->source_exists($ledger_row['source_hash'])) {
+                    $result['rep_tax_duplicates_skipped']++;
+                    continue;
+                }
+
+                \DB::insert('core_fiscal_ledger_lines')->set($ledger_row)->execute();
+                $result['rep_tax_lines_inserted']++;
+                $result['line_count']++;
+            } catch (\Exception $e) {
+                $result['rep_tax_errors']++;
+                $result['error_count']++;
+                $result['errors'][] = 'REP tax '.$row['payment_uuid'].' / '.$row['invoice_uuid'].': '.$e->getMessage();
+                \Log::error('Fiscal Ledger: error REP tax '.$row['payment_uuid'].' / '.$row['invoice_uuid'].' - '.$e->getMessage());
+            }
+        }
+    }
+
+    protected function rep_dr_tax_rows($rfc, array $dates)
+    {
+        return \DB::select(
+                ['t.id', 'payment_tax_id'],
+                ['t.source_hash', 'payment_tax_source_hash'],
+                ['t.payment_cfdi_id', 'payment_cfdi_id'],
+                ['t.payment_detail_id', 'payment_detail_id'],
+                ['t.invoice_cfdi_id', 'invoice_cfdi_id'],
+                ['t.payment_uuid', 'payment_uuid'],
+                ['t.invoice_uuid', 'invoice_uuid'],
+                ['t.tax_code', 'tax_code'],
+                ['t.tax_type', 'tax_type'],
+                ['t.tax_factor_type', 'tax_factor_type'],
+                ['t.tax_rate', 'tax_rate'],
+                ['t.base_amount', 'base_amount'],
+                ['t.tax_amount', 'tax_amount'],
+                ['t.currency', 'currency'],
+                ['t.exchange_rate', 'exchange_rate'],
+                ['t.payment_date', 'payment_date'],
+                ['rep.sat_status', 'rep_sat_status'],
+                ['rep.stamped_at', 'rep_stamped_at'],
+                ['rep.xml_path', 'rep_xml_path'],
+                ['rep.origin', 'rep_origin'],
+                ['inv.direction', 'invoice_direction'],
+                ['inv.emitter_rfc', 'invoice_emitter_rfc'],
+                ['inv.receiver_rfc', 'invoice_receiver_rfc'],
+                ['inv.sat_status', 'invoice_sat_status']
+            )
+            ->from(['core_sat_payment_taxes', 't'])
+            ->join(['core_sat_cfdi', 'rep'], 'inner')->on('t.payment_cfdi_id', '=', 'rep.id')
+            ->join(['core_sat_cfdi', 'inv'], 'left')->on('t.invoice_cfdi_id', '=', 'inv.id')
+            ->where('t.active', '=', 1)
+            ->where('t.tax_scope', '=', 'DR')
+            ->where('rep.voucher_type', '=', 'P')
+            ->where('t.payment_date', '>=', $dates['from'].' 00:00:00')
+            ->where('t.payment_date', '<=', $dates['to'].' 23:59:59')
+            ->and_where_open()
+                ->where('inv.emitter_rfc', '=', $rfc)
+                ->or_where('inv.receiver_rfc', '=', $rfc)
+                ->or_where_open()
+                    ->where('t.invoice_cfdi_id', '=', 0)
+                    ->and_where_open()
+                        ->where('rep.emitter_rfc', '=', $rfc)
+                        ->or_where('rep.receiver_rfc', '=', $rfc)
+                    ->and_where_close()
+                ->or_where_close()
+            ->and_where_close()
+            ->order_by('t.payment_date', 'asc')
+            ->order_by('t.id', 'asc')
+            ->execute();
+    }
+
+    protected function rep_dr_ledger_row(array $row, $period_id, $build_id, $rfc, $period, $now)
+    {
+        $direction = (string) $row['invoice_direction'];
+        $emitter_rfc = $this->normalize_rfc($row['invoice_emitter_rfc']);
+        $receiver_rfc = $this->normalize_rfc($row['invoice_receiver_rfc']);
+        $counterparty_rfc = $direction === 'issued' ? $receiver_rfc : $emitter_rfc;
+        $exchange_rate = (float) $row['exchange_rate'] > 0 ? (float) $row['exchange_rate'] : 1;
+
+        return [
+            'source_hash' => $this->rep_dr_source_hash($row, $rfc, $period),
+            'fiscal_period_id' => (int) $period_id,
+            'build_id' => (int) $build_id,
+            'cfdi_id' => (int) $row['payment_cfdi_id'],
+            'cfdi_detail_id' => 0,
+            'payment_detail_id' => (int) $row['payment_detail_id'],
+            'taxpayer_rfc' => $rfc,
+            'counterparty_rfc' => $counterparty_rfc,
+            'emitter_rfc' => $emitter_rfc,
+            'receiver_rfc' => $receiver_rfc,
+            'uuid' => strtoupper((string) $row['payment_uuid']),
+            'related_uuid' => strtoupper((string) $row['invoice_uuid']),
+            'direction' => $direction,
+            'cfdi_type' => 'P',
+            'payment_method' => 'PPD',
+            'payment_form' => '',
+            'payment_policy' => 'PPD',
+            'line_number' => 0,
+            'line_type' => 'payment_tax_dr',
+            'product_service_code' => '',
+            'identification_number' => '',
+            'description' => 'Impuesto DR de REP '.$row['payment_uuid'].' relacionado con factura '.$row['invoice_uuid'],
+            'tax_object' => '',
+            'base_amount' => round((float) $row['base_amount'], 6),
+            'discount_amount' => 0,
+            'tax_code' => (string) $row['tax_code'],
+            'tax_type' => (string) $row['tax_type'],
+            'tax_factor_type' => (string) $row['tax_factor_type'],
+            'tax_rate' => round((float) $row['tax_rate'], 6),
+            'tax_amount' => round((float) $row['tax_amount'], 6),
+            'currency' => (string) $row['currency'] ?: 'MXN',
+            'exchange_rate' => round($exchange_rate, 6),
+            'base_amount_mxn' => round((float) $row['base_amount'] * $exchange_rate, 6),
+            'tax_amount_mxn' => round((float) $row['tax_amount'] * $exchange_rate, 6),
+            'issue_date' => (string) $row['payment_date'],
+            'stamped_at' => $row['rep_stamped_at'] ?: null,
+            'fiscal_period' => $period,
+            'sat_status' => (string) $row['rep_sat_status'],
+            'source_origin' => 'sat_rep_tax',
+            'xml_available' => (string) $row['rep_xml_path'] !== '' ? 1 : 0,
+            'active' => 1,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ];
+    }
+
+    protected function rep_dr_source_hash(array $row, $rfc, $period)
+    {
+        return hash('sha256', implode('|', [
+            'rep_tax_ledger',
+            (int) $row['payment_tax_id'],
+            (string) $row['payment_tax_source_hash'],
+            $rfc,
+            $period,
+        ]));
+    }
+
     protected function is_cancelled(array $cfdi)
     {
-        return strtolower(trim((string) $cfdi['sat_status'])) === 'cancelado';
+        return strpos(strtolower(trim((string) $cfdi['sat_status'])), 'cancel') !== false;
     }
 
     protected function normalize_rfc($rfc)
@@ -460,5 +678,10 @@ class Service_Core_Fiscal_TaxLedgerBuilder
             ->current();
 
         return $row ? (int) $row['id'] : 0;
+    }
+
+    protected function sql($value)
+    {
+        return \DB::quote((string) $value);
     }
 }

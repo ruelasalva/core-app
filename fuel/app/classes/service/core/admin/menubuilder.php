@@ -77,14 +77,21 @@ class Service_Core_Admin_MenuBuilder
 
             $this->header('FISCAL', $menu['fiscal'] || $menu['sat'] || $menu['catalogs']),
             $this->item('Panel fiscal', 'bi bi-speedometer', \Uri::create('admin/fiscal'), $segment === 'fiscal' && $subsegment === '', $menu['fiscal']),
+            $this->item('Libro Fiscal', 'bi bi-journal-text', \Uri::create('admin/fiscal/ledger'), $segment === 'fiscal' && $subsegment === 'ledger', $menu['fiscal']),
+            $this->item('Validaciones Fiscales', 'bi bi-check2-square', \Uri::create('admin/fiscal/validations'), $segment === 'fiscal' && $subsegment === 'validations', $menu['fiscal']),
+            $this->item('Bitacora Fiscal', 'bi bi-clock-history', \Uri::create('admin/fiscal/events'), $segment === 'fiscal' && $subsegment === 'events', $menu['fiscal']),
+            $this->item('Auditor&iacute;a REP/PPD', 'bi bi-receipt-cutoff', \Uri::create('admin/fiscal/rep_audit'), $segment === 'fiscal' && $subsegment === 'rep_audit', $menu['fiscal']),
             $this->item('IVA mensual', 'bi bi-percent', \Uri::create('admin/fiscal/vat'), $segment === 'fiscal' && $subsegment === 'vat', $menu['fiscal']),
             $this->item('Preparacion DIOT', 'bi bi-file-earmark-spreadsheet', \Uri::create('admin/fiscal/diot'), $segment === 'fiscal' && $subsegment === 'diot', $menu['fiscal']),
+            $this->item('Conciliaci&oacute;n fiscal-contable', 'bi bi-columns-gap', \Uri::create('admin/fiscal/reconciliation'), $segment === 'fiscal' && $subsegment === 'reconciliation', $menu['fiscal']),
+            $this->item('Centro de Cierre Fiscal', 'bi bi-clipboard-check', \Uri::create('admin/fiscal/closing'), $segment === 'fiscal' && $subsegment === 'closing', $menu['fiscal']),
             $this->item('SAT y CFDI', 'bi bi-receipt', \Uri::create('admin/sat'), $segment === 'sat' && $subsegment === '', $menu['sat']),
             $this->item('Auditoria SAT', 'bi bi-search', \Uri::create('admin/cfdi'), $segment === 'cfdi', $menu['sat']),
             $this->item('Catalogos SAT', 'bi bi-collection', \Uri::create('admin/sat/catalogs'), $segment === 'sat' && $subsegment === 'catalogs', $menu['catalogs']),
 
             $this->header('CONTABILIDAD', $menu['accounting'] || $menu['catalogs']),
-            $this->item('Contabilidad', 'bi bi-journal-check', \Uri::create('admin/accounting'), $segment === 'accounting', $menu['accounting']),
+            $this->item('Contabilidad', 'bi bi-journal-check', \Uri::create('admin/accounting'), $segment === 'accounting' && $subsegment === '', $menu['accounting']),
+            $this->item('Configuracion Fiscal', 'bi bi-sliders', \Uri::create('admin/accounting/fiscal_config'), $segment === 'accounting' && $subsegment === 'fiscal_config', $menu['accounting']),
             $this->tree('Catalogos base', 'bi bi-collection', $catalog_open, $menu['catalogs'], [
                 $this->item('Generales', 'bi bi-grid', \Uri::create('admin/catalogs').'?group=general', $catalog_open && $catalog_group === 'general'),
                 $this->item('Bancos y monedas', 'bi bi-currency-exchange', \Uri::create('admin/catalogs').'?group=financial', $catalog_open && $catalog_group === 'financial'),

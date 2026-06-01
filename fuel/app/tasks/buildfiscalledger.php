@@ -43,9 +43,24 @@ class Buildfiscalledger
             \Cli::write(' - CFDI procesados: '.$result['cfdi_count']);
             \Cli::write(' - Detalles procesados: '.$result['detail_count']);
             \Cli::write(' - Lineas fiscales creadas: '.$result['line_count']);
+            \Cli::write(' - Lineas concepto PUE creadas: '.$result['pue_concept_lines_created']);
+            \Cli::write(' - Lineas impuesto concepto PPD omitidas: '.$result['ppd_concept_tax_lines_skipped']);
             \Cli::write(' - CFDI cancelados omitidos: '.$result['skipped_cancelled']);
             \Cli::write(' - Duplicados omitidos: '.$result['skipped_duplicates']);
+            \Cli::write(' - Impuestos REP DR encontrados: '.$result['rep_tax_rows_found']);
+            \Cli::write(' - Lineas REP DR creadas: '.$result['rep_tax_lines_inserted']);
+            \Cli::write(' - REP DR duplicados omitidos: '.$result['rep_tax_duplicates_skipped']);
+            \Cli::write(' - REP DR sin factura relacionada: '.$result['rep_tax_missing_related_invoice']);
+            \Cli::write(' - REP cancelados omitidos: '.$result['rep_tax_cancelled_skipped']);
+            \Cli::write(' - Errores REP DR: '.$result['rep_tax_errors']);
             \Cli::write(' - Errores: '.$result['error_count']);
+
+            if (!empty($result['warnings'])) {
+                \Cli::write('Advertencias:');
+                foreach ($result['warnings'] as $warning) {
+                    \Cli::write(' - '.$warning);
+                }
+            }
 
             if (!empty($result['errors'])) {
                 \Cli::write('Errores detectados:');
@@ -53,8 +68,32 @@ class Buildfiscalledger
                     \Cli::write(' - '.$error);
                 }
             }
+
+            \Service_Core_Fiscal_EventLogger::log([
+                'taxpayer_rfc' => $result['rfc'],
+                'fiscal_period' => $result['period'],
+                'event_type' => 'ledger_build',
+                'event_status' => (int) $result['error_count'] > 0 ? 'warning' : 'success',
+                'source_module' => 'fiscal',
+                'source_entity_type' => 'fiscal_ledger_build',
+                'source_entity_id' => (int) $result['build_id'],
+                'summary' => 'Construccion de libro fiscal finalizada.',
+                'details' => $result,
+                'executed_by' => 0,
+            ]);
         } catch (\Exception $e) {
             \Log::error('Buildfiscalledger: '.$e->getMessage());
+            \Service_Core_Fiscal_EventLogger::log([
+                'taxpayer_rfc' => $rfc,
+                'fiscal_period' => $period,
+                'event_type' => 'ledger_build',
+                'event_status' => 'error',
+                'source_module' => 'fiscal',
+                'source_entity_type' => 'fiscal_ledger_build',
+                'summary' => 'Error construyendo libro fiscal.',
+                'details' => ['error' => $e->getMessage()],
+                'executed_by' => 0,
+            ]);
             \Cli::write('Error construyendo libro fiscal: '.$e->getMessage());
         }
     }

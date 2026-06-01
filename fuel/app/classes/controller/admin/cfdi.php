@@ -678,15 +678,68 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
 
         $items = [];
         foreach ($query->order_by('issued_at', 'desc')->limit(300)->execute() as $row) {
+            $links = $this->operational_links_for_list((int) $row['id']);
             $row['issued_label'] = $row['issued_at'] ? date('d/m/Y H:i', strtotime($row['issued_at'])) : '';
             $row['type_label'] = $this->voucher_label((string) $row['voucher_type']);
             $row['xml_status'] = ((string) $row['xml_path'] !== '' && (int) $row['missing_xml'] === 0) ? 'available' : 'missing';
+            $row['has_purchase_link'] = $links['has_purchase_link'];
+            $row['purchase_invoice_id'] = $links['purchase_invoice_id'];
+            $row['purchase_invoice_folio'] = $links['purchase_invoice_folio'];
+            $row['has_sale_link'] = $links['has_sale_link'];
+            $row['billing_invoice_id'] = $links['billing_invoice_id'];
+            $row['billing_invoice_folio'] = $links['billing_invoice_folio'];
             $row['convertible_purchase'] = $this->is_purchase_convertible($row) ? 1 : 0;
             $row['convertible_sale'] = $this->is_sale_convertible($row) ? 1 : 0;
             $items[] = $row;
         }
 
         return $items;
+    }
+
+    protected function operational_links_for_list($cfdi_id)
+    {
+        $links = [
+            'has_purchase_link' => 0,
+            'purchase_invoice_id' => 0,
+            'purchase_invoice_folio' => '',
+            'has_sale_link' => 0,
+            'billing_invoice_id' => 0,
+            'billing_invoice_folio' => '',
+        ];
+
+        if (\DBUtil::table_exists('core_purchase_invoices')) {
+            $purchase = \DB::select('id', 'folio')
+                ->from('core_purchase_invoices')
+                ->where('cfdi_id', '=', (int) $cfdi_id)
+                ->where('active', '=', 1)
+                ->order_by('id', 'desc')
+                ->execute()
+                ->current();
+
+            if ($purchase) {
+                $links['has_purchase_link'] = 1;
+                $links['purchase_invoice_id'] = (int) $purchase['id'];
+                $links['purchase_invoice_folio'] = (string) $purchase['folio'];
+            }
+        }
+
+        if (\DBUtil::table_exists('core_billing_invoices')) {
+            $sale = \DB::select('id', 'folio')
+                ->from('core_billing_invoices')
+                ->where('cfdi_id', '=', (int) $cfdi_id)
+                ->where('active', '=', 1)
+                ->order_by('id', 'desc')
+                ->execute()
+                ->current();
+
+            if ($sale) {
+                $links['has_sale_link'] = 1;
+                $links['billing_invoice_id'] = (int) $sale['id'];
+                $links['billing_invoice_folio'] = (string) $sale['folio'];
+            }
+        }
+
+        return $links;
     }
 
     protected function reports(array $filters)
@@ -1271,6 +1324,7 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
             && in_array($row['voucher_type'], ['I', 'T'], true)
             && $row['sat_status'] !== 'cancelado'
             && (int) $row['missing_xml'] === 0
+            && (int) \Arr::get($row, 'has_purchase_link', 0) !== 1
             && (string) $row['purchase_status'] !== 'linked';
     }
 
@@ -1280,6 +1334,7 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
             && in_array($row['voucher_type'], ['I', 'E'], true)
             && $row['sat_status'] !== 'cancelado'
             && (int) $row['missing_xml'] === 0
+            && (int) \Arr::get($row, 'has_sale_link', 0) !== 1
             && (string) $row['sales_status'] !== 'linked';
     }
 

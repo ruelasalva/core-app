@@ -66,6 +66,10 @@ return array (
         60 => '061_create_purchase_supplier_product_mappings',
         61 => '062_create_sales_cfdi_product_mappings',
         62 => '063_create_core_fiscal_engine_tables',
+        63 => '064_create_core_fiscal_account_mappings',
+        64 => '066_create_core_fiscal_validations',
+        65 => '067_create_core_fiscal_events',
+        66 => '068_create_core_sat_payment_taxes',
       ),
     ),
     'module' => array(    

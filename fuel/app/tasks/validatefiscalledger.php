@@ -27,6 +27,10 @@ class Validatefiscalledger
      */
     public function run()
     {
+        $this->warnings = [];
+        $this->errors = [];
+        $this->suggestions = [];
+
         $options = $this->options();
         $rfc = $this->normalize_rfc(isset($options['rfc']) ? $options['rfc'] : '');
         $period = $this->normalize_period(isset($options['period']) ? $options['period'] : '');
@@ -48,9 +52,21 @@ class Validatefiscalledger
             $this->run_integrity_checks($rfc, $period, $dates);
 
             $this->output($rfc, $period, $source, $ledger, $diffs);
+            $this->store_validation($rfc, $period, $source, $ledger, $diffs);
             \Log::info('Validate Fiscal Ledger: fin RFC='.$rfc.' periodo='.$period.' errores='.count($this->errors).' advertencias='.count($this->warnings));
         } catch (\Exception $e) {
             \Log::error('Validate Fiscal Ledger: '.$e->getMessage());
+            \Service_Core_Fiscal_EventLogger::log([
+                'taxpayer_rfc' => $rfc,
+                'fiscal_period' => $period,
+                'event_type' => 'ledger_validation',
+                'event_status' => 'error',
+                'source_module' => 'fiscal',
+                'source_entity_type' => 'fiscal_validation',
+                'summary' => 'Error validando libro fiscal.',
+                'details' => ['error' => $e->getMessage()],
+                'executed_by' => 0,
+            ]);
             \Cli::write('Error validando libro fiscal: '.$e->getMessage());
         }
     }
@@ -403,6 +419,93 @@ class Validatefiscalledger
                 throw new \RuntimeException('Tabla requerida no existe: '.$table.'.');
             }
         }
+
+        if (!\DBUtil::table_exists('core_fiscal_validations')) {
+            throw new \RuntimeException('Falta ejecutar migración 066.');
+        }
+    }
+
+    /**
+     * STORE VALIDATION
+     *
+     * PERSISTE EL RESULTADO DE LA VALIDACION PARA CIERRE FISCAL Y AUDITORIA.
+     *
+     * @access  protected
+     * @return  Void
+     */
+    protected function store_validation($rfc, $period, array $source, array $ledger, array $diffs)
+    {
+        $now = time();
+        $status = $this->validation_status();
+        $summary = [
+            'source' => $source,
+            'ledger' => $ledger,
+            'differences' => $diffs,
+            'warnings' => array_values(array_unique($this->warnings)),
+            'errors' => array_values(array_unique($this->errors)),
+            'suggestions' => array_values(array_unique($this->suggestions)),
+        ];
+
+        \DB::insert('core_fiscal_validations')->set([
+            'company_id' => $this->company_id($rfc),
+            'taxpayer_rfc' => $rfc,
+            'fiscal_period' => $period,
+            'validation_type' => 'ledger_integrity',
+            'status' => $status,
+            'warnings_count' => count($summary['warnings']),
+            'errors_count' => count($summary['errors']),
+            'summary_json' => json_encode($summary),
+            'executed_by' => 0,
+            'executed_at' => $now,
+            'active' => 1,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ])->execute();
+
+        \Cli::write('');
+        \Cli::write('Resultado guardado en core_fiscal_validations con estado: '.$status);
+        \Log::info('Validate Fiscal Ledger: resultado persistido RFC='.$rfc.' periodo='.$period.' estado='.$status);
+
+        \Service_Core_Fiscal_EventLogger::log([
+            'company_id' => $this->company_id($rfc),
+            'taxpayer_rfc' => $rfc,
+            'fiscal_period' => $period,
+            'event_type' => 'ledger_validation',
+            'event_status' => $status === 'ok' ? 'success' : $status,
+            'source_module' => 'fiscal',
+            'source_entity_type' => 'fiscal_validation',
+            'summary' => 'Validacion de libro fiscal finalizada.',
+            'details' => $summary,
+            'executed_by' => 0,
+        ]);
+    }
+
+    protected function validation_status()
+    {
+        if (count($this->errors) > 0) {
+            return 'error';
+        }
+        if (count($this->warnings) > 0) {
+            return 'warning';
+        }
+        return 'ok';
+    }
+
+    protected function company_id($rfc)
+    {
+        if (!\DBUtil::table_exists('core_companies')) {
+            return 0;
+        }
+
+        $row = \DB::select('id')
+            ->from('core_companies')
+            ->where('rfc', '=', $rfc)
+            ->where('active', '=', 1)
+            ->order_by('id', 'asc')
+            ->execute()
+            ->current();
+
+        return $row ? (int) $row['id'] : 0;
     }
 
     protected function source_where($rfc, array $dates)

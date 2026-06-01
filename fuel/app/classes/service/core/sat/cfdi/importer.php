@@ -55,15 +55,19 @@ class Service_Core_Sat_Cfdi_Importer
         }
 
         $cfdi = Model_Core_Sat_Cfdi::query()->where('uuid', '=', $uuid)->get_one();
+        $is_new = false;
         if (!$cfdi) {
             $cfdi = Model_Core_Sat_Cfdi::forge(['uuid' => $uuid]);
+            $is_new = true;
         }
+        $preserved = $this->preserved_operational_fields($cfdi, $is_new);
 
         $emitter_party = $this->party_by_rfc((string) \Arr::get($data, 'emitter_rfc', ''));
         $receiver_party = $this->party_by_rfc((string) \Arr::get($data, 'receiver_rfc', ''));
         $direction = $this->direction($data);
         $customer_party_id = $direction === 'issued' && $receiver_party ? (int) $receiver_party['id'] : 0;
         $supplier_party_id = $direction === 'received' && $emitter_party ? (int) $emitter_party['id'] : 0;
+        $operational = $this->operational_fields_after_import($cfdi, $preserved, $direction, $customer_party_id, $supplier_party_id, $emitter_party, $receiver_party);
 
         $cfdi->set([
             'uuid' => $uuid,
@@ -72,13 +76,13 @@ class Service_Core_Sat_Cfdi_Importer
             'serie' => (string) \Arr::get($data, 'serie', ''),
             'folio' => (string) \Arr::get($data, 'folio', ''),
             'emitter_rfc' => strtoupper((string) \Arr::get($data, 'emitter_rfc', '')),
-            'emitter_party_id' => $emitter_party ? (int) $emitter_party['id'] : 0,
+            'emitter_party_id' => $operational['emitter_party_id'],
             'emitter_name' => (string) \Arr::get($data, 'emitter_name', ''),
             'emitter_regime' => (string) \Arr::get($data, 'emitter_regime', ''),
             'receiver_rfc' => strtoupper((string) \Arr::get($data, 'receiver_rfc', '')),
-            'receiver_party_id' => $receiver_party ? (int) $receiver_party['id'] : 0,
-            'customer_party_id' => $customer_party_id,
-            'supplier_party_id' => $supplier_party_id,
+            'receiver_party_id' => $operational['receiver_party_id'],
+            'customer_party_id' => $operational['customer_party_id'],
+            'supplier_party_id' => $operational['supplier_party_id'],
             'receiver_name' => (string) \Arr::get($data, 'receiver_name', ''),
             'receiver_regime' => (string) \Arr::get($data, 'receiver_regime', ''),
             'receiver_zip' => (string) \Arr::get($data, 'receiver_zip', ''),
@@ -110,18 +114,18 @@ class Service_Core_Sat_Cfdi_Importer
             'last_validated_at' => (int) \Arr::get($data, 'last_validated_at', 0),
             'metadata_seen_at' => (int) \Arr::get($data, 'metadata_seen_at', 0),
             'origin' => (string) \Arr::get($data, 'origin', 'manual'),
-            'processed' => 0,
-            'accounted' => 0,
+            'processed' => $operational['processed'],
+            'accounted' => $operational['accounted'],
             'xml_path' => (string) \Arr::get($data, 'xml_path', ''),
             'complements_json' => !empty($data['complements']) ? json_encode($data['complements']) : null,
             'has_payment_complement' => (int) \Arr::get($data, 'has_payment_complement', 0),
             'has_waybill' => (int) \Arr::get($data, 'has_waybill', 0),
-            'sales_status' => $direction === 'issued' ? ($customer_party_id > 0 ? 'candidate' : 'unmatched') : '',
-            'purchase_status' => $direction === 'received' ? ($supplier_party_id > 0 ? 'candidate' : 'unmatched') : '',
-            'portal_visible_customer' => $customer_party_id > 0 ? 1 : 0,
-            'portal_visible_supplier' => $supplier_party_id > 0 ? 1 : 0,
-            'reviewed_by' => (int) \Arr::get($data, 'reviewed_by', 0),
-            'reviewed_at' => (int) \Arr::get($data, 'reviewed_at', 0),
+            'sales_status' => $operational['sales_status'],
+            'purchase_status' => $operational['purchase_status'],
+            'portal_visible_customer' => $operational['portal_visible_customer'],
+            'portal_visible_supplier' => $operational['portal_visible_supplier'],
+            'reviewed_by' => $operational['reviewed_by'],
+            'reviewed_at' => $operational['reviewed_at'],
             'missing_xml' => 0,
         ]);
         $cfdi->save();
@@ -297,6 +301,100 @@ class Service_Core_Sat_Cfdi_Importer
 
         $cfdi->sales_status = 'linked';
         $cfdi->save();
+    }
+
+    protected function preserved_operational_fields(Model_Core_Sat_Cfdi $cfdi, $is_new)
+    {
+        if ($is_new) {
+            return [
+                'purchase_status' => '',
+                'sales_status' => '',
+                'processed' => 0,
+                'accounted' => 0,
+                'reviewed_by' => 0,
+                'reviewed_at' => 0,
+                'portal_visible_customer' => 0,
+                'portal_visible_supplier' => 0,
+                'customer_party_id' => 0,
+                'supplier_party_id' => 0,
+                'emitter_party_id' => 0,
+                'receiver_party_id' => 0,
+            ];
+        }
+
+        return [
+            'purchase_status' => (string) $cfdi->purchase_status,
+            'sales_status' => (string) $cfdi->sales_status,
+            'processed' => (int) $cfdi->processed,
+            'accounted' => (int) $cfdi->accounted,
+            'reviewed_by' => (int) $cfdi->reviewed_by,
+            'reviewed_at' => (int) $cfdi->reviewed_at,
+            'portal_visible_customer' => (int) $cfdi->portal_visible_customer,
+            'portal_visible_supplier' => (int) $cfdi->portal_visible_supplier,
+            'customer_party_id' => (int) $cfdi->customer_party_id,
+            'supplier_party_id' => (int) $cfdi->supplier_party_id,
+            'emitter_party_id' => (int) $cfdi->emitter_party_id,
+            'receiver_party_id' => (int) $cfdi->receiver_party_id,
+        ];
+    }
+
+    protected function operational_fields_after_import(Model_Core_Sat_Cfdi $cfdi, array $preserved, $direction, $customer_party_id, $supplier_party_id, $emitter_party, $receiver_party)
+    {
+        $purchase_status = $direction === 'received' ? ($supplier_party_id > 0 ? 'candidate' : 'unmatched') : '';
+        $sales_status = $direction === 'issued' ? ($customer_party_id > 0 ? 'candidate' : 'unmatched') : '';
+
+        if ((string) $preserved['purchase_status'] === 'linked') {
+            $purchase_status = 'linked';
+            \Log::warning('[SAT_CFDI_IMPORTER] Se evito degradar purchase_status linked para CFDI '.$cfdi->uuid.'.');
+        }
+        if ((string) $preserved['sales_status'] === 'linked') {
+            $sales_status = 'linked';
+            \Log::warning('[SAT_CFDI_IMPORTER] Se evito degradar sales_status linked para CFDI '.$cfdi->uuid.'.');
+        }
+
+        if ($this->has_active_purchase_invoice((int) $cfdi->id)) {
+            $purchase_status = 'linked';
+        }
+        if ($this->has_active_billing_invoice((int) $cfdi->id)) {
+            $sales_status = 'linked';
+        }
+
+        return [
+            'purchase_status' => $purchase_status,
+            'sales_status' => $sales_status,
+            'processed' => (int) $preserved['processed'],
+            'accounted' => (int) $preserved['accounted'],
+            'reviewed_by' => (int) $preserved['reviewed_by'],
+            'reviewed_at' => (int) $preserved['reviewed_at'],
+            'portal_visible_customer' => max((int) $preserved['portal_visible_customer'], $customer_party_id > 0 ? 1 : 0),
+            'portal_visible_supplier' => max((int) $preserved['portal_visible_supplier'], $supplier_party_id > 0 ? 1 : 0),
+            'customer_party_id' => (int) $preserved['customer_party_id'] > 0 ? (int) $preserved['customer_party_id'] : (int) $customer_party_id,
+            'supplier_party_id' => (int) $preserved['supplier_party_id'] > 0 ? (int) $preserved['supplier_party_id'] : (int) $supplier_party_id,
+            'emitter_party_id' => (int) $preserved['emitter_party_id'] > 0 ? (int) $preserved['emitter_party_id'] : ($emitter_party ? (int) $emitter_party['id'] : 0),
+            'receiver_party_id' => (int) $preserved['receiver_party_id'] > 0 ? (int) $preserved['receiver_party_id'] : ($receiver_party ? (int) $receiver_party['id'] : 0),
+        ];
+    }
+
+    protected function has_active_purchase_invoice($cfdi_id)
+    {
+        return \DBUtil::table_exists('core_purchase_invoices') && (bool) \DB::select('id')
+            ->from('core_purchase_invoices')
+            ->where('cfdi_id', '=', (int) $cfdi_id)
+            ->where('active', '=', 1)
+            ->limit(1)
+            ->execute()
+            ->current();
+    }
+
+    protected function has_active_billing_invoice($cfdi_id)
+    {
+        return \DBUtil::table_exists('core_billing_invoices') && (bool) \DB::select('id')
+            ->from('core_billing_invoices')
+            ->where('cfdi_id', '=', (int) $cfdi_id)
+            ->where('active', '=', 1)
+            ->limit(1)
+            ->execute()
+            ->current();
     }
 
     protected function party_by_rfc($rfc)

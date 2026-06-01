@@ -247,18 +247,34 @@ class Helper_Core_Sat_Xml
             }
 
             foreach ($payments as $payment) {
+                $payment_date = self::attr($payment, 'FechaPago');
+                $payment_currency = self::attr($payment, 'MonedaP') ?: 'MXN';
+                $payment_exchange_rate = self::decimal(self::attr($payment, 'TipoCambioP'), 1);
+                $payment_level_taxes = self::parse_payment_level_taxes($payment, $prefix, $payment_currency, $payment_exchange_rate, $payment_date);
                 $docs = $payment->xpath('.//'.$prefix.':DoctoRelacionado');
                 if (empty($docs)) {
                     continue;
                 }
 
                 foreach ($docs as $doc) {
+                    $invoice_uuid = strtoupper(self::attr($doc, 'IdDocumento'));
+                    $doc_currency = self::attr($doc, 'MonedaDR') ?: $payment_currency;
+                    $doc_exchange_rate = self::decimal(self::attr($doc, 'EquivalenciaDR'), $payment_exchange_rate);
+                    $document_taxes = self::parse_payment_document_taxes($doc, $prefix, $doc_currency, $doc_exchange_rate, $payment_date);
                     $item = [
                         'line_type' => 'payment_doc',
-                        'payment_uuid' => strtoupper(self::attr($doc, 'IdDocumento')),
+                        # payment_uuid conserva compatibilidad: historicamente contiene el UUID de la factura relacionada.
+                        'payment_uuid' => $invoice_uuid,
+                        'invoice_uuid' => $invoice_uuid,
+                        'rep_uuid' => (string) \Arr::get($data, 'uuid', ''),
+                        'payment_date' => $payment_date,
+                        'currency' => $doc_currency,
+                        'exchange_rate' => $doc_exchange_rate,
+                        'partiality_number' => (int) self::decimal(self::attr($doc, 'NumParcialidad')),
+                        'paid_amount' => self::decimal(self::attr($doc, 'ImpPagado')),
                         'payment_series' => self::attr($doc, 'Serie'),
                         'payment_folio' => self::attr($doc, 'Folio'),
-                        'payment_currency' => self::attr($doc, 'MonedaDR'),
+                        'payment_currency' => $doc_currency,
                         'payment_equivalence' => self::decimal(self::attr($doc, 'EquivalenciaDR'), null),
                         'payment_method' => self::attr($doc, 'MetodoDePagoDR'),
                         'payment_partiality' => (int) self::decimal(self::attr($doc, 'NumParcialidad')),
@@ -266,11 +282,104 @@ class Helper_Core_Sat_Xml
                         'payment_amount' => self::decimal(self::attr($doc, 'ImpPagado')),
                         'payment_remaining_balance' => self::decimal(self::attr($doc, 'ImpSaldoInsoluto')),
                         'tax_object' => self::attr($doc, 'ObjetoImpDR'),
+                        'taxes' => array_merge($document_taxes, $payment_level_taxes),
+                        'document_taxes' => $document_taxes,
+                        'payment_taxes' => $payment_level_taxes,
                     ];
                     $data['payments'][] = $item;
                 }
             }
         }
+    }
+
+    protected static function parse_payment_document_taxes($doc, $prefix, $currency, $exchange_rate, $payment_date)
+    {
+        $taxes = [];
+
+        foreach ((array) $doc->xpath(''.$prefix.':ImpuestosDR/'.$prefix.':TrasladosDR/'.$prefix.':TrasladoDR') as $tax) {
+            $taxes[] = self::payment_tax_item([
+                'tax_scope' => 'DR',
+                'tax_code' => self::attr($tax, 'ImpuestoDR'),
+                'tax_type' => 'transferred',
+                'tax_factor_type' => self::attr($tax, 'TipoFactorDR'),
+                'tax_rate' => self::decimal(self::attr($tax, 'TasaOCuotaDR')),
+                'base_amount' => self::decimal(self::attr($tax, 'BaseDR')),
+                'tax_amount' => self::decimal(self::attr($tax, 'ImporteDR')),
+                'currency' => $currency,
+                'exchange_rate' => $exchange_rate,
+                'payment_date' => $payment_date,
+            ]);
+        }
+
+        foreach ((array) $doc->xpath(''.$prefix.':ImpuestosDR/'.$prefix.':RetencionesDR/'.$prefix.':RetencionDR') as $tax) {
+            $taxes[] = self::payment_tax_item([
+                'tax_scope' => 'DR',
+                'tax_code' => self::attr($tax, 'ImpuestoDR'),
+                'tax_type' => 'retained',
+                'tax_factor_type' => self::attr($tax, 'TipoFactorDR'),
+                'tax_rate' => self::decimal(self::attr($tax, 'TasaOCuotaDR')),
+                'base_amount' => self::decimal(self::attr($tax, 'BaseDR')),
+                'tax_amount' => self::decimal(self::attr($tax, 'ImporteDR')),
+                'currency' => $currency,
+                'exchange_rate' => $exchange_rate,
+                'payment_date' => $payment_date,
+            ]);
+        }
+
+        return $taxes;
+    }
+
+    protected static function parse_payment_level_taxes($payment, $prefix, $currency, $exchange_rate, $payment_date)
+    {
+        $taxes = [];
+
+        foreach ((array) $payment->xpath(''.$prefix.':ImpuestosP/'.$prefix.':TrasladosP/'.$prefix.':TrasladoP') as $tax) {
+            $taxes[] = self::payment_tax_item([
+                'tax_scope' => 'P',
+                'tax_code' => self::attr($tax, 'ImpuestoP'),
+                'tax_type' => 'transferred',
+                'tax_factor_type' => self::attr($tax, 'TipoFactorP'),
+                'tax_rate' => self::decimal(self::attr($tax, 'TasaOCuotaP')),
+                'base_amount' => self::decimal(self::attr($tax, 'BaseP')),
+                'tax_amount' => self::decimal(self::attr($tax, 'ImporteP')),
+                'currency' => $currency,
+                'exchange_rate' => $exchange_rate,
+                'payment_date' => $payment_date,
+            ]);
+        }
+
+        foreach ((array) $payment->xpath(''.$prefix.':ImpuestosP/'.$prefix.':RetencionesP/'.$prefix.':RetencionP') as $tax) {
+            $taxes[] = self::payment_tax_item([
+                'tax_scope' => 'P',
+                'tax_code' => self::attr($tax, 'ImpuestoP'),
+                'tax_type' => 'retained',
+                'tax_factor_type' => '',
+                'tax_rate' => 0,
+                'base_amount' => 0,
+                'tax_amount' => self::decimal(self::attr($tax, 'ImporteP')),
+                'currency' => $currency,
+                'exchange_rate' => $exchange_rate,
+                'payment_date' => $payment_date,
+            ]);
+        }
+
+        return $taxes;
+    }
+
+    protected static function payment_tax_item(array $data)
+    {
+        return [
+            'tax_scope' => (string) \Arr::get($data, 'tax_scope', ''),
+            'tax_code' => (string) \Arr::get($data, 'tax_code', ''),
+            'tax_type' => (string) \Arr::get($data, 'tax_type', ''),
+            'tax_factor_type' => (string) \Arr::get($data, 'tax_factor_type', ''),
+            'tax_rate' => (float) \Arr::get($data, 'tax_rate', 0),
+            'base_amount' => (float) \Arr::get($data, 'base_amount', 0),
+            'tax_amount' => (float) \Arr::get($data, 'tax_amount', 0),
+            'currency' => (string) \Arr::get($data, 'currency', 'MXN'),
+            'exchange_rate' => (float) \Arr::get($data, 'exchange_rate', 1),
+            'payment_date' => (string) \Arr::get($data, 'payment_date', ''),
+        ];
     }
 
     protected static function attr($node, $primary, $fallback = null)

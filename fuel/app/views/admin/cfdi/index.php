@@ -190,6 +190,8 @@
                                 <td class="text-right">{{ money(item.total, item.currency) }}</td>
                                 <td>
                                     <span class="badge" :class="item.sat_status === 'cancelado' ? 'badge-danger' : 'badge-success'">{{ item.sat_status }}</span>
+                                    <span v-if="item.has_purchase_link == 1" class="badge badge-primary" :title="'Factura proveedor ' + item.purchase_invoice_folio">Compra ligada</span>
+                                    <span v-if="item.has_sale_link == 1" class="badge badge-primary" :title="'Factura venta ' + item.billing_invoice_folio">Venta ligada</span>
                                     <span v-if="item.purchase_status === 'linked'" class="badge badge-primary">Compra</span>
                                     <span v-if="item.sales_status === 'linked'" class="badge badge-primary">Venta</span>
                                     <span v-if="item.has_payment_complement == 1" class="badge badge-info">REP</span>
@@ -201,10 +203,10 @@
                                     <button class="btn btn-xs btn-outline-secondary" @click.stop="openDetails(item)">
                                         <i class="bi bi-list-ul"></i>
                                     </button>
-                                    <button v-if="item.convertible_purchase == 1" class="btn btn-xs btn-outline-primary" @click.stop="convertPurchase(item)">
+                                    <button v-if="item.convertible_purchase == 1 && item.has_purchase_link != 1" class="btn btn-xs btn-outline-primary" @click.stop="convertPurchase(item)">
                                         <i class="bi bi-cart-check"></i>
                                     </button>
-                                    <button v-if="item.convertible_sale == 1" class="btn btn-xs btn-outline-primary" @click.stop="convertSale(item)" title="Guardar como factura de venta">
+                                    <button v-if="item.convertible_sale == 1 && item.has_sale_link != 1" class="btn btn-xs btn-outline-primary" @click.stop="convertSale(item)" title="Guardar como factura de venta">
                                         <i class="bi bi-receipt"></i>
                                     </button>
                                     <button class="btn btn-xs btn-outline-success" @click.stop="openCatalogPartyModal(item, 'party')" title="Guardar tercero">

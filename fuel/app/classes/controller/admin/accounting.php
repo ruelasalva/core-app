@@ -22,6 +22,12 @@ class Controller_Admin_Accounting extends Controller_Adminbase
         $this->template->content = View::forge('admin/accounting/index');
     }
 
+    public function action_fiscal_config()
+    {
+        $this->template->title = 'Configuracion Fiscal Contable';
+        $this->template->content = View::forge('admin/accounting/fiscal_config');
+    }
+
     public function action_data()
     {
         try {
@@ -46,6 +52,106 @@ class Controller_Admin_Accounting extends Controller_Adminbase
         } catch (\Exception $e) {
             \Log::error('Error cargando contabilidad: '.$e->getMessage());
             return $this->json_response(['error' => 'No se pudo cargar contabilidad.'], 500);
+        }
+    }
+
+    public function action_fiscal_config_data()
+    {
+        try {
+            $this->assert_schema_ready();
+            $this->assert_fiscal_mapping_schema();
+
+            return $this->json_response([
+                'accounts' => $this->accounts(),
+                'detected_accounts' => $this->detected_fiscal_accounts(),
+                'mappings' => $this->fiscal_account_mappings(),
+                'options' => [
+                    'accounts' => $this->account_options(),
+                    'directions' => $this->fiscal_mapping_direction_options(),
+                    'tax_types' => $this->fiscal_mapping_tax_type_options(),
+                ],
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error cargando configuracion fiscal contable: '.$e->getMessage());
+            return $this->json_response(['error' => 'No se pudo cargar la configuracion fiscal contable.'], 500);
+        }
+    }
+
+    public function action_save_fiscal_mappings()
+    {
+        $this->require_access('accounting.access[edit]');
+        $payload = (array) \Input::json();
+
+        try {
+            $this->assert_schema_ready();
+            $this->assert_fiscal_mapping_schema();
+
+            $mappings = (array) \Arr::get($payload, 'mappings', []);
+            $now = time();
+            $definitions = $this->fiscal_mapping_definitions();
+
+            foreach ($definitions as $definition) {
+                $incoming = $this->incoming_mapping($mappings, $definition);
+                $account_id = (int) \Arr::get($incoming, 'account_id', 0);
+                $active = $this->bool_value(\Arr::get($incoming, 'active', true));
+
+                if ($active === 1 && $account_id < 1) {
+                    return $this->json_response(['error' => 'Selecciona una cuenta para '.$definition['label'].'.'], 422);
+                }
+
+                if ($account_id > 0 && !$this->valid_postable_account($account_id)) {
+                    return $this->json_response(['error' => 'La cuenta seleccionada para '.$definition['label'].' no existe o no es afectable.'], 422);
+                }
+
+                $existing = \DB::select('id')
+                    ->from('core_fiscal_account_mappings')
+                    ->where('tax_code', '=', $definition['tax_code'])
+                    ->where('tax_type', '=', $definition['tax_type'])
+                    ->where('direction', '=', $definition['direction'])
+                    ->execute()
+                    ->current();
+
+                $data = [
+                    'tax_code' => $definition['tax_code'],
+                    'tax_type' => $definition['tax_type'],
+                    'direction' => $definition['direction'],
+                    'account_id' => $account_id,
+                    'active' => $active,
+                    'updated_at' => $now,
+                ];
+
+                if ($existing) {
+                    \DB::update('core_fiscal_account_mappings')
+                        ->set($data)
+                        ->where('id', '=', (int) $existing['id'])
+                        ->execute();
+                } else {
+                    $data['created_at'] = $now;
+                    \DB::insert('core_fiscal_account_mappings')->set($data)->execute();
+                }
+            }
+
+            Helper_Core_Audit::log([
+                'module' => 'accounting',
+                'action' => 'save_fiscal_account_mappings',
+                'entity_type' => 'fiscal_account_mapping',
+                'entity_id' => 0,
+                'summary' => 'Configuracion fiscal contable actualizada',
+                'old_values' => [],
+                'new_values' => ['mappings' => $mappings],
+            ]);
+
+            \Log::info('Configuracion fiscal contable actualizada usuario='.(int) $this->user_id);
+
+            return $this->json_response([
+                'status' => 'ok',
+                'message' => 'Configuracion fiscal contable guardada.',
+                'mappings' => $this->fiscal_account_mappings(),
+                'detected_accounts' => $this->detected_fiscal_accounts(),
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error guardando configuracion fiscal contable: '.$e->getMessage());
+            return $this->json_response(['error' => 'No se pudo guardar la configuracion fiscal contable.'], 400);
         }
     }
 
@@ -234,6 +340,12 @@ class Controller_Admin_Accounting extends Controller_Adminbase
             }
             $this->recalculate_entry($id);
             $entry = Model_Core_Accounting_Journal_Entry::find($id);
+            $difference = round((float) $entry->total_debit - (float) $entry->total_credit, 2);
+            $is_fiscal_draft = ((string) $entry->source_module === 'fiscal' && (string) $entry->status === 'draft');
+            if ($is_fiscal_draft && abs($difference) > 0.01) {
+                \Log::warning('Contabilidad: intento de contabilizar poliza fiscal preliminar descuadrada entry_id='.$id.' diferencia='.$difference);
+                return $this->json_response(['error' => 'La poliza fiscal preliminar no esta cuadrada. Revise cuentas e importes antes de contabilizar.'], 422);
+            }
             if (round((float) $entry->total_debit, 2) !== round((float) $entry->total_credit, 2) || (float) $entry->total_debit <= 0) {
                 return $this->json_response(['error' => 'La poliza no esta cuadrada. Debe y haber deben ser iguales.'], 422);
             }
@@ -405,6 +517,184 @@ class Controller_Admin_Accounting extends Controller_Adminbase
             \Log::error('Error guardando centro de costo: '.$e->getMessage());
             return $this->json_response(['error' => 'No se pudo guardar el centro de costo.'], 400);
         }
+    }
+
+    protected function fiscal_account_mappings()
+    {
+        $stored = [];
+        $rows = \DB::select(['m.id', 'id'], ['m.tax_code', 'tax_code'], ['m.tax_type', 'tax_type'], ['m.direction', 'direction'], ['m.account_id', 'account_id'], ['m.active', 'active'], ['a.code', 'account_code'], ['a.name', 'account_name'])
+            ->from(['core_fiscal_account_mappings', 'm'])
+            ->join(['core_accounting_accounts', 'a'], 'left')->on('m.account_id', '=', 'a.id')
+            ->execute()
+            ->as_array();
+
+        foreach ($rows as $row) {
+            $stored[$this->fiscal_mapping_key($row)] = $row;
+        }
+
+        $mappings = [];
+        foreach ($this->fiscal_mapping_definitions() as $definition) {
+            $row = (array) \Arr::get($stored, $this->fiscal_mapping_key($definition), []);
+            $account_id = (int) \Arr::get($row, 'account_id', 0);
+            $mappings[] = [
+                'id' => (int) \Arr::get($row, 'id', 0),
+                'label' => $definition['label'],
+                'description' => $definition['description'],
+                'tax_code' => $definition['tax_code'],
+                'tax_type' => $definition['tax_type'],
+                'tax_type_label' => $this->fiscal_tax_type_label($definition['tax_type']),
+                'direction' => $definition['direction'],
+                'direction_label' => $this->fiscal_direction_label($definition['direction']),
+                'account_id' => $account_id,
+                'account_label' => $account_id > 0 ? trim((string) \Arr::get($row, 'account_code', '').' - '.(string) \Arr::get($row, 'account_name', '')) : '',
+                'active' => array_key_exists('active', $row) ? (int) $row['active'] : 1,
+            ];
+        }
+
+        return $mappings;
+    }
+
+    protected function fiscal_mapping_definitions()
+    {
+        return [
+            [
+                'label' => 'IVA trasladado',
+                'description' => 'CFDI emitidos con IVA trasladado.',
+                'tax_code' => '002',
+                'tax_type' => 'transferred',
+                'direction' => 'issued',
+            ],
+            [
+                'label' => 'IVA acreditable',
+                'description' => 'CFDI recibidos con IVA trasladado acreditable.',
+                'tax_code' => '002',
+                'tax_type' => 'transferred',
+                'direction' => 'received',
+            ],
+            [
+                'label' => 'IVA retenido',
+                'description' => 'Retenciones de IVA sin distinguir sentido.',
+                'tax_code' => '002',
+                'tax_type' => 'retained',
+                'direction' => '',
+            ],
+            [
+                'label' => 'ISR retenido',
+                'description' => 'Retenciones de ISR sin distinguir sentido.',
+                'tax_code' => '001',
+                'tax_type' => 'retained',
+                'direction' => '',
+            ],
+        ];
+    }
+
+    protected function detected_fiscal_accounts()
+    {
+        $accounts = $this->accounts();
+        $groups = [
+            ['label' => 'IVA trasladado', 'matches' => []],
+            ['label' => 'IVA acreditable', 'matches' => []],
+            ['label' => 'IVA retenido', 'matches' => []],
+            ['label' => 'ISR retenido', 'matches' => []],
+        ];
+
+        foreach ($accounts as $account) {
+            if ((int) \Arr::get($account, 'active', 0) !== 1 || (int) \Arr::get($account, 'is_postable', 0) !== 1) {
+                continue;
+            }
+
+            $code = (string) \Arr::get($account, 'code', '');
+            $name = $this->normalize_text((string) \Arr::get($account, 'name', ''));
+            $item = [
+                'id' => (int) $account['id'],
+                'code' => $code,
+                'name' => (string) $account['name'],
+                'label' => $code.' - '.$account['name'],
+            ];
+
+            if (strpos($name, 'iva') !== false && strpos($name, 'traslad') !== false) {
+                $groups[0]['matches'][] = $item;
+            }
+            if (strpos($name, 'iva') !== false && strpos($name, 'acredit') !== false) {
+                $groups[1]['matches'][] = $item;
+            }
+            if (strpos($name, 'retencion') !== false || strpos($name, 'retenciones') !== false) {
+                $groups[2]['matches'][] = $item;
+                $groups[3]['matches'][] = $item;
+            }
+            if (strpos($name, 'isr') !== false && strpos($name, 'reten') !== false) {
+                $groups[3]['matches'][] = $item;
+            }
+        }
+
+        return $groups;
+    }
+
+    protected function incoming_mapping(array $mappings, array $definition)
+    {
+        $key = $this->fiscal_mapping_key($definition);
+        foreach ($mappings as $mapping) {
+            if ($this->fiscal_mapping_key((array) $mapping) === $key) {
+                return (array) $mapping;
+            }
+        }
+        return $definition;
+    }
+
+    protected function valid_postable_account($account_id)
+    {
+        return (bool) \DB::select('id')
+            ->from('core_accounting_accounts')
+            ->where('id', '=', (int) $account_id)
+            ->where('active', '=', 1)
+            ->where('is_postable', '=', 1)
+            ->execute()
+            ->current();
+    }
+
+    protected function fiscal_mapping_key(array $row)
+    {
+        return implode('|', [
+            (string) \Arr::get($row, 'tax_code', ''),
+            (string) \Arr::get($row, 'tax_type', ''),
+            (string) \Arr::get($row, 'direction', ''),
+        ]);
+    }
+
+    protected function fiscal_direction_label($direction)
+    {
+        $labels = [
+            'issued' => 'Emitido',
+            'received' => 'Recibido',
+            '' => 'Ambos',
+        ];
+        return isset($labels[$direction]) ? $labels[$direction] : (string) $direction;
+    }
+
+    protected function fiscal_tax_type_label($tax_type)
+    {
+        $labels = [
+            'transferred' => 'Trasladado',
+            'retained' => 'Retenido',
+        ];
+        return isset($labels[$tax_type]) ? $labels[$tax_type] : (string) $tax_type;
+    }
+
+    protected function fiscal_mapping_direction_options()
+    {
+        return [
+            ['value' => 'issued', 'label' => 'Emitido'],
+            ['value' => 'received', 'label' => 'Recibido'],
+            ['value' => '', 'label' => 'Ambos'],
+        ];
+    }
+
+    protected function fiscal_mapping_tax_type_options()
+    {
+        return [
+            ['value' => 'transferred', 'label' => 'Trasladado'],
+            ['value' => 'retained', 'label' => 'Retenido'],
+        ];
     }
 
     protected function accounts()
@@ -692,6 +982,13 @@ class Controller_Admin_Accounting extends Controller_Adminbase
         }
     }
 
+    protected function assert_fiscal_mapping_schema()
+    {
+        if (!\DBUtil::table_exists('core_fiscal_account_mappings')) {
+            throw new \RuntimeException('Falta ejecutar migracion 064_create_core_fiscal_account_mappings.');
+        }
+    }
+
     protected function account_type($value)
     {
         $value = $this->codeify($value);
@@ -792,5 +1089,14 @@ class Controller_Admin_Accounting extends Controller_Adminbase
         }
         $value = preg_replace('/[^a-z0-9]+/', '_', $value);
         return trim($value, '_');
+    }
+
+    protected function normalize_text($value)
+    {
+        $value = strtolower(trim((string) $value));
+        if (function_exists('iconv')) {
+            $value = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $value);
+        }
+        return preg_replace('/[^a-z0-9]+/', ' ', $value);
     }
 }
