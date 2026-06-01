@@ -17,6 +17,51 @@ $section_settings = function ($json) {
     $settings = json_decode((string) $json, true);
     return is_array($settings) ? $settings : array();
 };
+
+$safe_cms_content = function ($html) {
+    $html = trim((string) $html);
+    $html = preg_replace('/<\s*script[^>]*>.*?<\s*\/\s*script\s*>/is', '', $html);
+    $html = preg_replace('/<\s*iframe[^>]*>.*?<\s*\/\s*iframe\s*>/is', '', $html);
+    $html = preg_replace('/\son[a-z]+\s*=\s*("[^"]*"|\'[^\']*\'|[^\s>]+)/i', '', $html);
+    $html = preg_replace('/javascript\s*:/i', '', $html);
+    return strip_tags($html, '<p><br><strong><b><em><i><u><ul><ol><li><h2><h3><h4><blockquote><a><span>');
+};
+
+$section_block = function ($section) {
+    if ((string) $section->section_type !== 'block' || !class_exists('Model_Core_Frontend_Block')) {
+        return null;
+    }
+
+    if ((int) $section->target_id > 0) {
+        $block = Model_Core_Frontend_Block::query()
+            ->where('id', (int) $section->target_id)
+            ->where('active', 1)
+            ->get_one();
+        if ($block) {
+            return $block;
+        }
+    }
+
+    $code = trim((string) $section->section_key);
+    if ($code === '') {
+        return null;
+    }
+
+    return Model_Core_Frontend_Block::query()
+        ->where('code', $code)
+        ->where('active', 1)
+        ->get_one();
+};
+
+$is_home_page = !empty($page) && (
+    (!empty($page->is_home) && (int) $page->is_home === 1)
+    || (!empty($page->slug) && in_array((string) $page->slug, array('inicio', 'home'), true))
+);
+$hero_class = 'front-hero '.($is_home_page ? 'front-hero--home' : 'front-hero--inner');
+$featured_categories = !empty($featured_categories) ? $featured_categories : array();
+$featured_brands = !empty($featured_brands) ? $featured_brands : array();
+$featured_products = !empty($featured_products) ? $featured_products : array();
+$whatsapp_url = !empty($whatsapp_url) ? (string) $whatsapp_url : '';
 ?>
 
 <style>
@@ -28,6 +73,14 @@ $section_settings = function ($json) {
         color: #fff;
         overflow: hidden;
         position: relative;
+    }
+    .front-admin-preview {
+        background: #fff3cd;
+        border-bottom: 1px solid #ffe08a;
+        color: #664d03;
+        font-weight: 700;
+        padding: 10px 18px;
+        text-align: center;
     }
     .front-hero img {
         position: absolute;
@@ -265,9 +318,15 @@ $section_settings = function ($json) {
     }
 </style>
 
+<?php if (!empty($admin_preview)): ?>
+<div class="front-admin-preview">
+    <?php echo e(!empty($admin_preview_message) ? $admin_preview_message : 'Vista previa administrativa: esta página puede no estar publicada.'); ?>
+</div>
+<?php endif; ?>
+
 <?php if (!empty($slider_items)): ?>
     <?php $hero = reset($slider_items); ?>
-    <section class="front-hero">
+    <section class="<?php echo e($hero_class); ?>">
         <?php if (!empty($hero->image_path)): ?>
         <img src="<?php echo e($media_url($hero->image_path)); ?>" alt="<?php echo e($hero->title); ?>">
         <?php endif; ?>
@@ -276,25 +335,146 @@ $section_settings = function ($json) {
             <?php if (!empty($hero->subtitle)): ?>
             <p><?php echo e($hero->subtitle); ?></p>
             <?php endif; ?>
-            <?php if (!empty($hero->button_text) && !empty($hero->button_url)): ?>
-            <a class="button" href="<?php echo e($hero->button_url); ?>"><?php echo e($hero->button_text); ?> <i class="bi bi-arrow-right"></i></a>
+            <?php if (!$is_home_page): ?>
+            <div class="front-breadcrumbs"><a href="<?php echo Uri::base(false); ?>">Inicio</a><span><?php echo e($hero->title ?: $page->title); ?></span></div>
+            <?php endif; ?>
+            <?php if ($is_home_page): ?>
+            <div class="hero-actions">
+                <?php if (!empty($hero->button_text) && !empty($hero->button_url)): ?>
+                <a class="button" href="<?php echo e($hero->button_url); ?>"><?php echo e($hero->button_text); ?> <i class="bi bi-arrow-right"></i></a>
+                <?php else: ?>
+                <a class="button" href="<?php echo Uri::create('pagina/contacto'); ?>">Solicitar información <i class="bi bi-arrow-right"></i></a>
+                <?php endif; ?>
+                <a class="button secondary" href="<?php echo Uri::create('productos'); ?>">Ver catálogo</a>
+            </div>
             <?php endif; ?>
         </div>
     </section>
 <?php else: ?>
-    <section class="front-hero">
+    <section class="<?php echo e($hero_class); ?>">
         <div class="front-hero-content">
+            <?php if (!$is_home_page): ?>
+            <div class="front-breadcrumbs"><a href="<?php echo Uri::base(false); ?>">Inicio</a><span><?php echo e($page->title); ?></span></div>
+            <?php endif; ?>
             <h1><?php echo e($page->title); ?></h1>
             <?php if (!empty($page->seo_description)): ?>
             <p><?php echo e($page->seo_description); ?></p>
+            <?php endif; ?>
+            <?php if ($is_home_page): ?>
+            <div class="hero-actions">
+                <a class="button" href="<?php echo Uri::create('pagina/contacto'); ?>">Solicitar información <i class="bi bi-arrow-right"></i></a>
+                <a class="button secondary" href="<?php echo Uri::create('productos'); ?>">Ver catálogo</a>
+            </div>
             <?php endif; ?>
         </div>
     </section>
 <?php endif; ?>
 
+<?php if ($is_home_page && (!empty($featured_categories) || !empty($featured_brands) || !empty($featured_products))): ?>
+<section class="home-commerce">
+    <div class="section-shell">
+        <?php if (!empty($featured_categories)): ?>
+        <div class="home-commerce-block">
+            <div class="section-copy home-commerce-heading">
+                <h2>Categorías destacadas</h2>
+                <p class="subtitle">Encuentra rápido consumibles, refacciones y productos por familia.</p>
+            </div>
+            <div class="category-grid">
+                <?php foreach ($featured_categories as $category): ?>
+                <a class="category-card" href="<?php echo e(Uri::create('categoria/'.$category['slug'])); ?>">
+                    <?php if (!empty($category['image_path'])): ?>
+                    <img src="<?php echo e($media_url($category['image_path'])); ?>" alt="<?php echo e($category['name']); ?>">
+                    <?php endif; ?>
+                    <span><?php echo e($category['name']); ?></span>
+                </a>
+                <?php endforeach; ?>
+            </div>
+        </div>
+        <?php endif; ?>
+
+        <?php if (!empty($featured_brands)): ?>
+        <div class="home-commerce-block">
+            <div class="section-copy home-commerce-heading">
+                <h2>Marcas destacadas</h2>
+                <p class="subtitle">Explora productos compatibles por marca.</p>
+            </div>
+            <div class="brand-grid">
+                <?php foreach ($featured_brands as $brand): ?>
+                <a class="brand-item" href="<?php echo e(Uri::create('productos', array(), array('brand_id' => (int) $brand['id']))); ?>">
+                    <?php if (!empty($brand['logo_path'])): ?>
+                    <img src="<?php echo e($media_url($brand['logo_path'])); ?>" alt="<?php echo e($brand['name']); ?>">
+                    <?php else: ?>
+                    <strong><?php echo e($brand['name']); ?></strong>
+                    <?php endif; ?>
+                </a>
+                <?php endforeach; ?>
+            </div>
+        </div>
+        <?php endif; ?>
+
+        <?php if (!empty($featured_products)): ?>
+        <div class="home-commerce-block">
+            <div class="section-copy home-commerce-heading">
+                <h2>Productos destacados</h2>
+                <p class="subtitle">Opciones seleccionadas para compra recurrente y consulta rápida.</p>
+            </div>
+            <div class="product-grid">
+                <?php foreach ($featured_products as $product): ?>
+                <a class="product-card" href="<?php echo e(Uri::create('producto/'.$product['slug'])); ?>">
+                    <img src="<?php echo e(!empty($product['main_image_path']) ? $media_url($product['main_image_path']) : $no_image_svg); ?>" alt="<?php echo e($product['name']); ?>">
+                    <div class="body">
+                        <h3><?php echo e($product['name']); ?></h3>
+                        <?php if (!empty($product['short_description'])): ?>
+                        <p><?php echo e($product['short_description']); ?></p>
+                        <?php endif; ?>
+                        <?php if (!empty($product['can_view_price'])): ?>
+                        <div class="product-price">
+                            <?php echo e($product['currency_code']); ?> <?php echo number_format((float) $product['price'], 2); ?>
+                        </div>
+                        <?php else: ?>
+                        <div class="product-login-price">
+                            <a href="<?php echo Uri::create('acceso'); ?>">Inicia sesión</a> para ver precio.
+                        </div>
+                        <?php endif; ?>
+                        <span class="card-action">Ver producto <i class="bi bi-arrow-right"></i></span>
+                    </div>
+                </a>
+                <?php endforeach; ?>
+            </div>
+        </div>
+        <?php endif; ?>
+    </div>
+</section>
+
+<section class="home-conversion-cta">
+    <div class="section-shell home-conversion-shell">
+        <div>
+            <h2>¿Necesitas ayuda para encontrar el producto correcto?</h2>
+            <p>Te ayudamos a identificar consumibles, compatibilidades y alternativas antes de comprar.</p>
+        </div>
+        <div class="home-conversion-actions">
+            <?php if ($whatsapp_url !== ''): ?>
+            <a class="button whatsapp" href="<?php echo e($whatsapp_url); ?>" target="_blank" rel="noopener noreferrer"><i class="bi bi-whatsapp"></i> WhatsApp</a>
+            <?php endif; ?>
+            <a class="button" href="<?php echo Uri::create('pagina/contacto'); ?>">Contacto</a>
+            <a class="button secondary" href="<?php echo Uri::create('productos'); ?>">Ver catálogo</a>
+        </div>
+    </div>
+</section>
+<?php endif; ?>
+
 <?php if (!empty($sections)): ?>
     <?php foreach ($sections as $section): ?>
-    <section class="section-band">
+    <?php
+        $resolved_block = null;
+        if ($section->section_type === 'block') {
+            $resolved_block = $section_block($section);
+            if (empty($resolved_block)) {
+                continue;
+            }
+        }
+    ?>
+    <section class="section-band<?php echo $section->section_type === 'cta' ? ' section-band-cta' : ''; ?>">
         <?php if ($section->section_type === 'feature_grid'): ?>
         <div class="section-shell">
             <div class="section-copy" style="margin-bottom: 24px;">
@@ -383,7 +563,7 @@ $section_settings = function ($json) {
                                 <input type="email" name="email" required maxlength="180">
                             </div>
                             <div class="field">
-                                <label>Telefono</label>
+                                <label>Teléfono</label>
                                 <input name="phone" maxlength="60">
                             </div>
                             <div class="field">
@@ -406,6 +586,22 @@ $section_settings = function ($json) {
                 <a class="section-link" href="<?php echo e(\Arr::get($cta_settings, 'button_url', Uri::create('pagina/contacto'))); ?>">
                     <?php echo e(\Arr::get($cta_settings, 'button_text', 'Contactar')); ?> <i class="bi bi-arrow-right"></i>
                 </a>
+                <?php endif; ?>
+            </div>
+        </div>
+        <?php elseif ($section->section_type === 'block'): ?>
+        <div class="section-shell">
+            <div class="section-copy">
+                <?php if (!empty($section->title)): ?>
+                <h2><?php echo e($section->title); ?></h2>
+                <?php elseif (!empty($resolved_block->name)): ?>
+                <h2><?php echo e($resolved_block->name); ?></h2>
+                <?php endif; ?>
+                <?php if (!empty($section->subtitle)): ?>
+                <p class="subtitle"><?php echo e($section->subtitle); ?></p>
+                <?php endif; ?>
+                <?php if (!empty($resolved_block->content)): ?>
+                <div class="content"><?php echo $safe_cms_content($resolved_block->content); ?></div>
                 <?php endif; ?>
             </div>
         </div>
@@ -448,7 +644,7 @@ $section_settings = function ($json) {
 </section>
 <?php endif; ?>
 
-<?php if (!empty($featured_products)): ?>
+<?php if (!$is_home_page && !empty($featured_products)): ?>
 <section class="section-band">
     <div class="section-shell">
         <div class="section-copy" style="margin-bottom: 24px;">
@@ -469,9 +665,10 @@ $section_settings = function ($json) {
                     </div>
                     <?php else: ?>
                     <div class="product-login-price">
-                        <a href="<?php echo Uri::create('acceso'); ?>">Inicia sesion</a> para ver precio.
+                        <a href="<?php echo Uri::create('acceso'); ?>">Inicia sesión</a> para ver precio.
                     </div>
                     <?php endif; ?>
+                    <span class="card-action">Ver producto <i class="bi bi-arrow-right"></i></span>
                 </div>
             </a>
             <?php endforeach; ?>

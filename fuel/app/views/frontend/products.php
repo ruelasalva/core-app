@@ -37,6 +37,7 @@ $options = !empty($options) ? $options : array(
 );
 $scope = !empty($scope) ? $scope : null;
 $catalog_action = Uri::create(Uri::string());
+$display_title = str_ireplace('Catalogo', 'Catálogo', (string) $title);
 ?>
 
 <style>
@@ -242,9 +243,9 @@ $catalog_action = Uri::create(Uri::string());
     }
 </style>
 
-<section class="catalog-hero">
+<section class="catalog-hero front-hero--catalog">
     <div class="catalog-shell">
-        <h1><?php echo e($title); ?></h1>
+        <h1><?php echo e($display_title); ?></h1>
         <?php if (!empty($description)): ?>
         <p><?php echo e($description); ?></p>
         <?php endif; ?>
@@ -255,16 +256,16 @@ $catalog_action = Uri::create(Uri::string());
     <div class="catalog-shell">
         <div class="catalog-layout">
             <aside class="catalog-filters">
-                <h2>Filtrar catalogo</h2>
+                <h2>Filtrar catálogo</h2>
                 <form method="get" action="<?php echo e($catalog_action); ?>">
                     <div class="filter-field">
                         <label for="catalog-q">Buscar</label>
-                        <input id="catalog-q" type="search" name="q" value="<?php echo e($filters['q']); ?>" placeholder="Nombre, SKU o descripcion">
+                        <input id="catalog-q" type="search" name="q" value="<?php echo e($filters['q']); ?>" placeholder="Nombre, SKU o descripción">
                     </div>
 
                     <?php if ($scope !== 'category'): ?>
                     <div class="filter-field">
-                        <label for="catalog-category">Categoria</label>
+                        <label for="catalog-category">Categoría</label>
                         <select id="catalog-category" name="category_id">
                             <option value="">Todas</option>
                             <?php foreach ($options['categories'] as $option): ?>
@@ -277,7 +278,7 @@ $catalog_action = Uri::create(Uri::string());
                     <?php endif; ?>
 
                     <div class="filter-field">
-                        <label for="catalog-subcategory">Subcategoria</label>
+                        <label for="catalog-subcategory">Subcategoría</label>
                         <select id="catalog-subcategory" name="subcategory_id">
                             <option value="">Todas</option>
                             <?php foreach ($options['subcategories'] as $option): ?>
@@ -327,7 +328,7 @@ $catalog_action = Uri::create(Uri::string());
                 <div class="catalog-results-bar">
                     <strong><?php echo count($products); ?> productos encontrados</strong>
                     <?php if (!empty($filters['q'])): ?>
-                    <span>Busqueda: <span class="catalog-active-search"><?php echo e($filters['q']); ?></span></span>
+                    <span>Búsqueda: <span class="catalog-active-search"><?php echo e($filters['q']); ?></span></span>
                     <?php endif; ?>
                 </div>
 
@@ -355,9 +356,10 @@ $catalog_action = Uri::create(Uri::string());
                     </div>
                     <?php else: ?>
                     <div class="catalog-login-price">
-                        <a href="<?php echo Uri::create('acceso'); ?>">Inicia sesion</a> para ver precio.
+                        <a href="<?php echo Uri::create('acceso'); ?>">Inicia sesión</a> para ver precio.
                     </div>
                     <?php endif; ?>
+                    <span class="card-action">Ver producto <i class="bi bi-arrow-right"></i></span>
                 </div>
             </a>
             <?php endforeach; ?>

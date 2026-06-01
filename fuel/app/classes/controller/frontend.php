@@ -222,8 +222,10 @@ class Controller_Frontend extends Controller_Template
             'slider'            => $this->get_slider($location),
             'slider_items'      => array(),
             'banners'           => $this->get_banners($location),
+            'featured_categories' => ($location === 'home') ? $this->get_featured_categories() : array(),
             'featured_products' => ($location === 'home') ? $this->get_featured_products() : array(),
             'featured_brands'   => $this->get_featured_brands(),
+            'whatsapp_url'      => $this->whatsapp_url(),
             'contact_form_enabled' => $page->slug === 'contacto',
             'contact_success' => \Session::get_flash('contact_success'),
             'contact_error' => \Session::get_flash('contact_error'),
@@ -560,6 +562,42 @@ class Controller_Frontend extends Controller_Template
     }
 
     /**
+     * Obtiene categorias destacadas para el inicio.
+     *
+     * @access  protected
+     * @return  array
+     */
+    protected function get_featured_categories()
+    {
+        if (!\DBUtil::table_exists('core_commerce_categories')) {
+            return array();
+        }
+
+        $rows = DB::select('id', 'name', 'slug', 'description', 'image_path', 'show_in_home')
+            ->from('core_commerce_categories')
+            ->where('active', 1)
+            ->where('show_in_home', 1)
+            ->order_by('sort_order', 'asc')
+            ->order_by('name', 'asc')
+            ->limit(8)
+            ->execute()
+            ->as_array();
+
+        if (!empty($rows)) {
+            return $rows;
+        }
+
+        return DB::select('id', 'name', 'slug', 'description', 'image_path', 'show_in_home')
+            ->from('core_commerce_categories')
+            ->where('active', 1)
+            ->order_by('sort_order', 'asc')
+            ->order_by('name', 'asc')
+            ->limit(8)
+            ->execute()
+            ->as_array();
+    }
+
+    /**
      * Obtiene marcas destacadas para paginas publicas.
      *
      * @access  protected
@@ -577,6 +615,42 @@ class Controller_Frontend extends Controller_Template
             ->limit(12)
             ->execute()
             ->as_array();
+    }
+
+    /**
+     * WHATSAPP URL
+     *
+     * RESUELVE URL DE WHATSAPP DESDE INTEGRACIONES WEB EXISTENTES.
+     *
+     * @access  protected
+     * @return  string
+     */
+    protected function whatsapp_url()
+    {
+        if (!class_exists('Helper_Core_Web')) {
+            return '';
+        }
+
+        $item = Helper_Core_Web::integration('whatsapp_click_chat');
+        if (!$item) {
+            return '';
+        }
+
+        $phone = preg_replace('/\D+/', '', (string) ($item->public_key ?: $item->public_value));
+        if ($phone === '') {
+            return '';
+        }
+
+        $settings = json_decode((string) $item->settings_json, true);
+        $settings = is_array($settings) ? $settings : array();
+        $message = trim((string) \Arr::get($settings, 'message', 'Hola, quiero información.'));
+
+        $url = 'https://wa.me/'.$phone;
+        if ($message !== '') {
+            $url .= '?text='.rawurlencode($message);
+        }
+
+        return $url;
     }
 
     /**

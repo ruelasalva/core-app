@@ -70,6 +70,7 @@ return array (
         64 => '066_create_core_fiscal_validations',
         65 => '067_create_core_fiscal_events',
         66 => '068_create_core_sat_payment_taxes',
+        67 => '069_adjust_fiscal_ledger_source_hash_for_rebuilds',
       ),
     ),
     'module' => array(    

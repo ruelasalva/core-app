@@ -204,7 +204,7 @@ $tag_url = function ($slug) {
     }
 </style>
 
-<section class="product-shell product-detail">
+<section class="product-shell product-detail front-hero--product">
     <div>
         <div class="product-media">
             <img src="<?php echo e(!empty($product['main_image_path']) ? $media_url($product['main_image_path']) : $no_image_svg); ?>" alt="<?php echo e($product['name']); ?>">
@@ -248,7 +248,7 @@ $tag_url = function ($slug) {
         <?php echo Form::close(); ?>
         <?php else: ?>
         <div class="product-login-price">
-            <a href="<?php echo Uri::create('acceso'); ?>">Inicia sesion</a> o <a href="<?php echo Uri::create('registro'); ?>">crea tu cuenta</a> para consultar precio y comprar.
+            <a href="<?php echo Uri::create('acceso'); ?>">Inicia sesión</a> o <a href="<?php echo Uri::create('registro'); ?>">crea tu cuenta</a> para consultar precio y comprar.
         </div>
         <?php endif; ?>
 
@@ -285,6 +285,7 @@ $tag_url = function ($slug) {
                     <?php echo e($related['currency_code']); ?> <?php echo number_format((float) $related['price'], 2); ?>
                 </div>
                 <?php endif; ?>
+                <span class="card-action">Ver producto <i class="bi bi-arrow-right"></i></span>
             </div>
         </a>
         <?php endforeach; ?>

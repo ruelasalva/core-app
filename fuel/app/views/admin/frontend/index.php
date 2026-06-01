@@ -18,7 +18,7 @@
     <div class="row">
         <div class="col-lg-3">
             <div class="small-box bg-info">
-                <div class="inner"><h3>{{ stats.pages || 0 }}</h3><p>Paginas</p></div>
+                <div class="inner"><h3>{{ stats.pages || 0 }}</h3><p>Páginas</p></div>
                 <div class="icon"><i class="bi bi-file-earmark-text"></i></div>
             </div>
         </div>
@@ -61,7 +61,67 @@
                 <p class="mt-2">Cargando frontend...</p>
             </div>
 
-            <table v-show="!loading" class="table table-bordered table-hover">
+            <div v-if="errorMessage" class="alert alert-danger">{{ errorMessage }}</div>
+
+            <div v-if="!loading && currentSection === 'sections'">
+                <div v-for="group in sectionGroups" :key="'page-sections-' + group.page.id" class="card card-outline card-secondary mb-3">
+                    <div class="card-header">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <h3 class="card-title mb-0">
+                                {{ group.page.title }}
+                                <span v-if="group.page.is_home == 1" class="badge badge-info ml-2">Página de inicio</span>
+                            </h3>
+                            <span class="badge badge-light">{{ group.sections.length }} secciones</span>
+                        </div>
+                    </div>
+                    <div class="card-body p-0">
+                        <table class="table table-bordered table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th style="width: 90px;">Orden</th>
+                                    <th>Sección</th>
+                                    <th>Tipo</th>
+                                    <th>Bloque</th>
+                                    <th>Estado</th>
+                                    <th class="text-center" style="width: 150px;">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="(section, index) in group.sections" :key="'section-row-' + section.id">
+                                    <td>{{ section.sort_order }}</td>
+                                    <td>
+                                        <strong>{{ section.title || section.section_key || 'Sin título' }}</strong>
+                                        <div class="text-muted small">{{ section.section_key || '-' }}</div>
+                                        <div v-if="blockWarning(section)" class="text-warning small">{{ blockWarning(section) }}</div>
+                                    </td>
+                                    <td><span class="badge badge-light">{{ sectionTypeLabel(section.section_type) }}</span></td>
+                                    <td>{{ section.section_type === 'block' ? blockLabel(section.target_id, section.section_key) : '-' }}</td>
+                                    <td>
+                                        <span class="badge" :class="isActive(section) ? 'badge-success' : 'badge-secondary'">
+                                            {{ isActive(section) ? 'Activo' : 'Inactivo' }}
+                                        </span>
+                                    </td>
+                                    <td class="text-center">
+                                        <button class="btn btn-xs btn-outline-secondary mr-1" :disabled="index === 0" title="Mover arriba" @click="moveSection(section, 'up')">
+                                            <i class="bi bi-arrow-up"></i>
+                                        </button>
+                                        <button class="btn btn-xs btn-outline-secondary mr-1" :disabled="index === group.sections.length - 1" title="Mover abajo" @click="moveSection(section, 'down')">
+                                            <i class="bi bi-arrow-down"></i>
+                                        </button>
+                                        <button class="btn btn-xs btn-warning" @click="editItem(section)"><i class="fas fa-edit"></i></button>
+                                    </td>
+                                </tr>
+                                <tr v-if="group.sections.length === 0">
+                                    <td colspan="6" class="text-center text-muted">Sin secciones para esta página</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div v-if="sectionGroups.length === 0" class="text-center text-muted p-4">Sin páginas para agrupar secciones</div>
+            </div>
+
+            <table v-if="!loading && currentSection !== 'sections'" class="table table-bordered table-hover">
                 <thead>
                     <tr>
                         <th v-for="field in tableFields" :key="field.name">{{ field.label }}</th>
@@ -71,13 +131,41 @@
                 </thead>
                 <tbody>
                     <tr v-for="item in currentItems" :key="item.id">
-                        <td v-for="field in tableFields" :key="field.name">{{ displayValue(item, field) }}</td>
+                        <td v-for="field in tableFields" :key="field.name">
+                            <template v-if="currentSection === 'pages' && field.name === 'published'">
+                                <span class="badge" :class="item.published == 1 ? 'badge-success' : 'badge-secondary'">
+                                    {{ item.published == 1 ? 'Publicada' : 'Borrador' }}
+                                </span>
+                            </template>
+                            <template v-else-if="currentSection === 'pages' && field.name === 'is_home'">
+                                <span v-if="item.is_home == 1" class="badge badge-info">Página de inicio</span>
+                                <span v-else class="text-muted">-</span>
+                            </template>
+                            <template v-else-if="currentSection === 'pages' && field.name === 'template_key'">
+                                <span class="badge badge-light">{{ templateLabel(item.template_key) }}</span>
+                            </template>
+                            <template v-else>{{ displayValue(item, field) }}</template>
+                        </td>
                         <td>
                             <span class="badge" :class="isActive(item) ? 'badge-success' : 'badge-secondary'">
                                 {{ isActive(item) ? 'Activo' : 'Inactivo' }}
                             </span>
                         </td>
                         <td class="text-center">
+                            <a v-if="currentSection === 'pages' && canPreviewPage(item)"
+                               class="btn btn-xs btn-info mr-1"
+                               :href="previewUrl(item)"
+                               target="_blank"
+                               rel="noopener"
+                               :title="previewTitle(item)">
+                                <i class="bi bi-eye"></i>
+                            </a>
+                            <button v-else-if="currentSection === 'pages'"
+                                    class="btn btn-xs btn-secondary mr-1"
+                                    disabled
+                                    title="Vista previa de borradores pendiente de implementar.">
+                                <i class="bi bi-eye-slash"></i>
+                            </button>
                             <button class="btn btn-xs btn-warning" @click="editItem(item)"><i class="fas fa-edit"></i></button>
                         </td>
                     </tr>
@@ -101,7 +189,11 @@
                         <div class="col-md-6" v-for="field in currentFields" :key="field.name">
                             <div class="form-group" v-if="field.type !== 'checkbox'">
                                 <label>{{ field.label }}</label>
-                                <select v-if="field.type === 'select'" class="form-control" v-model="form[field.name]">
+                                <select v-if="currentSection === 'sections' && form.section_type === 'block' && field.name === 'target_id'" class="form-control" v-model="form[field.name]">
+                                    <option value="0">Selecciona un bloque reutilizable</option>
+                                    <option v-for="option in options.blocks || []" :key="option.value" :value="option.value">{{ option.label }}</option>
+                                </select>
+                                <select v-else-if="field.type === 'select'" class="form-control" v-model="form[field.name]">
                                     <option value="">Selecciona</option>
                                     <option v-for="option in dynamicOptions(field)" :key="option.value" :value="option.value">{{ option.label }}</option>
                                 </select>
@@ -126,6 +218,7 @@
                                     </div>
                                 </div>
                                 <input v-else class="form-control" :type="inputType(field)" v-model="form[field.name]">
+                                <small v-if="fieldHelp(field)" class="form-text text-muted">{{ fieldHelp(field) }}</small>
                             </div>
                             <div class="custom-control custom-switch mt-4" v-if="field.type === 'checkbox'">
                                 <input type="checkbox" class="custom-control-input" :id="'field-' + field.name" v-model="form[field.name]">
@@ -136,7 +229,7 @@
 
                     <div v-if="currentSection === 'sections'" class="settings-card mt-3">
                         <div class="d-flex justify-content-between align-items-center mb-2">
-                            <strong>Configuracion del componente</strong>
+                            <strong>Configuración del componente</strong>
                             <span class="badge badge-light">{{ form.section_type || 'content' }}</span>
                         </div>
 
@@ -144,7 +237,7 @@
                             <div class="row" v-for="(item, index) in componentSettings.items" :key="'download-' + index">
                                 <div class="col-md-5">
                                     <div class="form-group">
-                                        <label>Titulo</label>
+                                        <label>Título</label>
                                         <input class="form-control" v-model="item.title" @input="syncComponentSettings">
                                     </div>
                                 </div>
@@ -175,7 +268,7 @@
                                 </div>
                                 <div class="col-md-6">
                                     <div class="form-group">
-                                        <label>Limite</label>
+                                        <label>Límite</label>
                                         <input type="number" min="1" max="24" class="form-control" v-model.number="componentSettings.limit" @input="syncComponentSettings">
                                     </div>
                                 </div>
@@ -186,13 +279,13 @@
                             <div class="row">
                                 <div class="col-md-6">
                                     <div class="form-group">
-                                        <label>Texto boton</label>
+                                        <label>Texto botón</label>
                                         <input class="form-control" v-model="componentSettings.button_text" @input="syncComponentSettings">
                                     </div>
                                 </div>
                                 <div class="col-md-6">
                                     <div class="form-group">
-                                        <label>URL boton</label>
+                                        <label>URL botón</label>
                                         <input class="form-control" v-model="componentSettings.button_url" @input="syncComponentSettings">
                                     </div>
                                 </div>
@@ -241,7 +334,7 @@
                                 <button class="btn btn-outline-danger btn-block mb-3" @click="removeSettingItem(index)"><i class="bi bi-trash"></i></button>
                             </div>
                         </div>
-                        <button class="btn btn-outline-primary btn-sm" @click="addFooterItem"><i class="bi bi-plus"></i> Agregar item</button>
+                        <button class="btn btn-outline-primary btn-sm" @click="addFooterItem"><i class="bi bi-plus"></i> Agregar elemento</button>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -254,7 +347,14 @@
 </div>
 
 <script>
-window.onload = function() {
+document.addEventListener('DOMContentLoaded', function() {
+    var frontendDataUrl = <?php echo json_encode(Uri::create('admin/frontend/data'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP); ?>;
+    var frontendSaveUrl = <?php echo json_encode(Uri::create('admin/frontend/save'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP); ?>;
+    var frontendMoveSectionUrl = <?php echo json_encode(Uri::create('admin/frontend/move_section'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP); ?>;
+    var frontendUploadUrl = <?php echo json_encode(Uri::create('admin/frontend/upload_image'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP); ?>;
+    var frontendAdminPreviewUrl = <?php echo json_encode(Uri::create('admin/frontend/preview'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP); ?>;
+    var frontendBaseUrl = <?php echo json_encode(Uri::base(false), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP); ?>;
+
     new Vue({
         el: '#app-frontend',
         data: {
@@ -267,7 +367,8 @@ window.onload = function() {
             form: {},
             richEditors: {},
             codeEditors: {},
-            componentSettings: {}
+            componentSettings: {},
+            errorMessage: ''
         },
         computed: {
             sectionKeys() { return Object.keys(this.definitions); },
@@ -276,21 +377,38 @@ window.onload = function() {
             tableFields() {
                 return this.currentFields.filter(field => !['active', 'content', 'settings_json', 'seo_description', 'media_path', 'image_path', 'logo_path', 'favicon_path', 'custom_css'].includes(field.name)).slice(0, 7);
             },
-            currentItems() { return this.items[this.currentSection] || []; }
+            currentItems() { return this.items[this.currentSection] || []; },
+            sectionGroups() {
+                const pages = (this.items.pages || []).slice().sort((a, b) => String(a.title || '').localeCompare(String(b.title || '')));
+                const sections = (this.items.sections || []).slice().sort((a, b) => {
+                    const order = Number(a.sort_order || 0) - Number(b.sort_order || 0);
+                    return order !== 0 ? order : Number(a.id || 0) - Number(b.id || 0);
+                });
+                return pages.map(page => ({
+                    page: page,
+                    sections: sections.filter(section => Number(section.page_id || 0) === Number(page.id || 0))
+                }));
+            }
         },
         mounted() { this.loadData(); },
         methods: {
             loadData() {
                 this.loading = true;
-                fetch('<?php echo Uri::create('admin/frontend/data'); ?>')
-                    .then(res => res.json())
+                this.errorMessage = '';
+                fetch(frontendDataUrl)
+                    .then(window.coreAppParseJsonResponse)
                     .then(data => {
                         this.loading = false;
-                        if (data.error) { alert(data.error); return; }
+                        if (data.error) { this.errorMessage = data.error; alert(data.error); return; }
                         this.definitions = data.definitions || {};
                         this.items = data.items || {};
                         this.options = data.options || {};
                         this.stats = data.stats || {};
+                    })
+                    .catch(() => {
+                        this.loading = false;
+                        this.errorMessage = 'No se pudo cargar el CMS Frontend.';
+                        alert(this.errorMessage);
                     });
             },
             emptyForm() {
@@ -324,16 +442,19 @@ window.onload = function() {
                 this.syncEditors();
                 if (this.hasVisualSettings()) this.syncComponentSettings();
                 this.form.section = this.currentSection;
-                fetch('<?php echo Uri::create('admin/frontend/save'); ?>', {
+                fetch(frontendSaveUrl, {
                     ...window.coreAppFetchOptions(this.form)
                 })
-                .then(res => res.json())
+                .then(window.coreAppParseJsonResponse)
                 .then(data => {
                     if (data.error) { alert(data.error); return; }
                     this.items = data.items || {};
                     this.options = data.options || {};
                     this.stats = data.stats || {};
                     this.hideModal('modal-frontend-item');
+                })
+                .catch(() => {
+                    alert('No se pudo guardar el registro.');
                 });
             },
             uploadImage(event, field) {
@@ -346,13 +467,32 @@ window.onload = function() {
                 data.append('field', field.name);
                 data.append(window.coreAppCsrfKey, fuel_csrf_token());
 
-                fetch('<?php echo Uri::create('admin/frontend/upload_image'); ?>', { method: 'POST', body: data })
-                    .then(res => res.json())
+                fetch(frontendUploadUrl, { method: 'POST', credentials: 'same-origin', headers: { 'Accept': 'application/json' }, body: data })
+                    .then(window.coreAppParseJsonResponse)
                     .then(data => {
                         event.target.value = '';
                         if (data.error) { alert(data.error); return; }
                         this.$set(this.form, field.name, data.path);
+                    })
+                    .catch(() => {
+                        event.target.value = '';
+                        alert('No se pudo subir la imagen.');
                     });
+            },
+            moveSection(section, direction) {
+                fetch(frontendMoveSectionUrl, {
+                    ...window.coreAppFetchOptions({ id: section.id, direction: direction })
+                })
+                .then(window.coreAppParseJsonResponse)
+                .then(data => {
+                    if (data.error) { alert(data.error); return; }
+                    this.items = data.items || {};
+                    this.options = data.options || {};
+                    this.stats = data.stats || {};
+                })
+                .catch(() => {
+                    alert('No se pudo reordenar la sección.');
+                });
             },
             inputType(field) {
                 if (field.type === 'number' || field.type === 'integer') return 'number';
@@ -472,7 +612,7 @@ window.onload = function() {
                     ],
                     legal: [
                         { label: 'Aviso de privacidad', url: 'pagina/aviso-de-privacidad', icon: '' },
-                        { label: 'Terminos y condiciones', url: 'pagina/terminos-condiciones', icon: '' }
+                        { label: 'Términos y condiciones', url: 'pagina/terminos-condiciones', icon: '' }
                     ]
                 };
                 this.$set(this.componentSettings, 'items', presets[type] || []);
@@ -480,7 +620,7 @@ window.onload = function() {
             },
             dynamicOptions(field) { return this.options[field.options] || []; },
             displayValue(item, field) {
-                if (field.type === 'checkbox') return item[field.name] == 1 ? 'Si' : 'No';
+                if (field.type === 'checkbox') return item[field.name] == 1 ? 'Sí' : 'No';
                 if (field.type === 'select') {
                     const found = this.dynamicOptions(field).find(option => option.value == item[field.name]);
                     return found ? found.label : item[field.name];
@@ -491,11 +631,76 @@ window.onload = function() {
                 }
                 return item[field.name] || '-';
             },
+            templateLabel(value) {
+                value = value || 'default';
+                const labels = {
+                    default: 'Predeterminada',
+                    home: 'Inicio',
+                    content: 'Contenido',
+                    catalog: 'Catálogo'
+                };
+                return labels[value] || value;
+            },
+            sectionTypeLabel(value) {
+                const labels = {
+                    hero: 'Hero',
+                    content: 'Contenido',
+                    content_image: 'Texto con imagen',
+                    feature_grid: 'Servicios',
+                    products: 'Productos',
+                    brands: 'Marcas',
+                    categories: 'Categorías',
+                    download_cards: 'Descargas',
+                    contact_info: 'Contacto',
+                    cta: 'CTA',
+                    banner: 'Banner',
+                    block: 'Bloque reutilizable'
+                };
+                return labels[value] || value || 'Contenido';
+            },
+            blockLabel(targetId, sectionKey) {
+                const byId = (this.options.blocks || []).find(option => Number(option.value) === Number(targetId || 0));
+                if (byId) return byId.label;
+                const byCode = (this.items.blocks || []).find(block => String(block.code || '') === String(sectionKey || '') && block.active == 1);
+                if (byCode) return byCode.name;
+                return 'Sin bloque vinculado';
+            },
+            blockWarning(section) {
+                if (!section || section.section_type !== 'block') return '';
+                if (this.blockExists(section)) return '';
+                return 'Bloque reutilizable no encontrado o inactivo.';
+            },
+            blockExists(section) {
+                const targetId = Number(section.target_id || 0);
+                if (targetId > 0 && (this.options.blocks || []).some(option => Number(option.value) === targetId)) {
+                    return true;
+                }
+                return (this.items.blocks || []).some(block => String(block.code || '') === String(section.section_key || '') && block.active == 1);
+            },
+            canPreviewPage(item) {
+                return !!(item && item.id);
+            },
+            previewUrl(item) {
+                if (!item) return '#';
+                if (item.published == 1 && this.isActive(item)) {
+                    if (item.is_home == 1) return frontendBaseUrl;
+                    return frontendBaseUrl + 'pagina/' + String(item.slug || '').replace(/^\/+/, '');
+                }
+                return frontendAdminPreviewUrl.replace(/\/+$/, '') + '/' + encodeURIComponent(item.id);
+            },
+            fieldHelp(field) {
+                return field && field.help ? field.help : '';
+            },
+            previewTitle(item) {
+                return item && item.published == 1 && this.isActive(item)
+                    ? 'Vista previa pública'
+                    : 'Vista previa administrativa';
+            },
             isActive(item) { return typeof item.active === 'undefined' || item.active == 1; },
             assetUrl(path) {
                 if (!path) return '';
                 if (/^https?:\/\//.test(path)) return path;
-                return '<?php echo Uri::base(false); ?>' + path.replace(/^\/+/, '');
+                return frontendBaseUrl + path.replace(/^\/+/, '');
             },
             showModal(id) {
                 const element = document.getElementById(id);
@@ -520,5 +725,5 @@ window.onload = function() {
             }
         }
     });
-};
+});
 </script>

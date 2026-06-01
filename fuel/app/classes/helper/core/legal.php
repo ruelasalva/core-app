@@ -215,18 +215,21 @@ class Helper_Core_Legal
         $endpoint = \Uri::create('legal/cookies/accept');
         $csrf_key = \Config::get('security.csrf_token_key', 'fuel_csrf_token');
         $csrf_token = \Security::fetch_token();
+        $endpoint_json = json_encode($endpoint);
+        $csrf_key_json = json_encode($csrf_key);
+        $csrf_token_json = json_encode($csrf_token);
 
         # SE REGRESA HTML AUTOCONTENIDO PARA FRONTEND
         return <<<HTML
-<div id="core-cookie-banner" style="position:fixed;left:0;right:0;bottom:0;z-index:9999;background:#1f2937;color:#fff;padding:16px;">
-    <div style="max-width:1100px;margin:0 auto;display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;">
-        <div>
+<div id="core-cookie-banner" class="core-cookie-banner">
+    <div class="core-cookie-inner">
+        <div class="core-cookie-copy">
             <strong>Preferencias de cookies</strong><br>
-            <span>Usamos cookies necesarias y, con tu permiso, cookies de analitica y marketing.</span>
+            <span>Usamos cookies necesarias y, con tu permiso, cookies de analítica y marketing.</span>
         </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            <button type="button" data-core-cookies="necessary" style="padding:8px 12px;">Solo necesarias</button>
-            <button type="button" data-core-cookies="all" style="padding:8px 12px;">Aceptar todas</button>
+        <div class="core-cookie-actions">
+            <button type="button" data-core-cookies="necessary">Solo necesarias</button>
+            <button type="button" data-core-cookies="all">Aceptar todas</button>
         </div>
     </div>
 </div>
@@ -234,14 +237,17 @@ class Helper_Core_Legal
 (function() {
     var banner = document.getElementById('core-cookie-banner');
     if (!banner) return;
+    var endpoint = {$endpoint_json};
+    var csrfKey = {$csrf_key_json};
+    var csrfToken = {$csrf_token_json};
 
     function saveCookies(mode) {
         var payload = mode === 'all'
             ? { analytics: 1, marketing: 1, personalization: 1 }
             : { analytics: 0, marketing: 0, personalization: 0 };
-        payload['{$csrf_key}'] = '{$csrf_token}';
+        payload[csrfKey] = csrfToken;
 
-        fetch('{$endpoint}', {
+        fetch(endpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),

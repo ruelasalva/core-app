@@ -459,10 +459,13 @@
             border-radius: 4px;
             border-color: #cbd5e1;
         }
-        <?php if ($theme && !empty($theme->custom_css)): ?>
-        <?php echo $theme->custom_css; ?>
-        <?php endif; ?>
     </style>
+    <?php echo Asset::css('frontend-public.css'); ?>
+    <?php if ($theme && !empty($theme->custom_css)): ?>
+    <style>
+        <?php echo $theme->custom_css; ?>
+    </style>
+    <?php endif; ?>
     <?php
     $public_url = function ($url) {
         if (empty($url) || $url === '/') {
@@ -486,6 +489,14 @@
         $icon = trim((string) $icon);
         return $icon !== '' ? $icon : $fallback;
     };
+    $footer_safe_html = function ($html) {
+        $html = html_entity_decode((string) $html, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $html = preg_replace('/<\s*script[^>]*>.*?<\s*\/\s*script\s*>/is', '', $html);
+        $html = preg_replace('/<\s*iframe[^>]*>.*?<\s*\/\s*iframe\s*>/is', '', $html);
+        $html = preg_replace('/\son[a-z]+\s*=\s*("[^"]*"|\'[^\']*\'|[^\s>]+)/i', '', $html);
+        $html = preg_replace('/javascript\s*:/i', '', $html);
+        return strip_tags($html, '<p><br><strong><b><em><i><u><ul><ol><li><a><span>');
+    };
     ?>
 </head>
 <body class="frontend-layout layout-<?php echo e($layout_key); ?>">
@@ -508,6 +519,7 @@
                 </div>
                 <?php endif; ?>
                 <div class="account-menu">
+                    <a class="site-cta primary" href="<?php echo Uri::create('pagina/contacto'); ?>"><i class="bi bi-chat-dots"></i> Solicitar información</a>
                     <?php $cart_count = isset($cart_count) ? (int) $cart_count : 0; ?>
                     <a class="cart-link" data-cart-link href="<?php echo Uri::create('carrito'); ?>"><i class="fas fa-shopping-cart"></i> Carrito<?php echo $cart_count > 0 ? ' ('.$cart_count.')' : ''; ?></a>
                     <?php $frontend_user = !empty($frontend_user) ? $frontend_user : ['logged_in' => false, 'name' => '']; ?>
@@ -555,7 +567,7 @@
                                 <?php endif; ?>
                             </div>
                             <?php endforeach; ?>
-                            <?php if (!empty($column->content)): ?><div class="footer-rich"><?php echo $column->content; ?></div><?php endif; ?>
+                            <?php if (!empty($column->content)): ?><div class="footer-rich"><?php echo $footer_safe_html($column->content); ?></div><?php endif; ?>
                         </div>
                     <?php elseif ($type === 'social'): ?>
                         <div class="footer-social">
@@ -566,7 +578,7 @@
                             </a>
                             <?php endforeach; ?>
                         </div>
-                        <?php if (!empty($column->content)): ?><div class="footer-rich" style="margin-top: 12px;"><?php echo $column->content; ?></div><?php endif; ?>
+                        <?php if (!empty($column->content)): ?><div class="footer-rich" style="margin-top: 12px;"><?php echo $footer_safe_html($column->content); ?></div><?php endif; ?>
                     <?php elseif ($type === 'badges'): ?>
                         <div class="footer-badges">
                             <?php foreach ($footer_items($column) as $item): ?>
@@ -574,9 +586,9 @@
                             <span class="footer-badge"><i class="<?php echo e($footer_icon(\Arr::get($item, 'icon', ''), 'bi bi-patch-check')); ?>"></i> <?php echo e($item['label']); ?></span>
                             <?php endforeach; ?>
                         </div>
-                        <?php if (!empty($column->content)): ?><div class="footer-rich" style="margin-top: 12px;"><?php echo $column->content; ?></div><?php endif; ?>
+                        <?php if (!empty($column->content)): ?><div class="footer-rich" style="margin-top: 12px;"><?php echo $footer_safe_html($column->content); ?></div><?php endif; ?>
                     <?php else: ?>
-                        <div class="footer-rich"><?php echo $column->content; ?></div>
+                        <div class="footer-rich"><?php echo $footer_safe_html($column->content); ?></div>
                     <?php endif; ?>
                 </section>
                 <?php endforeach; ?>
