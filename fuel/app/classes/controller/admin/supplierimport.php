@@ -118,6 +118,43 @@ class Controller_Admin_Supplierimport extends Controller_Adminbase
         }
     }
 
+    public function post_download_images()
+    {
+        $this->require_access('commerce.access[edit]');
+
+        try {
+            if (!$this->upload_security_token_valid()) {
+                return $this->json_response([
+                    'success' => false,
+                    'message' => 'La solicitud no paso la validacion de seguridad. Recarga la pantalla e intenta de nuevo.',
+                    'data' => [],
+                    'errors' => ['La solicitud no paso la validacion de seguridad. Recarga la pantalla e intenta de nuevo.'],
+                ], 400);
+            }
+
+            $manager = new \Service_Core_SupplierImport_Manager();
+            $result = $manager->download_product_images();
+
+            return $this->json_response([
+                'success' => true,
+                'message' => 'Descarga de imagenes completada.',
+                'data' => [
+                    'result' => $result,
+                    'review' => $manager->review_data($this->review_filters()),
+                ],
+                'errors' => [],
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error descargando imagenes de staging proveedor: '.$e->getMessage());
+            return $this->json_response([
+                'success' => false,
+                'message' => 'No se pudieron descargar imagenes de productos.',
+                'data' => [],
+                'errors' => [$e->getMessage()],
+            ], 400);
+        }
+    }
+
     public function action_csv_template()
     {
         $manager = new \Service_Core_SupplierImport_Manager();

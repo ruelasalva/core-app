@@ -31,6 +31,9 @@
             <button type="button" class="btn btn-sm btn-primary ml-1" :disabled="loadingAction" @click="applyApproved">
                 <i class="bi bi-box-seam"></i> Crear productos aprobados
             </button>
+            <button type="button" class="btn btn-sm btn-outline-primary ml-1" :disabled="loadingAction" @click="downloadImages">
+                <i class="bi bi-image"></i> Descargar im&aacute;genes
+            </button>
         </div>
     </div>
 
@@ -69,6 +72,34 @@
             </div>
             <div v-if="applyResult.messages && applyResult.messages.length" class="alert alert-warning mb-0">
                 <div v-for="message in applyResult.messages" :key="message">{{ message }}</div>
+            </div>
+        </div>
+    </div>
+    <div v-if="imageResult" class="card card-outline card-info">
+        <div class="card-header">
+            <h3 class="card-title mb-0">Resultado de descarga de im&aacute;genes</h3>
+        </div>
+        <div class="card-body">
+            <div class="row text-center">
+                <div class="col-md-3 col-6 mb-2">
+                    <strong>{{ number(imageResult.products_processed) }}</strong>
+                    <div class="text-muted small">Productos procesados</div>
+                </div>
+                <div class="col-md-3 col-6 mb-2">
+                    <strong>{{ number(imageResult.images_downloaded) }}</strong>
+                    <div class="text-muted small">Im&aacute;genes descargadas</div>
+                </div>
+                <div class="col-md-3 col-6 mb-2">
+                    <strong>{{ number(imageResult.images_skipped) }}</strong>
+                    <div class="text-muted small">Im&aacute;genes omitidas</div>
+                </div>
+                <div class="col-md-3 col-6 mb-2">
+                    <strong>{{ number(imageResult.errors) }}</strong>
+                    <div class="text-muted small">Errores</div>
+                </div>
+            </div>
+            <div v-if="imageResult.messages && imageResult.messages.length" class="alert alert-warning mb-0">
+                <div v-for="message in imageResult.messages" :key="message">{{ message }}</div>
             </div>
         </div>
     </div>
@@ -260,6 +291,7 @@ document.addEventListener('DOMContentLoaded', function() {
     var approveRowsUrl = <?php echo json_encode(Uri::create('admin/supplierimport/approve_rows'), $json_flags); ?>;
     var rejectRowsUrl = <?php echo json_encode(Uri::create('admin/supplierimport/reject_rows'), $json_flags); ?>;
     var applyApprovedUrl = <?php echo json_encode(Uri::create('admin/supplierimport/apply_approved'), $json_flags); ?>;
+    var downloadImagesUrl = <?php echo json_encode(Uri::create('admin/supplierimport/download_images'), $json_flags); ?>;
     var initialData = <?php echo json_encode((array) $initial_data, $json_flags); ?>;
 
     new Vue({
@@ -282,7 +314,8 @@ document.addEventListener('DOMContentLoaded', function() {
             },
             selectedIds: [],
             detailRow: null,
-            applyResult: null
+            applyResult: null,
+            imageResult: null
         },
         computed: {
             allVisibleSelected: function() {
@@ -304,6 +337,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 self.errorMessage = '';
                 self.successMessage = '';
                 self.applyResult = null;
+                self.imageResult = null;
 
                 fetch(reviewDataUrl + '?' + self.queryString(), {
                     credentials: 'same-origin',
@@ -357,7 +391,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (!confirm('Se crearan productos no publicados solo desde filas aprobadas. No se actualizara inventario ni imagenes. Deseas continuar?')) {
                     return;
                 }
-                this.changeRows(applyApprovedUrl, [], true);
+                this.changeRows(applyApprovedUrl, [], 'apply');
+            },
+            downloadImages: function() {
+                if (!confirm('Se descargaran imagenes solo para productos creados o mapeados. No se sobrescribiran imagenes existentes. Deseas continuar?')) {
+                    return;
+                }
+                this.changeRows(downloadImagesUrl, [], 'images');
             },
             approveRows: function(ids) {
                 this.changeRows(approveRowsUrl, ids);
@@ -365,15 +405,15 @@ document.addEventListener('DOMContentLoaded', function() {
             rejectRows: function(ids) {
                 this.changeRows(rejectRowsUrl, ids);
             },
-            changeRows: function(url, ids, applyAllApproved) {
+            changeRows: function(url, ids, specialAction) {
                 var self = this;
-                if (!applyAllApproved && (!ids || !ids.length)) {
+                if (!specialAction && (!ids || !ids.length)) {
                     self.errorMessage = 'Selecciona al menos una fila.';
                     return;
                 }
 
                 var formData = new FormData();
-                if (!applyAllApproved) {
+                if (!specialAction) {
                     formData.append('ids', JSON.stringify(ids));
                 }
                 if (window.coreAppCsrfKey && window.fuel_csrf_token) {
@@ -400,8 +440,11 @@ document.addEventListener('DOMContentLoaded', function() {
                             return;
                         }
                         self.successMessage = response.message || 'Estado actualizado.';
-                        if (applyAllApproved && response.data && response.data.result) {
+                        if (specialAction === 'apply' && response.data && response.data.result) {
                             self.applyResult = response.data.result;
+                        }
+                        if (specialAction === 'images' && response.data && response.data.result) {
+                            self.imageResult = response.data.result;
                         }
                         var payload = response.data && response.data.review ? response.data.review : null;
                         if (payload) {

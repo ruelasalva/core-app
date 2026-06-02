@@ -135,6 +135,12 @@ class Service_Core_SupplierImport_Manager
         return $writer->apply_approved();
     }
 
+    public function download_product_images()
+    {
+        $manager = new \Service_Core_SupplierImport_ImageManager();
+        return $manager->download_images();
+    }
+
     public function csv_template_rows()
     {
         return [
