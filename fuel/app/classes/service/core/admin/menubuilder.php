@@ -49,6 +49,7 @@ class Service_Core_Admin_MenuBuilder
 
             $this->header('COMERCIAL', $menu['commerce'] || $menu['sales'] || $menu['crm'] || $menu['commissions']),
             $this->item('Productos y precios', 'bi bi-box-seam', \Uri::create('admin/commerce'), $segment === 'commerce', $menu['commerce']),
+            $this->item('Importaci&oacute;n de proveedores', 'bi bi-cloud-arrow-up', \Uri::create('admin/supplierimport'), $segment === 'supplierimport', $menu['commerce']),
             $this->tree('Ventas', 'bi bi-receipt', $sales_open, $menu['sales'], [
                 $this->item('Cotizaciones', 'bi bi-circle', \Uri::create('admin/sales', [], ['view' => 'quotes']), $segment === 'sales' && $sales_view === 'quotes', $menu['sales']),
                 $this->item('Pedidos', 'bi bi-circle', \Uri::create('admin/sales', [], ['view' => 'orders']), $segment === 'sales' && $sales_view === 'orders', $menu['sales']),
