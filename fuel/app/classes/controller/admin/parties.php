@@ -22,8 +22,10 @@ class Controller_Admin_Parties extends Controller_Adminbase
         # REQUERIDA PARA EL TEMPLATING Y SESION ADMIN
         parent::before();
 
-        # VALIDAR PERMISO ORM AUTH
-        $this->require_access('parties.access[view]');
+        # VALIDAR PERMISO ORM AUTH COMPLETO O LIMITADO A CLIENTES
+        if (!$this->can_view_parties() && !$this->can_view_customers()) {
+            throw new \HttpNoAccessException;
+        }
     }
 
     /**
@@ -37,8 +39,10 @@ class Controller_Admin_Parties extends Controller_Adminbase
     public function action_index()
     {
         # SE CARGA LA VISTA PRINCIPAL
-        $this->template->title = 'Terceros';
-        $this->template->content = View::forge('admin/parties/index');
+        $this->template->title = $this->customer_only_mode() ? 'Clientes' : 'Terceros';
+        $this->template->content = View::forge('admin/parties/index', [
+            'customer_only' => $this->customer_only_mode(),
+        ]);
     }
 
     /**
@@ -61,6 +65,7 @@ class Controller_Admin_Parties extends Controller_Adminbase
                 'items' => $this->get_all_items(),
                 'options' => $this->get_options(),
                 'stats' => $this->get_stats(),
+                'customer_only' => $this->customer_only_mode(),
             ]);
         } catch (\Exception $e) {
             \Log::error('Error cargando terceros: '.$e->getMessage());
@@ -89,6 +94,10 @@ class Controller_Admin_Parties extends Controller_Adminbase
     public function action_csv_template()
     {
         $section = trim((string) \Input::get('section', 'customers'));
+        if ($this->customer_only_mode() && $section !== 'customers') {
+            throw new \HttpNoAccessException;
+        }
+
         $type = $section === 'suppliers' ? 'supplier' : 'customer';
         $filename = $type === 'supplier' ? 'plantilla_proveedores.csv' : 'plantilla_clientes.csv';
         $rows = [
@@ -109,11 +118,19 @@ class Controller_Admin_Parties extends Controller_Adminbase
      */
     public function action_import_csv()
     {
-        $this->require_access('parties.access[edit]');
+        if ($this->customer_only_mode()) {
+            $this->require_access('customers.access[edit]');
+        } else {
+            $this->require_access('parties.access[edit]');
+        }
 
         try {
             $this->assert_schema_ready();
             $section = trim((string) \Input::post('section', 'customers'));
+            if ($this->customer_only_mode() && $section !== 'customers') {
+                return $this->json_response(['error' => 'No tienes permiso para importar proveedores.'], 403);
+            }
+
             $default_type = $section === 'suppliers' ? 'supplier' : 'customer';
             $file = \Input::file('file');
             if (!$file || (int) \Arr::get($file, 'error', UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
@@ -125,7 +142,7 @@ class Controller_Admin_Parties extends Controller_Adminbase
                 return $this->json_response(['error' => 'Solo se permiten archivos CSV o TXT.'], 422);
             }
 
-            $result = $this->import_parties_csv((string) \Arr::get($file, 'tmp_name', ''), $default_type);
+            $result = $this->import_parties_csv((string) \Arr::get($file, 'tmp_name', ''), $default_type, $this->customer_only_mode());
             return $this->json_response([
                 'status' => 'ok',
                 'message' => 'Importacion terminada. Creados: '.$result['created'].', actualizados: '.$result['updated'].', omitidos: '.$result['skipped'].'.',
@@ -150,18 +167,25 @@ class Controller_Admin_Parties extends Controller_Adminbase
      */
     public function post_save()
     {
-        # VALIDAR PERMISO PARA EDITAR
-        $this->require_access('parties.access[edit]');
-
         # SE OBTIENE PAYLOAD JSON
         $val = (array) \Input::json();
+        $section = trim((string) \Arr::get($val, 'section', ''));
+
+        # VALIDAR PERMISO PARA EDITAR SEGUN ALCANCE
+        if ($this->customer_only_mode()) {
+            $this->require_access('customers.access[edit]');
+            if (!in_array($section, ['customers', 'addresses', 'contacts'], true)) {
+                return $this->json_response(['error' => 'No tienes permiso para editar proveedores.'], 403);
+            }
+        } else {
+            $this->require_access('parties.access[edit]');
+        }
 
         try {
             # SE VALIDA QUE LA ESTRUCTURA EXISTA
             $this->assert_schema_ready();
 
             # SE INICIALIZAN VARIABLES PRINCIPALES
-            $section = trim((string) \Arr::get($val, 'section', ''));
             $definitions = $this->get_definitions();
             if (!isset($definitions[$section])) {
                 return $this->json_response(['error' => 'Seccion invalida.'], 422);
@@ -206,6 +230,13 @@ class Controller_Admin_Parties extends Controller_Adminbase
                 $data['rfc'] = strtoupper($data['rfc']);
             }
 
+            if ($this->customer_only_mode()) {
+                $guard = $this->guard_customer_only_save($section, $data, (int) \Arr::get($val, 'id', 0), $val);
+                if ($guard !== true) {
+                    return $this->json_response(['error' => $guard], 403);
+                }
+            }
+
             # SE BUSCA EL REGISTRO EXISTENTE O SE CREA UNO NUEVO
             $class = $definition['model'];
             $id = (int) \Arr::get($val, 'id', 0);
@@ -246,12 +277,12 @@ class Controller_Admin_Parties extends Controller_Adminbase
     protected function get_definitions()
     {
         # SE DEFINEN SECCIONES DE TERCEROS
-        return [
+        $definitions = [
             'customers' => [
                 'title' => 'Clientes',
                 'model' => 'Model_Core_Party',
                 'table' => 'core_parties',
-                'filter' => ['party_type', ['customer', 'both']],
+                'filter' => ['party_type', $this->customer_only_mode() ? ['customer'] : ['customer', 'both']],
                 'required' => ['code', 'name'],
                 'fields' => $this->party_fields('customer'),
             ],
@@ -304,6 +335,15 @@ class Controller_Admin_Parties extends Controller_Adminbase
                 ],
             ],
         ];
+
+        if (!$this->customer_only_mode()) {
+            return $definitions;
+        }
+
+        unset($definitions['suppliers']);
+        $definitions['customers']['fields'] = $this->customer_fields_for_limited_access($definitions['customers']['fields']);
+
+        return $definitions;
     }
 
     /**
@@ -351,6 +391,149 @@ class Controller_Admin_Parties extends Controller_Adminbase
         ];
     }
 
+    protected function can_view_parties()
+    {
+        return $this->is_super_admin || \Auth::has_access('parties.access[view]');
+    }
+
+    protected function can_edit_parties()
+    {
+        return $this->is_super_admin || \Auth::has_access('parties.access[edit]');
+    }
+
+    protected function can_view_customers()
+    {
+        return $this->is_super_admin || \Auth::has_access('customers.access[view]');
+    }
+
+    protected function can_edit_customers()
+    {
+        return $this->is_super_admin || \Auth::has_access('customers.access[edit]');
+    }
+
+    protected function customer_only_mode()
+    {
+        return !$this->can_view_parties() && $this->can_view_customers();
+    }
+
+    protected function customer_fields_for_limited_access(array $fields)
+    {
+        $blocked = ['party_type', 'buyer_user_id', 'onboarding_status', 'onboarding_notes'];
+
+        return array_values(array_filter($fields, function ($field) use ($blocked) {
+            return !in_array((string) \Arr::get($field, 'name', ''), $blocked, true);
+        }));
+    }
+
+    protected function guard_customer_only_save($section, array &$data, $id, array $payload)
+    {
+        if ($section === 'customers') {
+            $requested_type = $this->party_type(\Arr::get($payload, 'party_type', 'customer'));
+            if (in_array($requested_type, ['supplier', 'both'], true)) {
+                return 'No tienes permiso para crear o editar proveedores.';
+            }
+
+            if ($id > 0) {
+                $party = \Model_Core_Party::find($id);
+                if (!$party || (string) $party->party_type !== 'customer') {
+                    return 'No tienes permiso para editar proveedores o registros mixtos.';
+                }
+            }
+
+            $data['party_type'] = 'customer';
+            return true;
+        }
+
+        if (in_array($section, ['addresses', 'contacts'], true)) {
+            if ($id > 0) {
+                $existing_party_id = $this->existing_party_id_for_section($section, $id);
+                if ($existing_party_id < 1 || !$this->is_customer_party($existing_party_id)) {
+                    return 'No tienes permiso para editar datos relacionados con proveedores.';
+                }
+            }
+
+            $party_id = (int) \Arr::get($data, 'party_id', 0);
+            if ($party_id < 1 || !$this->is_customer_party($party_id)) {
+                return 'Selecciona un cliente valido.';
+            }
+
+            return true;
+        }
+
+        return 'No tienes permiso para editar esta seccion.';
+    }
+
+    protected function existing_party_id_for_section($section, $id)
+    {
+        $table = $section === 'addresses' ? 'core_party_addresses' : 'core_party_contacts';
+        if (!\DBUtil::table_exists($table)) {
+            return 0;
+        }
+
+        $row = \DB::select('party_id')
+            ->from($table)
+            ->where('id', '=', (int) $id)
+            ->execute()
+            ->current();
+
+        return $row ? (int) $row['party_id'] : 0;
+    }
+
+    protected function is_customer_party($party_id)
+    {
+        if ($party_id < 1) {
+            return false;
+        }
+
+        $row = \DB::select('id')
+            ->from('core_parties')
+            ->where('id', '=', (int) $party_id)
+            ->where('party_type', '=', 'customer')
+            ->execute()
+            ->current();
+
+        return (bool) $row;
+    }
+
+    protected function customer_party_ids()
+    {
+        $ids = [];
+        if (!\DBUtil::table_exists('core_parties')) {
+            return $ids;
+        }
+
+        $rows = \DB::select('id')
+            ->from('core_parties')
+            ->where('party_type', '=', 'customer')
+            ->execute();
+
+        foreach ($rows as $row) {
+            $ids[] = (int) $row['id'];
+        }
+
+        return $ids;
+    }
+
+    protected function customer_options()
+    {
+        $rows = \DB::select('id', 'name')
+            ->from('core_parties')
+            ->where('party_type', '=', 'customer')
+            ->where('active', '=', 1)
+            ->order_by('name', 'asc')
+            ->execute();
+
+        $options = [];
+        foreach ($rows as $row) {
+            $options[] = [
+                'value' => (string) $row['id'],
+                'label' => (string) $row['name'],
+            ];
+        }
+
+        return $options;
+    }
+
     /**
      * GET ALL ITEMS
      *
@@ -372,6 +555,13 @@ class Controller_Admin_Parties extends Controller_Adminbase
             }
             if ($definition['table'] === 'core_parties') {
                 $this->apply_party_scope($query, 't0', 'any');
+            } elseif ($this->customer_only_mode() && in_array($definition['table'], ['core_party_addresses', 'core_party_contacts'], true)) {
+                $customer_ids = $this->customer_party_ids();
+                if (empty($customer_ids)) {
+                    $items[$key] = [];
+                    continue;
+                }
+                $query->where('party_id', 'in', $customer_ids);
             }
 
             $items[$key] = [];
@@ -393,8 +583,12 @@ class Controller_Admin_Parties extends Controller_Adminbase
      */
     protected function get_options()
     {
+        $parties = $this->customer_only_mode()
+            ? $this->customer_options()
+            : $this->select_options('core_parties', 'id', 'name');
+
         return [
-            'parties' => $this->select_options('core_parties', 'id', 'name'),
+            'parties' => $parties,
             'departments' => $this->select_options('core_departments', 'id', 'name'),
             'users' => $this->select_user_options(),
             'sellers' => \DBUtil::table_exists('core_sales_sellers') ? $this->select_options('core_sales_sellers', 'id', 'name') : [],
@@ -417,6 +611,22 @@ class Controller_Admin_Parties extends Controller_Adminbase
      */
     protected function get_stats()
     {
+        if ($this->customer_only_mode()) {
+            $customer_ids = $this->customer_party_ids();
+            $contacts = empty($customer_ids) ? 0 : (int) \DB::select()
+                ->from('core_party_contacts')
+                ->where('party_id', 'in', $customer_ids)
+                ->execute()
+                ->count();
+
+            return [
+                'customers' => (int) \DB::select()->from('core_parties')->where('party_type', '=', 'customer')->execute()->count(),
+                'suppliers' => 0,
+                'supplier_requests' => 0,
+                'contacts' => $contacts,
+            ];
+        }
+
         return [
             'customers' => (int) \DB::select()->from('core_parties')->where('party_type', 'in', ['customer', 'both'])->execute()->count(),
             'suppliers' => (int) \DB::select()->from('core_parties')->where('party_type', 'in', ['supplier', 'both'])->execute()->count(),
@@ -472,7 +682,7 @@ class Controller_Admin_Parties extends Controller_Adminbase
         }
     }
 
-    protected function import_parties_csv($path, $default_type)
+    protected function import_parties_csv($path, $default_type, $customer_only = false)
     {
         $rows = $this->read_csv_rows($path);
         $result = ['created' => 0, 'updated' => 0, 'skipped' => 0, 'errors' => []];
@@ -485,6 +695,12 @@ class Controller_Admin_Parties extends Controller_Adminbase
             }
 
             $party_type = $this->party_type(\Arr::get($row, 'party_type', $default_type));
+            if ($customer_only && $party_type !== 'customer') {
+                $result['errors'][] = 'Fila '.($index + 2).': no tienes permiso para importar proveedores o registros mixtos.';
+                $result['skipped']++;
+                continue;
+            }
+
             $data = [
                 'party_type' => $party_type,
                 'code' => $this->unique_party_code(trim((string) \Arr::get($row, 'code', '')), $name, 0),
@@ -511,6 +727,12 @@ class Controller_Admin_Parties extends Controller_Adminbase
             if ($existing) {
                 $party = \Model_Core_Party::find((int) $existing['id']);
                 if ($party) {
+                    if ($customer_only && (string) $party->party_type !== 'customer') {
+                        $result['errors'][] = 'Fila '.($index + 2).': el RFC o codigo corresponde a un proveedor o registro mixto existente.';
+                        $result['skipped']++;
+                        continue;
+                    }
+
                     $data['party_type'] = $this->merge_party_type((string) $party->party_type, $party_type);
                     unset($data['code']);
                     $party->set($data);

@@ -6,13 +6,13 @@
                 <div class="icon"><i class="bi bi-person-check"></i></div>
             </div>
         </div>
-        <div class="col-lg-3">
+        <div class="col-lg-3" v-if="!customerOnly">
             <div class="small-box bg-success">
                 <div class="inner"><h3>{{ stats.suppliers || 0 }}</h3><p>Proveedores</p></div>
                 <div class="icon"><i class="bi bi-building"></i></div>
             </div>
         </div>
-        <div class="col-lg-3">
+        <div class="col-lg-3" v-if="!customerOnly">
             <div class="small-box bg-warning">
                 <div class="inner"><h3>{{ stats.supplier_requests || 0 }}</h3><p>Solicitudes proveedor</p></div>
                 <div class="icon"><i class="bi bi-clipboard-check"></i></div>
@@ -29,7 +29,7 @@
     <div class="card card-primary card-outline">
         <div class="card-header">
             <div class="d-flex justify-content-between align-items-center">
-                <h3 class="card-title">{{ currentDefinition.title || 'Terceros' }}</h3>
+                <h3 class="card-title">{{ customerOnly ? 'Clientes' : (currentDefinition.title || 'Terceros') }}</h3>
                 <div class="d-flex align-items-center">
                     <select class="form-control form-control-sm mr-2" v-model="currentSection">
                         <option v-for="key in sectionKeys" :key="key" :value="key">{{ definitions[key].title }}</option>
@@ -49,7 +49,7 @@
             <div v-if="message" class="alert alert-info py-2">{{ message }}</div>
             <div v-if="loading" class="text-center p-5">
                 <div class="spinner-border text-primary" role="status"></div>
-                <p class="mt-2">Cargando terceros...</p>
+                <p class="mt-2">{{ customerOnly ? 'Cargando clientes...' : 'Cargando terceros...' }}</p>
             </div>
 
             <table v-show="!loading" class="table table-bordered table-hover">
@@ -70,10 +70,10 @@
                         </td>
                         <td class="text-center">
                             <button class="btn btn-xs btn-warning" @click="editItem(item)"><i class="fas fa-edit"></i></button>
-                            <button v-if="currentSection === 'suppliers' && item.onboarding_status === 'pending'" class="btn btn-xs btn-success" @click="reviewSupplier(item, 'approve_supplier')">
+                            <button v-if="!customerOnly && currentSection === 'suppliers' && item.onboarding_status === 'pending'" class="btn btn-xs btn-success" @click="reviewSupplier(item, 'approve_supplier')">
                                 Aprobar
                             </button>
-                            <button v-if="currentSection === 'suppliers' && item.onboarding_status === 'pending'" class="btn btn-xs btn-danger" @click="reviewSupplier(item, 'reject_supplier')">
+                            <button v-if="!customerOnly && currentSection === 'suppliers' && item.onboarding_status === 'pending'" class="btn btn-xs btn-danger" @click="reviewSupplier(item, 'reject_supplier')">
                                 Rechazar
                             </button>
                         </td>
@@ -130,6 +130,7 @@ window.onload = function() {
     new Vue({
         el: '#app-parties',
         data: {
+            customerOnly: <?php echo !empty($customer_only) ? 'true' : 'false'; ?>,
             loading: true,
             currentSection: 'customers',
             definitions: {},
@@ -162,6 +163,10 @@ window.onload = function() {
                         this.items = data.items || {};
                         this.options = data.options || {};
                         this.stats = data.stats || {};
+                        this.customerOnly = data.customer_only === true || data.customer_only === 1;
+                        if (!this.definitions[this.currentSection]) {
+                            this.currentSection = this.sectionKeys[0] || 'customers';
+                        }
                     });
             },
             emptyForm() {

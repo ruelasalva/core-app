@@ -100,8 +100,8 @@ class Service_Core_Admin_MenuBuilder
                 $this->item('Logistica', 'bi bi-truck', \Uri::create('admin/catalogs').'?group=logistics', $catalog_open && $catalog_group === 'logistics'),
             ], true),
 
-            $this->header('RELACIONES Y PORTALES', $menu['parties'] || $menu['portals']),
-            $this->item('Clientes y proveedores', 'bi bi-person-vcard', \Uri::create('admin/parties'), $segment === 'parties', $menu['parties']),
+            $this->header('RELACIONES Y PORTALES', $menu['parties'] || $menu['customers'] || $menu['portals']),
+            $this->item($menu['parties'] ? 'Clientes y proveedores' : 'Clientes', 'bi bi-person-vcard', $menu['parties'] ? \Uri::create('admin/parties') : \Uri::create('admin/parties', [], ['section' => 'customers']), $segment === 'parties', $menu['parties'] || $menu['customers']),
             $this->tree('Portales', 'bi bi-door-open', $portal_open, $menu['portals'], [
                 $this->item('Accesos', 'bi bi-person-lock', \Uri::create('admin/portals').'?section=user_links', $portal_open && $portal_section === 'user_links'),
                 $this->item('Perfiles', 'bi bi-door-open', \Uri::create('admin/portals').'?section=profiles', $portal_open && $portal_section === 'profiles'),
