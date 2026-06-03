@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 $media_url = function ($path) {
     if (empty($path)) {
         return '';
@@ -20,6 +20,9 @@ $category_url = function ($slug) {
 $tag_url = function ($slug) {
     return Uri::create('tag/'.$slug);
 };
+
+$inquiry_url = !empty($product['inquiry_url']) ? (string) $product['inquiry_url'] : Uri::create('pagina/contacto');
+$inquiry_target = !empty($product['inquiry_target']) ? (string) $product['inquiry_target'] : '_self';
 ?>
 
 <style>
@@ -252,6 +255,13 @@ $tag_url = function ($slug) {
         </div>
         <?php endif; ?>
 
+        <?php if (!empty($product['inquiry_enabled'])): ?>
+        <div class="product-commercial-actions">
+            <a class="product-inquiry-link product-inquiry-link--large" href="<?php echo e($inquiry_url); ?>" target="<?php echo e($inquiry_target); ?>" rel="noopener noreferrer"><i class="bi bi-chat-dots"></i> <?php echo e(\Arr::get($product, 'inquiry_label', 'Consultar producto')); ?></a>
+            <a class="product-secondary-link" href="<?php echo Uri::create('productos'); ?>">Volver al catálogo</a>
+        </div>
+        <?php endif; ?>
+
         <?php if (!empty($product['description'])): ?>
         <div class="product-description">
             <?php echo nl2br(e($product['description'])); ?>
@@ -273,10 +283,12 @@ $tag_url = function ($slug) {
     <h2>Productos relacionados</h2>
     <div class="related-grid">
         <?php foreach ($related_products as $related): ?>
-        <a class="related-card" href="<?php echo e(Uri::create('producto/'.$related['slug'])); ?>">
-            <img src="<?php echo e(!empty($related['main_image_path']) ? $media_url($related['main_image_path']) : $no_image_svg); ?>" alt="<?php echo e($related['name']); ?>">
+        <article class="related-card">
+            <a href="<?php echo e(Uri::create('producto/'.$related['slug'])); ?>">
+                <img src="<?php echo e(!empty($related['main_image_path']) ? $media_url($related['main_image_path']) : $no_image_svg); ?>" alt="<?php echo e($related['name']); ?>">
+            </a>
             <div class="body">
-                <h3><?php echo e($related['name']); ?></h3>
+                <h3><a href="<?php echo e(Uri::create('producto/'.$related['slug'])); ?>"><?php echo e($related['name']); ?></a></h3>
                 <?php if (!empty($related['short_description'])): ?>
                 <p><?php echo e($related['short_description']); ?></p>
                 <?php endif; ?>
@@ -285,10 +297,15 @@ $tag_url = function ($slug) {
                     <?php echo e($related['currency_code']); ?> <?php echo number_format((float) $related['price'], 2); ?>
                 </div>
                 <?php endif; ?>
-                <span class="card-action">Ver producto <i class="bi bi-arrow-right"></i></span>
+                <div class="product-card-actions">
+                    <a class="card-action" href="<?php echo e(Uri::create('producto/'.$related['slug'])); ?>">Ver producto <i class="bi bi-arrow-right"></i></a>
+                    <?php if (!empty($related['inquiry_enabled'])): ?><a class="product-inquiry-link" href="<?php echo e(\Arr::get($related, 'inquiry_url', Uri::create('pagina/contacto'))); ?>" target="<?php echo e(\Arr::get($related, 'inquiry_target', '_self')); ?>" rel="noopener noreferrer"><?php echo e(\Arr::get($related, 'inquiry_label', 'Consultar producto')); ?></a><?php endif; ?>
+                </div>
             </div>
-        </a>
+        </article>
         <?php endforeach; ?>
     </div>
 </section>
 <?php endif; ?>
+
+

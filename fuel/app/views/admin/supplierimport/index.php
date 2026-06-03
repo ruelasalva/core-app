@@ -330,9 +330,13 @@
                     <ul>
                         <li>El modo dry-run solo valida y muestra totales.</li>
                         <li>El modo staging guarda filas en espera de revisi&oacute;n.</li>
+                        <li>La ruta recomendada actualmente es CSV / Excel manual.</li>
                         <li>No se modifican productos, precios, inventario ni im&aacute;genes.</li>
                         <li>Las columnas principales son SKU, modelo, nombre, marca, categor&iacute;a, precio, moneda y URL de origen.</li>
                     </ul>
+                    <div class="alert alert-warning mb-3">
+                        TonersParaImpresoras requiere estrategia adicional porque su cat&aacute;logo depende de JavaScript. Actualmente solo se puede descubrir URLs por sitemap; no se importan productos autom&aacute;ticamente.
+                    </div>
                     <p class="mb-0">Cuando se aprueben fases posteriores, estas filas podr&aacute;n mapearse contra productos internos mediante equivalencias de proveedor.</p>
                 </div>
             </div>

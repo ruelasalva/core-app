@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 $media_url = function ($path) {
     if (empty($path)) {
         return '';
@@ -335,8 +335,10 @@ $display_title = str_ireplace('Catalogo', 'Catálogo', (string) $title);
         <?php if (!empty($products)): ?>
         <div class="catalog-grid">
             <?php foreach ($products as $product): ?>
-            <a class="catalog-card" href="<?php echo e($product_url($product['slug'])); ?>">
-                <img src="<?php echo e(!empty($product['main_image_path']) ? $media_url($product['main_image_path']) : $no_image_svg); ?>" alt="<?php echo e($product['name']); ?>">
+            <article class="catalog-card">
+                <a href="<?php echo e($product_url($product['slug'])); ?>">
+                    <img src="<?php echo e(!empty($product['main_image_path']) ? $media_url($product['main_image_path']) : $no_image_svg); ?>" alt="<?php echo e($product['name']); ?>">
+                </a>
                 <div class="body">
                     <?php if (!empty($product['category_name'])): ?>
                     <div class="catalog-meta"><?php echo e($product['category_name']); ?></div>
@@ -346,7 +348,7 @@ $display_title = str_ireplace('Catalogo', 'Catálogo', (string) $title);
                         <?php echo e(trim(($product['brand_name'] ?? '').(!empty($product['brand_name']) && !empty($product['subcategory_name']) ? ' / ' : '').($product['subcategory_name'] ?? ''))); ?>
                     </div>
                     <?php endif; ?>
-                    <h2><?php echo e($product['name']); ?></h2>
+                    <h2><a href="<?php echo e($product_url($product['slug'])); ?>"><?php echo e($product['name']); ?></a></h2>
                     <?php if (!empty($product['short_description'])): ?>
                     <p><?php echo e($product['short_description']); ?></p>
                     <?php endif; ?>
@@ -359,9 +361,12 @@ $display_title = str_ireplace('Catalogo', 'Catálogo', (string) $title);
                         <a href="<?php echo Uri::create('acceso'); ?>">Inicia sesión</a> para ver precio.
                     </div>
                     <?php endif; ?>
-                    <span class="card-action">Ver producto <i class="bi bi-arrow-right"></i></span>
+                    <div class="product-card-actions">
+                        <a class="card-action" href="<?php echo e($product_url($product['slug'])); ?>">Ver producto <i class="bi bi-arrow-right"></i></a>
+                        <?php if (!empty($product['inquiry_enabled'])): ?><a class="product-inquiry-link" href="<?php echo e(\Arr::get($product, 'inquiry_url', Uri::create('pagina/contacto'))); ?>" target="<?php echo e(\Arr::get($product, 'inquiry_target', '_self')); ?>" rel="noopener noreferrer"><?php echo e(\Arr::get($product, 'inquiry_label', 'Consultar producto')); ?></a><?php endif; ?>
+                    </div>
                 </div>
-            </a>
+            </article>
             <?php endforeach; ?>
         </div>
         <?php else: ?>
@@ -373,3 +378,5 @@ $display_title = str_ireplace('Catalogo', 'Catálogo', (string) $title);
         </div>
     </div>
 </section>
+
+

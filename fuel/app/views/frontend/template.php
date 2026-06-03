@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="utf-8">
@@ -32,6 +32,9 @@
     $robots = ($theme && !empty($theme->robots)) ? (string) $theme->robots : 'index,follow';
     $og_image = ($theme && !empty($theme->og_image_path)) ? $theme_asset($theme->og_image_path) : '';
     $layout_key = ($theme && !empty($theme->layout_key)) ? preg_replace('/[^a-z0-9_-]+/i', '-', (string) $theme->layout_key) : 'commerce_default';
+    $conversion_settings = !empty($conversion_settings) && is_array($conversion_settings) ? $conversion_settings : array();
+    $whatsapp_url = !empty($whatsapp_url) ? (string) $whatsapp_url : (string) \Arr::get($conversion_settings, 'whatsapp_url', '');
+    $mobile_cta = !empty($conversion_settings['mobile_cta']) && is_array($conversion_settings['mobile_cta']) ? $conversion_settings['mobile_cta'] : array();
     ?>
     <title><?php echo e($full_title); ?></title>
     <meta name="robots" content="<?php echo e($robots); ?>">
@@ -610,6 +613,19 @@
 
     <div class="core-toast" data-core-toast></div>
     <?php echo !empty($cookie_banner) ? $cookie_banner : ''; ?>
+    <?php if (!empty($conversion_settings['mobile_cta_enabled'])): ?>
+    <nav class="mobile-sticky-cta" aria-label="Acciones rápidas">
+        <?php if ($whatsapp_url !== '' && !empty($mobile_cta['show_whatsapp'])): ?>
+        <a class="mobile-sticky-cta-item whatsapp" href="<?php echo e($whatsapp_url); ?>" target="_blank" rel="noopener noreferrer"><i class="bi bi-whatsapp"></i><span><?php echo e(\Arr::get($mobile_cta, 'whatsapp_label', 'WhatsApp')); ?></span></a>
+        <?php endif; ?>
+        <?php if (!empty($mobile_cta['show_catalog'])): ?>
+        <a class="mobile-sticky-cta-item" href="<?php echo Uri::create('productos'); ?>"><i class="bi bi-grid"></i><span><?php echo e(\Arr::get($mobile_cta, 'catalog_label', 'Catálogo')); ?></span></a>
+        <?php endif; ?>
+        <?php if (!empty($mobile_cta['show_contact'])): ?>
+        <a class="mobile-sticky-cta-item" href="<?php echo Uri::create('pagina/contacto'); ?>"><i class="bi bi-chat-dots"></i><span><?php echo e(\Arr::get($mobile_cta, 'contact_label', 'Contacto')); ?></span></a>
+        <?php endif; ?>
+    </nav>
+    <?php endif; ?>
     <?php echo !empty($frontend_extra_scripts) ? $frontend_extra_scripts : ''; ?>
     <script>
     (function() {
@@ -694,3 +710,5 @@
     </script>
 </body>
 </html>
+
+

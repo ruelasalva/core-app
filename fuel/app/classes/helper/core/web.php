@@ -139,6 +139,143 @@ class Helper_Core_Web
     }
 
     /**
+     * WHATSAPP URL
+     *
+     * RESUELVE LIGA PUBLICA DE WHATSAPP DESDE INTEGRACIONES WEB.
+     *
+     * @access  public
+     * @return  String
+     */
+    public static function whatsapp_url($context = 'general', array $data = array())
+    {
+        # SE REQUIERE INTEGRACION ACTIVA, SIN USAR SECRETOS
+        $item = self::integration('whatsapp_click_chat');
+        if (!$item) {
+            return '';
+        }
+
+        $phone = preg_replace('/\D+/', '', (string) ($item->public_key ?: $item->public_value));
+        if ($phone === '') {
+            return '';
+        }
+
+        $settings = json_decode((string) $item->settings_json, true);
+        $settings = is_array($settings) ? $settings : array();
+        $message = trim((string) \Arr::get($settings, 'message', 'Hola, quiero información.'));
+
+        if ($context === 'product') {
+            $product_message = trim((string) \Arr::get($settings, 'message_product', 'Hola, quiero consultar este producto: {product} {sku} {url}'));
+            $message = strtr($product_message, array(
+                '{product}' => trim((string) \Arr::get($data, 'name', '')),
+                '{sku}' => trim((string) \Arr::get($data, 'sku', '')),
+                '{url}' => trim((string) \Arr::get($data, 'url', '')),
+            ));
+        }
+
+        $url = 'https://wa.me/'.$phone;
+        if ($message !== '') {
+            $url .= '?text='.rawurlencode($message);
+        }
+
+        return $url;
+    }
+
+    /**
+     * CONVERSION SETTINGS
+     *
+     * OBTIENE CONFIGURACION PUBLICA DE CTAS COMERCIALES.
+     *
+     * @access  public
+     * @return  Array
+     */
+    public static function conversion_settings()
+    {
+        $stored = array();
+        try {
+            $stored_integration = self::integration('web_conversion_settings');
+            if ($stored_integration) {
+                $decoded = json_decode((string) $stored_integration->settings_json, true);
+                $stored = is_array($decoded) ? $decoded : array();
+            }
+        } catch (\Exception $e) {
+            \Log::warning('No se pudo resolver configuracion de conversion web: '.$e->getMessage());
+        }
+
+        $badges = array(
+            array('label' => 'Atención personalizada', 'icon' => 'bi bi-person-check'),
+            array('label' => 'Facturación disponible', 'icon' => 'bi bi-receipt'),
+            array('label' => 'Envío o entrega', 'icon' => 'bi bi-truck'),
+            array('label' => 'Soporte técnico', 'icon' => 'bi bi-headset'),
+        );
+
+        if (!empty($stored['trust_badges']) && is_array($stored['trust_badges'])) {
+            $badges = $stored['trust_badges'];
+        }
+
+        # PERMITE ADMINISTRAR BADGES DESDE UN BLOQUE EXISTENTE SIN NUEVA PANTALLA
+        try {
+            if (empty($stored['trust_badges']) && \DBUtil::table_exists('core_frontend_blocks') && class_exists('Model_Core_Frontend_Block')) {
+                $block = Model_Core_Frontend_Block::query()
+                    ->where('code', 'conversion_trust_badges')
+                    ->where('active', 1)
+                    ->get_one();
+
+                if ($block) {
+                    $settings = json_decode((string) $block->settings_json, true);
+                    if (is_array($settings) && !empty($settings['items']) && is_array($settings['items'])) {
+                        $custom = array();
+                        foreach ($settings['items'] as $item) {
+                            $label = trim((string) \Arr::get($item, 'label', ''));
+                            if ($label !== '') {
+                                $custom[] = array(
+                                    'label' => $label,
+                                    'icon' => trim((string) \Arr::get($item, 'icon', 'bi bi-patch-check')),
+                                );
+                            }
+                        }
+                        if (!empty($custom)) {
+                            $badges = $custom;
+                        }
+                    }
+                }
+            }
+        } catch (\Exception $e) {
+            \Log::warning('No se pudieron resolver badges comerciales: '.$e->getMessage());
+        }
+
+        $mobile_cta = array_merge(array(
+            'enabled' => 1,
+            'show_whatsapp' => 1,
+            'show_catalog' => 1,
+            'show_contact' => 1,
+            'whatsapp_label' => 'WhatsApp',
+            'catalog_label' => 'Catálogo',
+            'contact_label' => 'Contacto',
+        ), !empty($stored['mobile_cta']) && is_array($stored['mobile_cta']) ? $stored['mobile_cta'] : array());
+
+        $product_inquiry = array_merge(array(
+            'enabled' => 1,
+            'label' => 'Consultar producto',
+            'destination' => 'whatsapp',
+        ), !empty($stored['product_inquiry']) && is_array($stored['product_inquiry']) ? $stored['product_inquiry'] : array());
+
+        $leads = array_merge(array(
+            'crm_enabled' => \DBUtil::table_exists('core_crm_prospects') ? 1 : 0,
+            'default_source' => 'web/contact',
+            'notification_email' => '',
+        ), !empty($stored['leads']) && is_array($stored['leads']) ? $stored['leads'] : array());
+
+        return array(
+            'whatsapp_url' => self::whatsapp_url(),
+            'trust_badges' => $badges,
+            'mobile_cta' => $mobile_cta,
+            'mobile_cta_enabled' => !empty($mobile_cta['enabled']),
+            'product_inquiry' => $product_inquiry,
+            'leads' => $leads,
+        );
+    }
+
+    /**
      * VERIFY CAPTCHA
      *
      * VALIDA EL TOKEN DE RECAPTCHA SOLO CUANDO ESTA CONFIGURADO.
@@ -389,15 +526,16 @@ class Helper_Core_Web
         $settings = json_decode((string) $item->settings_json, true);
         $settings = is_array($settings) ? $settings : [];
         $label = trim((string) \Arr::get($settings, 'label', 'WhatsApp'));
-        $message = trim((string) \Arr::get($settings, 'message', 'Hola, quiero informacion.'));
         $side = \Arr::get($settings, 'side', 'right') === 'left' ? 'left' : 'right';
         $bottom = max(16, min(160, (int) \Arr::get($settings, 'bottom', 24)));
-        $url = 'https://wa.me/'.$phone;
-        if ($message !== '') {
-            $url .= '?text='.rawurlencode($message);
+        $show_mobile = (int) \Arr::get($settings, 'show_mobile', 1) === 1;
+        $show_desktop = (int) \Arr::get($settings, 'show_desktop', 1) === 1;
+        if (!$show_mobile && !$show_desktop) {
+            return '';
         }
+        $url = self::whatsapp_url();
 
-        return '<style>.core-contact-float{position:fixed;'.$side.':22px;bottom:'.$bottom.'px;z-index:9990;display:inline-flex;align-items:center;gap:9px;padding:11px 15px;border-radius:999px;background:#25d366;color:#102014;font-weight:800;box-shadow:0 16px 34px rgba(15,23,42,.18);border:1px solid rgba(0,0,0,.08)}.core-contact-float:hover{color:#102014;filter:brightness(.98);transform:translateY(-1px)}.core-contact-float i{font-size:1.25rem}@media(max-width:560px){.core-contact-float{'.$side.':16px;bottom:18px;padding:12px}.core-contact-float span{display:none}}</style>'
+        return '<style>.core-contact-float{position:fixed;'.$side.':22px;bottom:'.$bottom.'px;z-index:9990;display:'.($show_desktop ? 'inline-flex' : 'none').';align-items:center;gap:9px;padding:11px 15px;border-radius:999px;background:#25d366;color:#102014;font-weight:800;box-shadow:0 16px 34px rgba(15,23,42,.18);border:1px solid rgba(0,0,0,.08)}.core-contact-float:hover{color:#102014;filter:brightness(.98);transform:translateY(-1px)}.core-contact-float i{font-size:1.25rem}@media(max-width:560px){.core-contact-float{display:'.($show_mobile ? 'inline-flex' : 'none').';'.$side.':16px;bottom:18px;padding:12px}.core-contact-float span{display:none}}</style>'
             .'<a class="core-contact-float" href="'.e($url).'" target="_blank" rel="noopener noreferrer" aria-label="'.e($label).'"><i class="bi bi-whatsapp"></i><span>'.e($label).'</span></a>';
     }
 

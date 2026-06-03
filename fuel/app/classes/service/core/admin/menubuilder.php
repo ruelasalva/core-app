@@ -110,7 +110,8 @@ class Service_Core_Admin_MenuBuilder
 
             $this->header('SITIO E INTEGRACIONES', $menu['frontend'] || $menu['web'] || $menu['legal'] || $menu['communications'] || $menu['integrations']),
             $this->item('Sitio publico', 'bi bi-window', \Uri::create('admin/frontend'), $segment === 'frontend', $menu['frontend']),
-            $this->item('Web y tracking', 'bi bi-globe2', \Uri::create('admin/web'), $segment === 'web', $menu['web']),
+            $this->item('Web y tracking', 'bi bi-globe2', \Uri::create('admin/web'), $segment === 'web' && $subsegment === '', $menu['web']),
+            $this->item('Conversi&oacute;n web', 'bi bi-bullseye', \Uri::create('admin/web/conversion'), $segment === 'web' && $subsegment === 'conversion', $menu['web']),
             $this->item('Legal y privacidad', 'bi bi-file-earmark-check', \Uri::create('admin/legal'), $segment === 'legal', $menu['legal']),
             $this->item('Correos y avisos', 'bi bi-chat-square-dots', \Uri::create('admin/communications'), $segment === 'communications', $menu['communications']),
             $this->item('Integraciones', 'bi bi-plug', \Uri::create('admin/integrations'), $segment === 'integrations', $menu['integrations']),

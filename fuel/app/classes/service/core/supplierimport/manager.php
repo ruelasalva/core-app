@@ -247,7 +247,7 @@ class Service_Core_SupplierImport_Manager
             ['id' => 0, 'code' => 'tvc_api', 'name' => 'API TVC', 'category' => 'supplier_catalog', 'enabled' => false, 'pending' => true],
             ['id' => 0, 'code' => 'pch_api', 'name' => 'API PCH', 'category' => 'supplier_catalog', 'enabled' => false, 'pending' => true],
             ['id' => 0, 'code' => 'exel_api', 'name' => 'API Exel', 'category' => 'supplier_catalog', 'enabled' => false, 'pending' => true],
-            ['id' => 0, 'code' => 'tonersparaimpresoras_scraper', 'name' => 'Scraper TonersParaImpresoras', 'category' => 'supplier_catalog', 'enabled' => false, 'pending' => true],
+            ['id' => 0, 'code' => 'tonersparaimpresoras_scraper', 'name' => 'Scraper TonersParaImpresoras (exploratorio)', 'category' => 'supplier_catalog', 'enabled' => false, 'pending' => true],
         ];
     }
 

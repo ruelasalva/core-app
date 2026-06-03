@@ -45,6 +45,12 @@ class Tonersdiscovery
         \Cli::write(' - URLs de producto detectadas: '.(int) \Arr::get($result, 'total_product_urls', 0));
         \Cli::write(' - URLs de imagen detectadas: '.(int) \Arr::get($result, 'total_image_urls', 0));
         \Cli::write(' - Nombres de producto detectados: '.(int) \Arr::get($result, 'total_product_names', 0));
+        \Cli::write(' - Product import: not implemented');
+
+        if ((int) \Arr::get($result, 'total_product_urls', 0) === 0 && (int) \Arr::get($result, 'total_product_names', 0) === 0) {
+            \Cli::write('');
+            \Cli::write('HTML discovery: no products detected');
+        }
 
         $this->print_sample('Muestras de categorias', (array) \Arr::get($result, 'sample_categories', []));
         $this->print_sample('Muestras de URLs de producto', (array) \Arr::get($result, 'sample_product_urls', []));
@@ -77,6 +83,12 @@ class Tonersdiscovery
         \Cli::write('Totales:');
         \Cli::write(' - URLs sitemap: '.(int) \Arr::get($result, 'total_sitemap_urls', 0));
         \Cli::write(' - URLs de producto: '.(int) \Arr::get($result, 'total_product_urls', 0));
+        \Cli::write(' - Product import: not implemented');
+
+        if ((int) \Arr::get($result, 'total_product_urls', 0) > 0) {
+            \Cli::write('');
+            \Cli::write('Sitemap discovery: product URLs detected');
+        }
 
         $this->print_sample('Muestras de URLs de producto', (array) \Arr::get($result, 'sample_product_urls', []));
         $this->print_lastmod_sample((array) \Arr::get($result, 'sample_product_lastmods', []));

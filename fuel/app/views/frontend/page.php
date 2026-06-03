@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 $media_url = function ($path) {
     if (empty($path)) {
         return '';
@@ -61,7 +61,12 @@ $hero_class = 'front-hero '.($is_home_page ? 'front-hero--home' : 'front-hero--i
 $featured_categories = !empty($featured_categories) ? $featured_categories : array();
 $featured_brands = !empty($featured_brands) ? $featured_brands : array();
 $featured_products = !empty($featured_products) ? $featured_products : array();
+$conversion_settings = !empty($conversion_settings) && is_array($conversion_settings) ? $conversion_settings : array();
+$trust_badges = !empty($conversion_settings['trust_badges']) && is_array($conversion_settings['trust_badges']) ? $conversion_settings['trust_badges'] : array();
 $whatsapp_url = !empty($whatsapp_url) ? (string) $whatsapp_url : '';
+$contact_product_name = !empty($contact_product_name) ? (string) $contact_product_name : '';
+$contact_product_sku = !empty($contact_product_sku) ? (string) $contact_product_sku : '';
+$contact_product_url = !empty($contact_product_url) ? (string) $contact_product_url : '';
 ?>
 
 <style>
@@ -370,6 +375,21 @@ $whatsapp_url = !empty($whatsapp_url) ? (string) $whatsapp_url : '';
     </section>
 <?php endif; ?>
 
+<?php if (!empty($trust_badges)): ?>
+<section class="trust-badges-band">
+    <div class="section-shell trust-badges">
+        <?php foreach ($trust_badges as $badge): ?>
+        <?php $badge_label = trim((string) \Arr::get($badge, 'label', '')); ?>
+        <?php if ($badge_label === '') continue; ?>
+        <div class="trust-badge">
+            <i class="<?php echo e(trim((string) \Arr::get($badge, 'icon', 'bi bi-patch-check'))); ?>"></i>
+            <span><?php echo e($badge_label); ?></span>
+        </div>
+        <?php endforeach; ?>
+    </div>
+</section>
+<?php endif; ?>
+
 <?php if ($is_home_page && (!empty($featured_categories) || !empty($featured_brands) || !empty($featured_products))): ?>
 <section class="home-commerce">
     <div class="section-shell">
@@ -420,10 +440,12 @@ $whatsapp_url = !empty($whatsapp_url) ? (string) $whatsapp_url : '';
             </div>
             <div class="product-grid">
                 <?php foreach ($featured_products as $product): ?>
-                <a class="product-card" href="<?php echo e(Uri::create('producto/'.$product['slug'])); ?>">
-                    <img src="<?php echo e(!empty($product['main_image_path']) ? $media_url($product['main_image_path']) : $no_image_svg); ?>" alt="<?php echo e($product['name']); ?>">
+                <article class="product-card">
+                    <a href="<?php echo e(Uri::create('producto/'.$product['slug'])); ?>">
+                        <img src="<?php echo e(!empty($product['main_image_path']) ? $media_url($product['main_image_path']) : $no_image_svg); ?>" alt="<?php echo e($product['name']); ?>">
+                    </a>
                     <div class="body">
-                        <h3><?php echo e($product['name']); ?></h3>
+                        <h3><a href="<?php echo e(Uri::create('producto/'.$product['slug'])); ?>"><?php echo e($product['name']); ?></a></h3>
                         <?php if (!empty($product['short_description'])): ?>
                         <p><?php echo e($product['short_description']); ?></p>
                         <?php endif; ?>
@@ -436,9 +458,12 @@ $whatsapp_url = !empty($whatsapp_url) ? (string) $whatsapp_url : '';
                             <a href="<?php echo Uri::create('acceso'); ?>">Inicia sesión</a> para ver precio.
                         </div>
                         <?php endif; ?>
-                        <span class="card-action">Ver producto <i class="bi bi-arrow-right"></i></span>
+                        <div class="product-card-actions">
+                            <a class="card-action" href="<?php echo e(Uri::create('producto/'.$product['slug'])); ?>">Ver producto <i class="bi bi-arrow-right"></i></a>
+                            <?php if (!empty($product['inquiry_enabled'])): ?><a class="product-inquiry-link" href="<?php echo e(\Arr::get($product, 'inquiry_url', Uri::create('pagina/contacto'))); ?>" target="<?php echo e(\Arr::get($product, 'inquiry_target', '_self')); ?>" rel="noopener noreferrer"><?php echo e(\Arr::get($product, 'inquiry_label', 'Consultar producto')); ?></a><?php endif; ?>
+                        </div>
                     </div>
-                </a>
+                </article>
                 <?php endforeach; ?>
             </div>
         </div>
@@ -554,6 +579,16 @@ $whatsapp_url = !empty($whatsapp_url) ? (string) $whatsapp_url : '';
                         <div class="contact-alert error"><?php echo e($contact_error); ?></div>
                         <?php endif; ?>
                         <?php echo Form::open(['action' => 'contacto/enviar', 'method' => 'post', 'class' => 'contact-form']); ?>
+                            <input type="hidden" name="origin" value="<?php echo e($contact_product_name !== '' ? 'web/product' : 'web/contact'); ?>">
+                            <input type="hidden" name="product_name" value="<?php echo e($contact_product_name); ?>">
+                            <input type="hidden" name="product_sku" value="<?php echo e($contact_product_sku); ?>">
+                            <input type="hidden" name="product_url" value="<?php echo e($contact_product_url); ?>">
+                            <?php if ($contact_product_name !== ''): ?>
+                            <div class="contact-product-reference">
+                                Consulta sobre: <strong><?php echo e($contact_product_name); ?></strong>
+                                <?php if ($contact_product_sku !== ''): ?><span>SKU <?php echo e($contact_product_sku); ?></span><?php endif; ?>
+                            </div>
+                            <?php endif; ?>
                             <div class="field">
                                 <label>Nombre</label>
                                 <input name="name" required maxlength="160">
@@ -652,10 +687,12 @@ $whatsapp_url = !empty($whatsapp_url) ? (string) $whatsapp_url : '';
         </div>
         <div class="product-grid">
             <?php foreach ($featured_products as $product): ?>
-            <a class="product-card" href="<?php echo e(Uri::create('producto/'.$product['slug'])); ?>">
-                <img src="<?php echo e(!empty($product['main_image_path']) ? $media_url($product['main_image_path']) : $no_image_svg); ?>" alt="<?php echo e($product['name']); ?>">
+            <article class="product-card">
+                <a href="<?php echo e(Uri::create('producto/'.$product['slug'])); ?>">
+                    <img src="<?php echo e(!empty($product['main_image_path']) ? $media_url($product['main_image_path']) : $no_image_svg); ?>" alt="<?php echo e($product['name']); ?>">
+                </a>
                 <div class="body">
-                    <h3><?php echo e($product['name']); ?></h3>
+                    <h3><a href="<?php echo e(Uri::create('producto/'.$product['slug'])); ?>"><?php echo e($product['name']); ?></a></h3>
                     <?php if (!empty($product['short_description'])): ?>
                     <p><?php echo e($product['short_description']); ?></p>
                     <?php endif; ?>
@@ -668,11 +705,17 @@ $whatsapp_url = !empty($whatsapp_url) ? (string) $whatsapp_url : '';
                         <a href="<?php echo Uri::create('acceso'); ?>">Inicia sesión</a> para ver precio.
                     </div>
                     <?php endif; ?>
-                    <span class="card-action">Ver producto <i class="bi bi-arrow-right"></i></span>
+                    <div class="product-card-actions">
+                        <a class="card-action" href="<?php echo e(Uri::create('producto/'.$product['slug'])); ?>">Ver producto <i class="bi bi-arrow-right"></i></a>
+                        <?php if (!empty($product['inquiry_enabled'])): ?><a class="product-inquiry-link" href="<?php echo e(\Arr::get($product, 'inquiry_url', Uri::create('pagina/contacto'))); ?>" target="<?php echo e(\Arr::get($product, 'inquiry_target', '_self')); ?>" rel="noopener noreferrer"><?php echo e(\Arr::get($product, 'inquiry_label', 'Consultar producto')); ?></a><?php endif; ?>
+                    </div>
                 </div>
-            </a>
+            </article>
             <?php endforeach; ?>
         </div>
     </div>
 </section>
 <?php endif; ?>
+
+
+

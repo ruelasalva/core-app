@@ -79,7 +79,7 @@ class Controller_Frontend extends Controller_Template
     public function action_products()
     {
         # SE INICIALIZA LA PLANTILLA PUBLICA
-        $this->prepare_template('Productos', 'Catalogo publico de productos.');
+        $this->prepare_template('Productos', 'Catálogo público de productos.');
 
         # SE OBTIENEN FILTROS DEL CATALOGO
         $filters = $this->catalog_filters();
@@ -87,11 +87,12 @@ class Controller_Frontend extends Controller_Template
         # SE CARGA EL LISTADO GENERAL
         $this->template->set('content', View::forge('frontend/products', array(
             'title'       => 'Productos',
-            'description' => 'Catalogo publico de productos.',
+            'description' => 'Catálogo público de productos.',
             'products'    => $this->get_public_products($filters),
             'filters'     => $filters,
             'options'     => $this->catalog_filter_options(),
             'scope'       => null,
+            'conversion_settings' => $this->conversion_settings(),
         ), false), false);
     }
 
@@ -127,6 +128,7 @@ class Controller_Frontend extends Controller_Template
             'images'  => $this->get_product_images($product['id']),
             'tags'    => $this->get_product_tags($product['id']),
             'related_products' => $this->get_related_products($product),
+            'conversion_settings' => $this->conversion_settings(),
         ), false), false);
     }
 
@@ -163,6 +165,7 @@ class Controller_Frontend extends Controller_Template
             'filters'     => $filters,
             'options'     => $this->catalog_filter_options(),
             'scope'       => 'category',
+            'conversion_settings' => $this->conversion_settings(),
         ), false), false);
     }
 
@@ -199,6 +202,7 @@ class Controller_Frontend extends Controller_Template
             'filters'     => $filters,
             'options'     => $this->catalog_filter_options(),
             'scope'       => 'tag',
+            'conversion_settings' => $this->conversion_settings(),
         ), false), false);
     }
 
@@ -226,9 +230,13 @@ class Controller_Frontend extends Controller_Template
             'featured_products' => ($location === 'home') ? $this->get_featured_products() : array(),
             'featured_brands'   => $this->get_featured_brands(),
             'whatsapp_url'      => $this->whatsapp_url(),
+            'conversion_settings' => $this->conversion_settings(),
             'contact_form_enabled' => $page->slug === 'contacto',
             'contact_success' => \Session::get_flash('contact_success'),
             'contact_error' => \Session::get_flash('contact_error'),
+            'contact_product_name' => trim((string) \Input::get('producto', '')),
+            'contact_product_sku' => trim((string) \Input::get('sku', '')),
+            'contact_product_url' => trim((string) \Input::get('url', '')),
             'google_maps_embed_url' => class_exists('Helper_Core_Web') ? Helper_Core_Web::google_maps_embed_url() : '',
             'captcha_html' => class_exists('Helper_Core_Web') ? Helper_Core_Web::render_captcha() : '',
         );
@@ -265,14 +273,30 @@ class Controller_Frontend extends Controller_Template
             $email = strtolower(trim((string) \Input::post('email', '')));
             $phone = trim((string) \Input::post('phone', ''));
             $message = trim((string) \Input::post('message', ''));
+            $origin = trim((string) \Input::post('origin', 'web/contact'));
+            $product_name = trim((string) \Input::post('product_name', ''));
+            $product_sku = trim((string) \Input::post('product_sku', ''));
+            $product_url = trim((string) \Input::post('product_url', ''));
 
             if ($name === '' || $email === '' || $message === '') {
                 throw new \InvalidArgumentException('Nombre, correo y mensaje son obligatorios.');
             }
 
             if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-                throw new \InvalidArgumentException('Captura un correo valido.');
+                throw new \InvalidArgumentException('Captura un correo válido.');
             }
+
+            $contact_payload = [
+                'name' => $name,
+                'email' => $email,
+                'phone' => $phone,
+                'message' => $message,
+                'origin' => $origin,
+                'product_name' => $product_name,
+                'product_sku' => $product_sku,
+                'product_url' => $product_url,
+                'ip' => \Input::real_ip(),
+            ];
 
             # SE CREA NOTIFICACION PARA ADMINISTRADORES
             $recipients = $this->contact_notification_recipients();
@@ -281,20 +305,16 @@ class Controller_Frontend extends Controller_Template
                     'event_code' => 'contact.web.message',
                     'notification_type' => 'contact',
                     'title' => 'Nuevo mensaje de contacto',
-                    'message' => $name.' escribio desde el frontend.',
+                    'message' => $name.' escribió desde el frontend.',
                     'url' => 'admin/communications',
                     'icon' => 'bi bi-envelope',
                     'priority' => 2,
-                    'payload' => [
-                        'name' => $name,
-                        'email' => $email,
-                        'phone' => $phone,
-                        'message' => $message,
-                        'ip' => \Input::real_ip(),
-                    ],
+                    'payload' => $contact_payload,
                     'created_by' => 0,
                 ], $recipients);
             }
+
+            $this->create_contact_prospect($contact_payload);
 
             \Session::set_flash('contact_success', 'Recibimos tu mensaje. Te contactaremos pronto.');
         } catch (\InvalidArgumentException $e) {
@@ -348,6 +368,8 @@ class Controller_Frontend extends Controller_Template
             'name' => \Auth::check() ? \Auth::get_screen_name() : '',
         ];
         $this->template->cart_count = class_exists('Helper_Core_Cart') ? Helper_Core_Cart::count() : 0;
+        $this->template->whatsapp_url = $this->whatsapp_url();
+        $this->template->conversion_settings = $this->conversion_settings();
         $this->template->set('cookie_banner', class_exists('Helper_Core_Legal')
             ? Helper_Core_Legal::render_cookie_banner()
             : '', false);
@@ -558,7 +580,7 @@ class Controller_Frontend extends Controller_Template
             ->execute()
             ->as_array();
 
-        return $this->apply_customer_prices($products);
+        return $this->apply_product_inquiry_urls($this->apply_customer_prices($products));
     }
 
     /**
@@ -627,30 +649,24 @@ class Controller_Frontend extends Controller_Template
      */
     protected function whatsapp_url()
     {
-        if (!class_exists('Helper_Core_Web')) {
-            return '';
-        }
+        return class_exists('Helper_Core_Web') ? Helper_Core_Web::whatsapp_url() : '';
+    }
 
-        $item = Helper_Core_Web::integration('whatsapp_click_chat');
-        if (!$item) {
-            return '';
-        }
-
-        $phone = preg_replace('/\D+/', '', (string) ($item->public_key ?: $item->public_value));
-        if ($phone === '') {
-            return '';
-        }
-
-        $settings = json_decode((string) $item->settings_json, true);
-        $settings = is_array($settings) ? $settings : array();
-        $message = trim((string) \Arr::get($settings, 'message', 'Hola, quiero información.'));
-
-        $url = 'https://wa.me/'.$phone;
-        if ($message !== '') {
-            $url .= '?text='.rawurlencode($message);
-        }
-
-        return $url;
+    /**
+     * CONVERSION SETTINGS
+     *
+     * RESUELVE CTAS PUBLICOS SIN EXPONER SECRETOS.
+     *
+     * @access  protected
+     * @return  Array
+     */
+    protected function conversion_settings()
+    {
+        return class_exists('Helper_Core_Web') ? Helper_Core_Web::conversion_settings() : array(
+            'whatsapp_url' => '',
+            'trust_badges' => array(),
+            'mobile_cta_enabled' => true,
+        );
     }
 
     /**
@@ -677,6 +693,103 @@ class Controller_Frontend extends Controller_Template
         return array_map(function ($row) {
             return (int) $row['id'];
         }, $rows);
+    }
+
+    /**
+     * CREATE CONTACT PROSPECT
+     *
+     * GUARDA PROSPECTO WEB SI EL MODULO CRM ESTA DISPONIBLE.
+     *
+     * @access  protected
+     * @return  Bool
+     */
+    protected function create_contact_prospect(array $payload)
+    {
+        $conversion = $this->conversion_settings();
+        $leads = isset($conversion['leads']) && is_array($conversion['leads']) ? $conversion['leads'] : array();
+        if (empty($leads['crm_enabled'])) {
+            return false;
+        }
+
+        if (!\DBUtil::table_exists('core_crm_prospects') || !class_exists('Model_Core_Crm_Prospect')) {
+            return false;
+        }
+
+        try {
+            $origin = trim((string) \Arr::get($payload, 'origin', \Arr::get($leads, 'default_source', 'web/contact')));
+            $product_name = trim((string) \Arr::get($payload, 'product_name', ''));
+            $message = trim((string) \Arr::get($payload, 'message', ''));
+            $activity = $product_name !== '' ? 'Consulta de producto: '.$product_name : 'Contacto desde sitio web';
+
+            $prospect = Model_Core_Crm_Prospect::forge(array(
+                'source_id' => 0,
+                'external_id' => 'web_'.sha1((string) \Arr::get($payload, 'email', '').'|'.microtime(true)),
+                'name' => (string) \Arr::get($payload, 'name', ''),
+                'legal_name' => '',
+                'activity' => $activity,
+                'activity_code' => '',
+                'size_range' => '',
+                'phone' => (string) \Arr::get($payload, 'phone', ''),
+                'email' => (string) \Arr::get($payload, 'email', ''),
+                'website' => '',
+                'status' => 'new',
+                'priority' => 'medium',
+                'raw_json' => json_encode($payload, JSON_UNESCAPED_UNICODE),
+                'notes' => trim($message."\n\nOrigen: ".$origin),
+                'active' => 1,
+                'created_at' => time(),
+                'updated_at' => time(),
+            ));
+            $prospect->save();
+            \Log::info('Prospecto web creado desde frontend: '.$prospect->id);
+            return true;
+        } catch (\Exception $e) {
+            \Log::warning('No se pudo crear prospecto CRM desde formulario web: '.$e->getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * APPLY PRODUCT INQUIRY URLS
+     *
+     * AGREGA LIGA COMERCIAL DE CONSULTA A CADA PRODUCTO PUBLICO.
+     *
+     * @access  protected
+     * @return  Array
+     */
+    protected function apply_product_inquiry_urls(array $products)
+    {
+        $conversion = $this->conversion_settings();
+        $inquiry = isset($conversion['product_inquiry']) && is_array($conversion['product_inquiry']) ? $conversion['product_inquiry'] : array();
+        $enabled = !isset($inquiry['enabled']) || (int) $inquiry['enabled'] === 1;
+        $label = trim((string) \Arr::get($inquiry, 'label', 'Consultar producto'));
+        $destination = trim((string) \Arr::get($inquiry, 'destination', 'whatsapp'));
+
+        foreach ($products as &$product) {
+            $product['inquiry_enabled'] = $enabled;
+            $product['inquiry_label'] = $label !== '' ? $label : 'Consultar producto';
+
+            $product_url = !empty($product['slug']) ? \Uri::create('producto/'.$product['slug']) : '';
+            $whatsapp = class_exists('Helper_Core_Web') ? Helper_Core_Web::whatsapp_url('product', array(
+                'name' => \Arr::get($product, 'name', ''),
+                'sku' => \Arr::get($product, 'sku', ''),
+                'url' => $product_url,
+            )) : '';
+
+            if ($destination === 'whatsapp' && $whatsapp !== '') {
+                $product['inquiry_url'] = $whatsapp;
+                $product['inquiry_target'] = '_blank';
+            } else {
+                $product['inquiry_url'] = \Uri::create('pagina/contacto', array(), array(
+                    'producto' => \Arr::get($product, 'name', ''),
+                    'sku' => \Arr::get($product, 'sku', ''),
+                    'url' => $product_url,
+                ));
+                $product['inquiry_target'] = '_self';
+            }
+        }
+
+        return $products;
     }
 
     /**
@@ -782,7 +895,7 @@ class Controller_Frontend extends Controller_Template
 
         $products = $query->limit(240)->execute()->as_array();
 
-        return $this->apply_customer_prices($products);
+        return $this->apply_product_inquiry_urls($this->apply_customer_prices($products));
     }
 
     /**
@@ -959,6 +1072,7 @@ class Controller_Frontend extends Controller_Template
         }
 
         $priced = $this->apply_customer_prices([$result[0]]);
+        $priced = $this->apply_product_inquiry_urls($priced);
         return !empty($priced[0]) ? $priced[0] : $result[0];
     }
 
@@ -1106,7 +1220,7 @@ class Controller_Frontend extends Controller_Template
             }
         }
 
-        return $this->apply_customer_prices($rows);
+        return $this->apply_product_inquiry_urls($this->apply_customer_prices($rows));
     }
 
     /**
