@@ -10,7 +10,7 @@ class Controller_Admin_Supplierimport extends Controller_Adminbase
     public function before()
     {
         parent::before();
-        $this->require_access('commerce.access[view]');
+        $this->require_access('supplierimport.access[view]');
     }
 
     public function action_index()
@@ -83,7 +83,7 @@ class Controller_Admin_Supplierimport extends Controller_Adminbase
 
     public function post_apply_approved()
     {
-        $this->require_access('commerce.access[edit]');
+        $this->require_access('supplierimport.access[edit]');
 
         try {
             if (!$this->upload_security_token_valid()) {
@@ -120,7 +120,7 @@ class Controller_Admin_Supplierimport extends Controller_Adminbase
 
     public function post_download_images()
     {
-        $this->require_access('commerce.access[edit]');
+        $this->require_access('supplierimport.access[edit]');
 
         try {
             if (!$this->upload_security_token_valid()) {
@@ -176,7 +176,7 @@ class Controller_Admin_Supplierimport extends Controller_Adminbase
 
     public function post_upload_csv()
     {
-        $this->require_access('commerce.access[edit]');
+        $this->require_access('supplierimport.access[edit]');
 
         $debug = (int) \Input::get('debug', 0) === 1;
         $debug_payload = [];
@@ -307,7 +307,7 @@ class Controller_Admin_Supplierimport extends Controller_Adminbase
 
     protected function change_review_rows($status)
     {
-        $this->require_access('commerce.access[edit]');
+        $this->require_access('supplierimport.access[edit]');
 
         try {
             if (!$this->upload_security_token_valid()) {

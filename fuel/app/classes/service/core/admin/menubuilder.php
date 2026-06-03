@@ -47,9 +47,9 @@ class Service_Core_Admin_MenuBuilder
             $this->header('INICIO'),
             $this->item('Inicio', 'bi bi-speedometer2', \Uri::create('admin'), $segment === ''),
 
-            $this->header('COMERCIAL', $menu['commerce'] || $menu['sales'] || $menu['crm'] || $menu['commissions']),
+            $this->header('COMERCIAL', $menu['commerce'] || $menu['supplierimport'] || $menu['sales'] || $menu['crm'] || $menu['commissions']),
             $this->item('Productos y precios', 'bi bi-box-seam', \Uri::create('admin/commerce'), $segment === 'commerce', $menu['commerce']),
-            $this->item('Importaci&oacute;n de proveedores', 'bi bi-cloud-arrow-up', \Uri::create('admin/supplierimport'), $segment === 'supplierimport', $menu['commerce']),
+            $this->item('Importaci&oacute;n de proveedores', 'bi bi-cloud-arrow-up', \Uri::create('admin/supplierimport'), $segment === 'supplierimport', $menu['supplierimport']),
             $this->tree('Ventas', 'bi bi-receipt', $sales_open, $menu['sales'], [
                 $this->item('Cotizaciones', 'bi bi-circle', \Uri::create('admin/sales', [], ['view' => 'quotes']), $segment === 'sales' && $sales_view === 'quotes', $menu['sales']),
                 $this->item('Pedidos', 'bi bi-circle', \Uri::create('admin/sales', [], ['view' => 'orders']), $segment === 'sales' && $sales_view === 'orders', $menu['sales']),
@@ -108,10 +108,10 @@ class Service_Core_Admin_MenuBuilder
                 $this->item('Branding', 'bi bi-palette', \Uri::create('admin/portals').'?section=branding', $portal_open && $portal_section === 'branding'),
             ], true),
 
-            $this->header('SITIO E INTEGRACIONES', $menu['frontend'] || $menu['web'] || $menu['legal'] || $menu['communications'] || $menu['integrations']),
+            $this->header('SITIO E INTEGRACIONES', $menu['frontend'] || $menu['web'] || $menu['web_conversion'] || $menu['legal'] || $menu['communications'] || $menu['integrations']),
             $this->item('Sitio publico', 'bi bi-window', \Uri::create('admin/frontend'), $segment === 'frontend', $menu['frontend']),
             $this->item('Web y tracking', 'bi bi-globe2', \Uri::create('admin/web'), $segment === 'web' && $subsegment === '', $menu['web']),
-            $this->item('Conversi&oacute;n web', 'bi bi-bullseye', \Uri::create('admin/web/conversion'), $segment === 'web' && $subsegment === 'conversion', $menu['web']),
+            $this->item('Conversi&oacute;n web', 'bi bi-bullseye', \Uri::create('admin/web/conversion'), $segment === 'web' && $subsegment === 'conversion', $menu['web_conversion']),
             $this->item('Legal y privacidad', 'bi bi-file-earmark-check', \Uri::create('admin/legal'), $segment === 'legal', $menu['legal']),
             $this->item('Correos y avisos', 'bi bi-chat-square-dots', \Uri::create('admin/communications'), $segment === 'communications', $menu['communications']),
             $this->item('Integraciones', 'bi bi-plug', \Uri::create('admin/integrations'), $segment === 'integrations', $menu['integrations']),
@@ -130,10 +130,10 @@ class Service_Core_Admin_MenuBuilder
         $has_fiscal_permission = array_key_exists('fiscal', $menu);
 
         $keys = [
-            'commerce', 'sales', 'commissions', 'inventory', 'purchases',
+            'commerce', 'supplierimport', 'sales', 'commissions', 'inventory', 'purchases',
             'billing', 'receivables', 'payables', 'payments', 'treasury', 'budgets', 'accounting', 'hr',
-            'parties', 'crm', 'portals', 'documents', 'helpdesk', 'calendar',
-            'fiscal', 'sat', 'catalogs', 'web', 'legal', 'communications', 'integrations', 'frontend',
+            'parties', 'customers', 'crm', 'portals', 'documents', 'helpdesk', 'calendar',
+            'fiscal', 'sat', 'catalogs', 'web', 'web_conversion', 'legal', 'communications', 'integrations', 'frontend',
             'audit', 'help', 'users', 'acl', 'config',
         ];
 

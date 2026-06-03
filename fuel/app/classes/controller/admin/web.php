@@ -22,7 +22,13 @@ class Controller_Admin_Web extends Controller_Adminbase
         # REQUERIDA PARA EL TEMPLATING Y LA SESION ADMIN
         parent::before();
 
-        # VALIDAR PERMISO ORM AUTH
+        # VALIDAR PERMISO ORM AUTH SEGUN LA SECCION WEB SOLICITADA
+        $action = (string) \Request::active()->action;
+        if (in_array($action, ['conversion', 'conversion_data', 'save_conversion'], true)) {
+            $this->require_access('web_conversion.access[view]');
+            return;
+        }
+
         $this->require_access('web.access[view]');
     }
 
@@ -98,7 +104,7 @@ class Controller_Admin_Web extends Controller_Adminbase
      */
     public function post_save_conversion()
     {
-        $this->require_access('web.access[edit]');
+        $this->require_access('web_conversion.access[edit]');
 
         try {
             $this->assert_schema_ready();
