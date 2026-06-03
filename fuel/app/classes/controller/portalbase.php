@@ -58,6 +58,16 @@ class Controller_Portalbase extends Controller_Template
 
         # SE OBTIENE TERCERO Y BRANDING
         $this->party = Model_Core_Party::find((int) $this->portal_link->party_id);
+        if (!$this->party || (int) $this->party->active !== 1) {
+            \Log::warning('PORTAL ACCESS: tercero inactivo o inexistente para usuario '.$this->user_id.' portal '.$this->portal_code);
+            \Response::redirect($this->portal_code.'/login');
+        }
+
+        if (!$this->party_type_allowed((string) $this->party->party_type)) {
+            \Log::warning('PORTAL ACCESS: tipo de tercero no permitido '.$this->party->party_type.' para portal '.$this->portal_code.' usuario '.$this->user_id);
+            \Response::redirect($this->portal_code.'/login');
+        }
+
         $this->branding = Model_Core_Party_Branding::query()
             ->where('party_id', (int) $this->portal_link->party_id)
             ->where('portal_code', $this->portal_code)
@@ -610,6 +620,56 @@ class Controller_Portalbase extends Controller_Template
     }
 
     /**
+     * PERFIL DOCUMENT DOWNLOAD
+     *
+     * ENTREGA DOCUMENTOS DEL PERFIL SOLO SI PERTENECEN AL TERCERO DEL PORTAL.
+     *
+     * @access  public
+     * @return  Response
+     */
+    public function action_perfil_document_download($document_id = 0)
+    {
+        try {
+            $document = $this->profile_document_by_id((int) $document_id);
+            if (!$document) {
+                throw new \HttpNotFoundException;
+            }
+
+            return $this->download_portal_document($document);
+        } catch (\HttpNotFoundException $e) {
+            throw $e;
+        } catch (\Exception $e) {
+            \Log::error('Error descargando documento perfil portal '.$this->portal_code.': '.$e->getMessage());
+            throw new \HttpNotFoundException;
+        }
+    }
+
+    /**
+     * HELPDESK DOCUMENT DOWNLOAD
+     *
+     * ENTREGA ADJUNTOS DE HELPDESK SOLO SI EL TICKET PERTENECE AL PORTAL ACTUAL.
+     *
+     * @access  public
+     * @return  Response
+     */
+    public function action_helpdesk_document_download($document_id = 0)
+    {
+        try {
+            $document = $this->helpdesk_document_by_id((int) $document_id);
+            if (!$document) {
+                throw new \HttpNotFoundException;
+            }
+
+            return $this->download_portal_document($document);
+        } catch (\HttpNotFoundException $e) {
+            throw $e;
+        } catch (\Exception $e) {
+            \Log::error('Error descargando adjunto helpdesk portal '.$this->portal_code.': '.$e->getMessage());
+            throw new \HttpNotFoundException;
+        }
+    }
+
+    /**
      * PORTAL TICKETS
      *
      * FORMATEA LOS TICKETS VISIBLES PARA EL TERCERO ACTUAL
@@ -700,7 +760,6 @@ class Controller_Portalbase extends Controller_Template
                 ['l.entity_id', 'ticket_id'],
                 ['d.title', 'title'],
                 ['d.original_name', 'original_name'],
-                ['d.file_path', 'file_path'],
                 ['d.file_extension', 'file_extension'],
                 ['d.file_size', 'file_size'],
                 ['d.visibility', 'visibility'],
@@ -725,10 +784,10 @@ class Controller_Portalbase extends Controller_Template
                 'ticket_id' => (int) $row['ticket_id'],
                 'title' => (string) $row['title'],
                 'original_name' => (string) $row['original_name'],
-                'file_path' => (string) $row['file_path'],
                 'file_extension' => (string) $row['file_extension'],
                 'file_size' => (int) $row['file_size'],
                 'visibility' => (string) $row['visibility'],
+                'download_url' => \Uri::create($this->portal_code.'/helpdesk_document_download/'.(int) $row['id']),
                 'created_at' => $row['created_at'] ? date('d/m/Y H:i', $row['created_at']) : '',
             ];
         }
@@ -1102,7 +1161,7 @@ class Controller_Portalbase extends Controller_Template
 
         return \DB::select(
                 ['d.id', 'id'], ['d.document_type', 'document_type'], ['d.title', 'title'],
-                ['d.original_name', 'original_name'], ['d.file_path', 'file_path'],
+                ['d.original_name', 'original_name'],
                 ['d.file_extension', 'file_extension'], ['d.file_size', 'file_size'],
                 ['d.created_at', 'created_at'], ['l.relation_type', 'relation_type'], ['l.notes', 'notes']
             )
@@ -1114,8 +1173,25 @@ class Controller_Portalbase extends Controller_Template
             ->where('d.active', '=', 1)
             ->order_by('d.id', 'desc')
             ->limit(100)
-            ->execute()
-            ->as_array();
+            ->execute();
+
+        $documents = [];
+        foreach ($rows as $row) {
+            $documents[] = [
+                'id' => (int) $row['id'],
+                'document_type' => (string) $row['document_type'],
+                'title' => (string) $row['title'],
+                'original_name' => (string) $row['original_name'],
+                'file_extension' => (string) $row['file_extension'],
+                'file_size' => (int) $row['file_size'],
+                'created_at' => (int) $row['created_at'],
+                'relation_type' => (string) $row['relation_type'],
+                'notes' => (string) $row['notes'],
+                'download_url' => \Uri::create($this->portal_code.'/perfil_document_download/'.(int) $row['id']),
+            ];
+        }
+
+        return $documents;
     }
 
     protected function reseller_customers($party_id)
@@ -1239,6 +1315,127 @@ class Controller_Portalbase extends Controller_Template
         }
 
         return $ids;
+    }
+
+    /**
+     * PARTY TYPE ALLOWED
+     *
+     * VALIDA QUE EL TIPO DE TERCERO CORRESPONDA AL PERFIL DE PORTAL ACTIVO.
+     *
+     * @access  protected
+     * @return  Bool
+     */
+    protected function party_type_allowed($party_type)
+    {
+        $profile = Model_Core_Portal_Profile::query()
+            ->where('code', $this->portal_code)
+            ->where('active', 1)
+            ->get_one();
+
+        if (!$profile) {
+            return false;
+        }
+
+        $allowed = trim((string) $profile->allowed_party_types);
+        if ($allowed === '') {
+            return true;
+        }
+
+        $types = array_filter(array_map('trim', explode(',', $allowed)));
+        return in_array((string) $party_type, $types, true);
+    }
+
+    /**
+     * PROFILE DOCUMENT BY ID
+     *
+     * BUSCA UN DOCUMENTO DE PERFIL ASEGURANDO TENENCIA POR TERCERO.
+     *
+     * @access  protected
+     * @return  Array|null
+     */
+    protected function profile_document_by_id($document_id)
+    {
+        if ($document_id < 1 || !\DBUtil::table_exists('core_documents') || !\DBUtil::table_exists('core_document_links')) {
+            return null;
+        }
+
+        return \DB::select(['d.id', 'id'], ['d.file_path', 'file_path'], ['d.original_name', 'original_name'], ['d.mime_type', 'mime_type'])
+            ->from(['core_document_links', 'l'])
+            ->join(['core_documents', 'd'], 'inner')->on('d.id', '=', 'l.document_id')
+            ->where('d.id', '=', (int) $document_id)
+            ->where('l.entity_type', '=', 'party')
+            ->where('l.entity_id', '=', (int) $this->portal_link->party_id)
+            ->where('l.active', '=', 1)
+            ->where('d.active', '=', 1)
+            ->execute()
+            ->current();
+    }
+
+    /**
+     * HELPDESK DOCUMENT BY ID
+     *
+     * BUSCA UN ADJUNTO ASEGURANDO QUE EL TICKET SEA DEL PORTAL ACTUAL.
+     *
+     * @access  protected
+     * @return  Array|null
+     */
+    protected function helpdesk_document_by_id($document_id)
+    {
+        if ($document_id < 1 || !\DBUtil::table_exists('core_documents') || !\DBUtil::table_exists('core_document_links')) {
+            return null;
+        }
+
+        return \DB::select(['d.id', 'id'], ['d.file_path', 'file_path'], ['d.original_name', 'original_name'], ['d.mime_type', 'mime_type'])
+            ->from(['core_document_links', 'l'])
+            ->join(['core_documents', 'd'], 'inner')->on('d.id', '=', 'l.document_id')
+            ->join(['core_helpdesk_tickets', 't'], 'inner')->on('t.id', '=', 'l.entity_id')
+            ->where('d.id', '=', (int) $document_id)
+            ->where('l.entity_type', '=', 'ticket')
+            ->where('t.party_id', '=', (int) $this->portal_link->party_id)
+            ->where('t.portal_code', '=', $this->portal_code)
+            ->where('t.active', '=', 1)
+            ->where('l.active', '=', 1)
+            ->where('d.active', '=', 1)
+            ->execute()
+            ->current();
+    }
+
+    /**
+     * DOWNLOAD PORTAL DOCUMENT
+     *
+     * ENVIA EL ARCHIVO SIN EXPONER RUTAS FISICAS Y BLOQUEANDO RUTAS INVALIDAS.
+     *
+     * @access  protected
+     * @return  Response
+     */
+    protected function download_portal_document(array $document)
+    {
+        $relative = str_replace('\\', '/', ltrim((string) \Arr::get($document, 'file_path', ''), '/'));
+        if ($relative === '' || strpos($relative, '..') !== false || preg_match('/^[a-z]+:/i', $relative)) {
+            throw new \RuntimeException('Ruta de documento invalida.');
+        }
+
+        $absolute = DOCROOT.$relative;
+        if (!is_file($absolute)) {
+            throw new \RuntimeException('Archivo no encontrado.');
+        }
+
+        $filename = (string) \Arr::get($document, 'original_name', '');
+        if ($filename === '') {
+            $filename = basename($absolute);
+        }
+
+        $mime = (string) \Arr::get($document, 'mime_type', '');
+        if ($mime === '') {
+            $mime = 'application/octet-stream';
+        }
+
+        return \Response::forge(file_get_contents($absolute), 200, [
+            'Content-Type' => $mime,
+            'Content-Disposition' => 'attachment; filename="'.str_replace('"', '', $filename).'"',
+            'Content-Length' => (string) filesize($absolute),
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
     }
 
     /**

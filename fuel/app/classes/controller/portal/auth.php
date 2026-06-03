@@ -109,11 +109,28 @@ class Controller_Portal_Auth extends Controller
         }
 
         # SE BUSCA VINCULO ACTIVO
-        return (bool) Model_Core_Party_User_Link::query()
+        $link = Model_Core_Party_User_Link::query()
             ->where('user_id', $user_id)
             ->where('portal_code', $portal_code)
             ->where('active', 1)
             ->get_one();
+
+        if (!$link) {
+            return false;
+        }
+
+        $party = Model_Core_Party::find((int) $link->party_id);
+        if (!$party || (int) $party->active !== 1) {
+            \Log::warning('LOGIN PORTAL BLOQUEADO: tercero inactivo o inexistente para usuario '.$user_id.' portal '.$portal_code);
+            return false;
+        }
+
+        if (!$this->party_type_allowed($portal_code, (string) $party->party_type)) {
+            \Log::warning('LOGIN PORTAL BLOQUEADO: tipo de tercero '.$party->party_type.' no permitido para portal '.$portal_code.' usuario '.$user_id);
+            return false;
+        }
+
+        return true;
     }
 
     /**
@@ -134,6 +151,30 @@ class Controller_Portal_Auth extends Controller
             ->where('code', $portal_code)
             ->where('active', 1)
             ->get_one();
+    }
+
+    /**
+     * PARTY TYPE ALLOWED
+     *
+     * VALIDA EL TIPO DE TERCERO CONTRA EL PERFIL ACTIVO DEL PORTAL.
+     *
+     * @access  protected
+     * @return  Bool
+     */
+    protected function party_type_allowed($portal_code, $party_type)
+    {
+        $profile = $this->get_profile($portal_code);
+        if (!$profile) {
+            return false;
+        }
+
+        $allowed = trim((string) $profile->allowed_party_types);
+        if ($allowed === '') {
+            return true;
+        }
+
+        $types = array_filter(array_map('trim', explode(',', $allowed)));
+        return in_array((string) $party_type, $types, true);
     }
 
     /**

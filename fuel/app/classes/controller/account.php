@@ -339,11 +339,23 @@ class Controller_Account extends Controller_Template
             return null;
         }
 
-        return Model_Core_Party_User_Link::query()
+        $link = Model_Core_Party_User_Link::query()
             ->where('user_id', $user_id)
             ->where('portal_code', 'clientes')
             ->where('active', 1)
             ->get_one();
+
+        if (!$link) {
+            return null;
+        }
+
+        $party = Model_Core_Party::find((int) $link->party_id);
+        if (!$party || (int) $party->active !== 1 || (string) $party->party_type !== 'customer') {
+            \Log::warning('ACCESO CLIENTE WEB BLOQUEADO: usuario '.$user_id.' sin cliente activo valido.');
+            return null;
+        }
+
+        return $link;
     }
 
     /**

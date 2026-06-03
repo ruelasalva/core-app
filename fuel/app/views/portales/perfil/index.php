@@ -180,7 +180,7 @@
                             <tbody>
                                 <tr v-for="row in documents" v-bind:key="row.id">
                                     <td>{{ row.relation_type }}</td><td>{{ row.title }}</td>
-                                    <td><a v-bind:href="baseUrl + row.file_path" target="_blank">{{ row.original_name }}</a></td>
+                                    <td><a v-bind:href="row.download_url" target="_blank" rel="noopener">{{ row.original_name }}</a></td>
                                     <td>{{ date(row.created_at) }}</td>
                                 </tr>
                                 <tr v-if="!documents.length"><td colspan="4" class="text-muted">Sin documentos.</td></tr>
