@@ -717,7 +717,8 @@ class Controller_Admin_Contracts extends Controller_Adminbase
     protected function format_contract(\Model_Core_Contract $contract)
     {
         $party = $contract->party ?: null;
-        $expiration = $this->manager->calculate_expiration_status((string) $contract->end_date);
+        $expiration = $this->manager->calculate_expiration_status($contract);
+        $expiration_days = $this->manager->calculate_expiration_days($contract);
 
         return [
             'id' => (int) $contract->id,
@@ -737,6 +738,8 @@ class Controller_Admin_Contracts extends Controller_Adminbase
             'status_label' => $this->status_label((string) $contract->status),
             'expiration_status' => $expiration,
             'expiration_label' => $this->expiration_label($expiration),
+            'expiration_days' => $expiration_days,
+            'expiration_days_label' => $this->expiration_days_label($expiration_days, $expiration),
             'responsible_user_id' => (int) $contract->responsible_user_id,
             'contract_value' => (float) $contract->contract_value,
             'currency_code' => (string) $contract->currency_code,
@@ -754,17 +757,33 @@ class Controller_Admin_Contracts extends Controller_Adminbase
     protected function stats()
     {
         $contracts = $this->contracts();
-        $stats = ['active' => 0, 'expiring' => 0, 'expired' => 0];
+        $stats = [
+            'active' => 0,
+            'expiring_90' => 0,
+            'expiring_60' => 0,
+            'expiring_30' => 0,
+            'expired' => 0,
+            'no_end_date' => 0,
+        ];
 
         foreach ($contracts as $contract) {
-            if ($contract['status'] === 'active') {
+            if ($contract['expiration_status'] === 'active') {
                 $stats['active']++;
             }
-            if (in_array($contract['expiration_status'], ['expiring_90', 'expiring_60', 'expiring_30'], true)) {
-                $stats['expiring']++;
+            if ($contract['expiration_status'] === 'expiring_90') {
+                $stats['expiring_90']++;
             }
-            if ($contract['expiration_status'] === 'expired' || $contract['status'] === 'expired') {
+            if ($contract['expiration_status'] === 'expiring_60') {
+                $stats['expiring_60']++;
+            }
+            if ($contract['expiration_status'] === 'expiring_30') {
+                $stats['expiring_30']++;
+            }
+            if ($contract['expiration_status'] === 'expired') {
                 $stats['expired']++;
+            }
+            if ($contract['expiration_status'] === 'no_end_date') {
+                $stats['no_end_date']++;
             }
         }
 
@@ -800,6 +819,7 @@ class Controller_Admin_Contracts extends Controller_Adminbase
                 ['value' => 'annual', 'label' => 'Anual'],
             ],
             'statuses' => $this->status_options(),
+            'expiration_filters' => $this->expiration_filter_options(),
             'visibilities' => [
                 ['value' => 'internal', 'label' => 'Interno'],
                 ['value' => 'portal', 'label' => 'Visible en portal'],
@@ -978,6 +998,19 @@ class Controller_Admin_Contracts extends Controller_Adminbase
             $options[] = ['value' => $status, 'label' => $this->status_label($status)];
         }
         return $options;
+    }
+
+    protected function expiration_filter_options()
+    {
+        return [
+            ['value' => 'all', 'label' => 'Todos'],
+            ['value' => 'no_end_date', 'label' => 'Sin vencimiento'],
+            ['value' => 'active', 'label' => 'Vigentes'],
+            ['value' => 'expiring_90', 'label' => 'Por vencer 90'],
+            ['value' => 'expiring_60', 'label' => 'Por vencer 60'],
+            ['value' => 'expiring_30', 'label' => 'Por vencer 30'],
+            ['value' => 'expired', 'label' => 'Vencidos'],
+        ];
     }
 
     protected function document_structure()
@@ -1412,14 +1445,35 @@ class Controller_Admin_Contracts extends Controller_Adminbase
     {
         $labels = [
             'no_end_date' => 'Sin vencimiento',
-            'invalid_date' => 'Fecha invalida',
+            'inactive' => 'Inactivo',
             'expired' => 'Vencido',
             'expiring_30' => 'Vence en 30 dias',
             'expiring_60' => 'Vence en 60 dias',
             'expiring_90' => 'Vence en 90 dias',
-            'ok' => 'Vigente',
+            'active' => 'Vigente',
         ];
 
         return isset($labels[$status]) ? $labels[$status] : $status;
+    }
+
+    protected function expiration_days_label($days, $status)
+    {
+        if ($status === 'no_end_date') {
+            return 'Sin fecha final';
+        }
+        if ($status === 'inactive') {
+            return 'Contrato inactivo';
+        }
+        if ($days === null) {
+            return '';
+        }
+        if ((int) $days < 0) {
+            return 'Vencido hace '.abs((int) $days).' dias';
+        }
+        if ((int) $days === 0) {
+            return 'Vence hoy';
+        }
+
+        return 'Faltan '.(int) $days.' dias';
     }
 }

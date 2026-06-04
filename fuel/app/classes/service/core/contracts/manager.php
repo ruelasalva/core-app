@@ -117,19 +117,28 @@ class Service_Core_Contracts_Manager
      * @access  public
      * @return  String
      */
-    public function calculate_expiration_status($end_date)
+    public function calculate_expiration_status($contract)
     {
-        $end_date = trim((string) $end_date);
+        $end_date = is_object($contract) ? (string) $contract->end_date : (string) $contract;
+        $status = is_object($contract) ? $this->codeify($contract->status) : '';
+        $active = is_object($contract) && isset($contract->active) ? (int) $contract->active : 1;
+        $end_date = trim($end_date);
+
         if ($end_date === '') {
             return 'no_end_date';
         }
 
-        $end = strtotime($end_date.' 23:59:59');
-        if (!$end) {
-            return 'invalid_date';
+        if ($active !== 1 || in_array($status, ['cancelled', 'terminated', 'archived'], true)) {
+            return 'inactive';
         }
 
-        $days = (int) floor(($end - time()) / 86400);
+        $end = strtotime($end_date.' 23:59:59');
+        if (!$end) {
+            return 'no_end_date';
+        }
+
+        $today = strtotime(date('Y-m-d').' 00:00:00');
+        $days = (int) floor(($end - $today) / 86400);
         if ($days < 0) {
             return 'expired';
         }
@@ -143,7 +152,32 @@ class Service_Core_Contracts_Manager
             return 'expiring_90';
         }
 
-        return 'ok';
+        return 'active';
+    }
+
+    /**
+     * CALCULATE EXPIRATION DAYS
+     *
+     * CALCULA DIAS RESTANTES O VENCIDOS SIN CAMBIAR ESTADOS.
+     *
+     * @access  public
+     * @return  Integer|null
+     */
+    public function calculate_expiration_days($contract)
+    {
+        $end_date = is_object($contract) ? (string) $contract->end_date : (string) $contract;
+        $end_date = trim($end_date);
+        if ($end_date === '') {
+            return null;
+        }
+
+        $end = strtotime($end_date.' 23:59:59');
+        if (!$end) {
+            return null;
+        }
+
+        $today = strtotime(date('Y-m-d').' 00:00:00');
+        return (int) floor(($end - $today) / 86400);
     }
 
     protected function codeify($value)

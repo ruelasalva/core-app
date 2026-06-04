@@ -1,21 +1,45 @@
 <div id="app-contracts">
+    <style>
+        #app-contracts .badge-orange {
+            background-color: #fd7e14;
+            color: #fff;
+        }
+    </style>
     <div class="row">
-        <div class="col-lg-4 col-12">
+        <div class="col-lg-2 col-md-4 col-6">
             <div class="small-box bg-success">
                 <div class="inner"><h3>{{ stats.active || 0 }}</h3><p>Activos</p></div>
                 <div class="icon"><i class="bi bi-file-earmark-check"></i></div>
             </div>
         </div>
-        <div class="col-lg-4 col-12">
-            <div class="small-box bg-warning">
-                <div class="inner"><h3>{{ stats.expiring || 0 }}</h3><p>Por vencer</p></div>
+        <div class="col-lg-2 col-md-4 col-6">
+            <div class="small-box bg-info">
+                <div class="inner"><h3>{{ stats.expiring_90 || 0 }}</h3><p>Por vencer 90 dias</p></div>
                 <div class="icon"><i class="bi bi-clock-history"></i></div>
             </div>
         </div>
-        <div class="col-lg-4 col-12">
+        <div class="col-lg-2 col-md-4 col-6">
+            <div class="small-box bg-warning">
+                <div class="inner"><h3>{{ stats.expiring_60 || 0 }}</h3><p>Por vencer 60 dias</p></div>
+                <div class="icon"><i class="bi bi-clock-history"></i></div>
+            </div>
+        </div>
+        <div class="col-lg-2 col-md-4 col-6">
+            <div class="small-box bg-orange">
+                <div class="inner"><h3>{{ stats.expiring_30 || 0 }}</h3><p>Por vencer 30 dias</p></div>
+                <div class="icon"><i class="bi bi-hourglass-split"></i></div>
+            </div>
+        </div>
+        <div class="col-lg-2 col-md-4 col-6">
             <div class="small-box bg-danger">
                 <div class="inner"><h3>{{ stats.expired || 0 }}</h3><p>Vencidos</p></div>
                 <div class="icon"><i class="bi bi-exclamation-triangle"></i></div>
+            </div>
+        </div>
+        <div class="col-lg-2 col-md-4 col-6">
+            <div class="small-box bg-secondary">
+                <div class="inner"><h3>{{ stats.no_end_date || 0 }}</h3><p>Sin vencimiento</p></div>
+                <div class="icon"><i class="bi bi-infinity"></i></div>
             </div>
         </div>
     </div>
@@ -36,6 +60,29 @@
                         No hay tipos de contrato configurados. Ejecuta <code>php oil refine contractsseed</code>.
                     </div>
 
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <label class="small mb-1">Estado</label>
+                            <select class="form-control form-control-sm" v-model="filters.status">
+                                <option value="all">Todos</option>
+                                <option v-for="status in options.statuses" :value="status.value">{{ status.label }}</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="small mb-1">Tipo</label>
+                            <select class="form-control form-control-sm" v-model="filters.contract_type">
+                                <option value="all">Todos</option>
+                                <option v-for="type in options.contract_types" :value="type.value">{{ type.label }}</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="small mb-1">Vencimiento</label>
+                            <select class="form-control form-control-sm" v-model="filters.expiration">
+                                <option v-for="option in options.expiration_filters" :value="option.value">{{ option.label }}</option>
+                            </select>
+                        </div>
+                    </div>
+
                     <div class="table-responsive">
                         <table class="table table-bordered table-hover table-sm">
                             <thead>
@@ -49,11 +96,15 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                <tr v-for="contract in contracts" :key="contract.id" :class="{ 'table-primary': selected && selected.id === contract.id }">
+                                <tr v-for="contract in filteredContracts" :key="contract.id" :class="{ 'table-primary': selected && selected.id === contract.id }">
                                     <td><strong>{{ contract.contract_number }}</strong><div class="text-muted small">{{ contract.title }}</div></td>
                                     <td>{{ contract.contract_type_label || contract.contract_type }}</td>
                                     <td>{{ contract.party_name || '-' }}</td>
-                                    <td>{{ contract.end_date || '-' }}<div class="text-muted small">{{ contract.expiration_label }}</div></td>
+                                    <td>
+                                        {{ contract.end_date || '-' }}
+                                        <div><span class="badge" :class="expirationClass(contract.expiration_status)">{{ contract.expiration_label }}</span></div>
+                                        <div class="text-muted small">{{ contract.expiration_days_label }}</div>
+                                    </td>
                                     <td><span class="badge" :class="statusClass(contract.status)">{{ contract.status_label }}</span></td>
                                     <td>
                                         <button class="btn btn-outline-secondary btn-xs" @click="selectContract(contract)">Detalle</button>
@@ -65,7 +116,7 @@
                                         <span v-if="!permissions.edit && !permissions.status" class="text-muted small">Solo lectura</span>
                                     </td>
                                 </tr>
-                                <tr v-if="contracts.length === 0">
+                                <tr v-if="filteredContracts.length === 0">
                                     <td colspan="6" class="text-center text-muted">Sin contratos registrados.</td>
                                 </tr>
                             </tbody>
@@ -96,7 +147,7 @@
                         <div v-show="tab === 'general'">
                             <table class="table table-sm table-bordered">
                                 <tr><th>Inicio</th><td>{{ selected.start_date || '-' }}</td></tr>
-                                <tr><th>Fin</th><td>{{ selected.end_date || '-' }} / {{ selected.expiration_label }}</td></tr>
+                                <tr><th>Fin</th><td>{{ selected.end_date || '-' }} / <span class="badge" :class="expirationClass(selected.expiration_status)">{{ selected.expiration_label }}</span> <span class="text-muted">{{ selected.expiration_days_label }}</span></td></tr>
                                 <tr><th>Valor</th><td>{{ money(selected.contract_value) }} {{ selected.currency_code }}</td></tr>
                                 <tr><th>Renovacion</th><td>{{ selected.renewal_type }}</td></tr>
                                 <tr><th>Facturacion</th><td>{{ selected.billing_type }}</td></tr>
@@ -396,7 +447,8 @@ window.addEventListener('load', function () {
             availableDocuments: [],
             selected: null,
             tab: 'general',
-            stats: { active: 0, expiring: 0, expired: 0 },
+            stats: { active: 0, expiring_90: 0, expiring_60: 0, expiring_30: 0, expired: 0, no_end_date: 0 },
+            filters: { status: 'all', contract_type: 'all', expiration: 'all' },
             options: {
                 contract_types: [],
                 parties: [],
@@ -407,6 +459,7 @@ window.addEventListener('load', function () {
                 billing_types: [],
                 statuses: [],
                 visibilities: [],
+                expiration_filters: [{ value: 'all', label: 'Todos' }],
                 contract_type_catalog_empty: false
             },
             permissions: { create: false, edit: false, status: false, upload_document: false, link: false },
@@ -436,6 +489,20 @@ window.addEventListener('load', function () {
             selectedEvents: function () {
                 if (!this.selected) return [];
                 return this.events.filter(function (event) { return Number(event.contract_id) === Number(this.selected.id); }, this);
+            },
+            filteredContracts: function () {
+                return this.contracts.filter(function (contract) {
+                    if (this.filters.status !== 'all' && contract.status !== this.filters.status) {
+                        return false;
+                    }
+                    if (this.filters.contract_type !== 'all' && contract.contract_type !== this.filters.contract_type) {
+                        return false;
+                    }
+                    if (this.filters.expiration !== 'all' && contract.expiration_status !== this.filters.expiration) {
+                        return false;
+                    }
+                    return true;
+                }, this);
             }
         },
         mounted: function () {
@@ -767,6 +834,17 @@ window.addEventListener('load', function () {
                     terminated: 'badge-dark',
                     cancelled: 'badge-danger',
                     archived: 'badge-light border'
+                }[status] || 'badge-secondary';
+            },
+            expirationClass: function (status) {
+                return {
+                    no_end_date: 'badge-secondary',
+                    active: 'badge-success',
+                    expiring_90: 'badge-info',
+                    expiring_60: 'badge-warning',
+                    expiring_30: 'badge-orange',
+                    expired: 'badge-danger',
+                    inactive: 'badge-dark'
                 }[status] || 'badge-secondary';
             }
         }
