@@ -72,6 +72,8 @@ return array (
         66 => '068_create_core_sat_payment_taxes',
         67 => '069_adjust_fiscal_ledger_source_hash_for_rebuilds',
         68 => '070_create_core_supplier_import_tables',
+        69 => '071_create_core_contract_tables',
+        70 => '072_make_contract_approval_fields_nullable',
       ),
     ),
     'module' => array(    

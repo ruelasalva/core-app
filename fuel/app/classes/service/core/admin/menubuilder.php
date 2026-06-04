@@ -58,9 +58,10 @@ class Service_Core_Admin_MenuBuilder
             $this->item('CRM comercial', 'bi bi-people', \Uri::create('admin/crm'), $segment === 'crm', $menu['crm']),
             $this->item('Vendedores y comisiones', 'bi bi-cash-coin', \Uri::create('admin/commissions'), $segment === 'commissions', $menu['commissions']),
 
-            $this->header('OPERACI&Oacute;N', $menu['inventory'] || $menu['purchases'] || $menu['documents'] || $menu['helpdesk'] || $menu['calendar']),
+            $this->header('OPERACI&Oacute;N', $menu['inventory'] || $menu['purchases'] || $menu['contracts'] || $menu['documents'] || $menu['helpdesk'] || $menu['calendar']),
             $this->item('Inventario', 'bi bi-boxes', \Uri::create('admin/inventory'), $segment === 'inventory', $menu['inventory']),
             $this->item('Compras', 'bi bi-cart-check', \Uri::create('admin/purchases'), $segment === 'purchases', $menu['purchases']),
+            $this->item('Contratos', 'bi bi-file-earmark-text', \Uri::create('admin/contracts'), $segment === 'contracts', $menu['contracts']),
             $this->item('Documentos', 'bi bi-folder2-open', \Uri::create('admin/documents'), $segment === 'documents', $menu['documents']),
             $this->item('Helpdesk', 'bi bi-life-preserver', \Uri::create('admin/helpdesk'), $segment === 'helpdesk', $menu['helpdesk']),
             $this->item('Calendario', 'bi bi-calendar3', \Uri::create('admin/calendar'), $segment === 'calendar', $menu['calendar']),
@@ -130,7 +131,7 @@ class Service_Core_Admin_MenuBuilder
         $has_fiscal_permission = array_key_exists('fiscal', $menu);
 
         $keys = [
-            'commerce', 'supplierimport', 'sales', 'commissions', 'inventory', 'purchases',
+            'commerce', 'supplierimport', 'sales', 'commissions', 'inventory', 'purchases', 'contracts',
             'billing', 'receivables', 'payables', 'payments', 'treasury', 'budgets', 'accounting', 'hr',
             'parties', 'customers', 'crm', 'portals', 'documents', 'helpdesk', 'calendar',
             'fiscal', 'sat', 'catalogs', 'web', 'web_conversion', 'legal', 'communications', 'integrations', 'frontend',

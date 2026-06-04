@@ -256,7 +256,7 @@ $trust_badges = !empty($conversion_settings['trust_badges']) && is_array($conver
 
 <section class="product-shell product-detail front-hero--product">
     <div>
-        <div class="product-media">
+        <div class="product-media<?php echo empty($product['main_image_path']) ? ' product-media--empty' : ''; ?>">
             <img src="<?php echo e(!empty($product['main_image_path']) ? $media_url($product['main_image_path']) : $no_image_svg); ?>" alt="<?php echo e($product['name']); ?>">
         </div>
         <?php if (!empty($images)): ?>
@@ -376,7 +376,7 @@ $trust_badges = !empty($conversion_settings['trust_badges']) && is_array($conver
                 <?php endif; ?>
                 <div class="product-card-actions">
                     <a class="card-action" href="<?php echo e(Uri::create('producto/'.$related['slug'])); ?>">Ver producto <i class="bi bi-arrow-right"></i></a>
-                    <?php if (!empty($related['inquiry_enabled'])): ?><a class="product-inquiry-link" href="<?php echo e(\Arr::get($related, 'inquiry_url', Uri::create('pagina/contacto'))); ?>" target="<?php echo e(\Arr::get($related, 'inquiry_target', '_self')); ?>" rel="noopener noreferrer">Consultar producto</a><?php endif; ?>
+                    <a class="product-inquiry-link" href="<?php echo e(\Arr::get($related, 'inquiry_url', Uri::create('pagina/contacto', array(), array('producto' => \Arr::get($related, 'name', ''), 'sku' => \Arr::get($related, 'sku', ''))))); ?>" target="<?php echo e(\Arr::get($related, 'inquiry_target', '_self')); ?>" rel="noopener noreferrer">Consultar producto</a>
                 </div>
             </div>
         </article>

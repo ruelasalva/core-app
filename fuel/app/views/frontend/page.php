@@ -332,9 +332,12 @@ $contact_product_url = !empty($contact_product_url) ? (string) $contact_product_
 <?php if (!empty($slider_items)): ?>
     <?php $hero = reset($slider_items); ?>
     <section class="<?php echo e($hero_class); ?>">
-        <?php if (!empty($hero->image_path)): ?>
-        <img src="<?php echo e($media_url($hero->image_path)); ?>" alt="<?php echo e($hero->title); ?>">
-        <?php endif; ?>
+        <div class="front-hero-slider" aria-hidden="true">
+            <?php foreach ($slider_items as $index => $slide): ?>
+            <?php if (empty($slide->image_path)) continue; ?>
+            <img class="front-hero-slide<?php echo $index === 0 ? ' is-active' : ''; ?>" src="<?php echo e($media_url($slide->image_path)); ?>" alt="">
+            <?php endforeach; ?>
+        </div>
         <div class="front-hero-content">
             <h1><?php echo e($hero->title ?: $page->title); ?></h1>
             <?php if (!empty($hero->subtitle)): ?>

@@ -161,11 +161,42 @@ body.frontend-layout {
 }
 
 .front-hero {
-    min-height: clamp(520px, 72vh, 680px);
+    min-height: clamp(430px, 58vh, 560px);
     align-items: center;
     background:
         radial-gradient(circle at 82% 18%, color-mix(in srgb, var(--core-brand) 28%, transparent), transparent 28%),
         linear-gradient(135deg, var(--core-secondary), #08111f);
+}
+
+.front-hero--home {
+    min-height: clamp(400px, 54vh, 540px);
+}
+
+.front-hero-slider {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+}
+
+.front-hero-slider .front-hero-slide {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transform: scale(1.02);
+    animation: frontHeroSlide 18s infinite;
+}
+
+.front-hero-slider .front-hero-slide:nth-child(1) { animation-delay: 0s; }
+.front-hero-slider .front-hero-slide:nth-child(2) { animation-delay: 6s; }
+.front-hero-slider .front-hero-slide:nth-child(3) { animation-delay: 12s; }
+.front-hero-slider .front-hero-slide:only-child {
+    opacity: .42;
+    animation: none;
+}
+
+@keyframes frontHeroSlide {
+    0%, 28% { opacity: .42; transform: scale(1.02); }
+    36%, 100% { opacity: 0; transform: scale(1.06); }
 }
 
 .front-hero img {
@@ -180,18 +211,18 @@ body.frontend-layout {
 }
 
 .front-hero-content {
-    padding: 110px 0 92px;
+    padding: 72px 0 64px;
 }
 
 .front-hero h1 {
-    max-width: 880px;
-    font-size: clamp(2.8rem, 7vw, 6rem);
-    line-height: .94;
+    max-width: 780px;
+    font-size: clamp(2.35rem, 5.6vw, 4.65rem);
+    line-height: .98;
 }
 
 .front-hero p {
     max-width: 720px;
-    margin-top: 24px;
+    margin-top: 18px;
     color: rgba(248, 250, 252, .88);
     font-size: clamp(1.06rem, 1.6vw, 1.28rem);
     line-height: 1.65;
@@ -201,7 +232,7 @@ body.frontend-layout {
     display: flex;
     flex-wrap: wrap;
     gap: 12px;
-    margin-top: 30px;
+    margin-top: 24px;
 }
 
 .front-hero .button,
@@ -250,6 +281,26 @@ body.frontend-layout {
 .catalog-hero p,
 .product-copy .short {
     line-height: 1.7;
+}
+
+.section-copy .content {
+    max-width: 820px;
+    color: #334155;
+    font-size: 1rem;
+    line-height: 1.78;
+}
+
+.section-copy .content p {
+    max-width: 78ch;
+    margin: 0 0 1.05rem;
+    text-align: justify;
+    text-wrap: pretty;
+}
+
+.section-copy .content ul,
+.section-copy .content ol {
+    max-width: 78ch;
+    line-height: 1.72;
 }
 
 .feature-grid,
@@ -700,6 +751,24 @@ body.frontend-layout {
 
 .product-media {
     box-shadow: var(--front-shadow-sm);
+    display: grid;
+    place-items: center;
+    background: #f8fafc;
+}
+
+.product-media img {
+    object-fit: contain;
+    background: #f8fafc;
+}
+
+.product-media--empty {
+    padding: clamp(18px, 4vw, 34px);
+}
+
+.product-media--empty img {
+    width: min(78%, 420px);
+    margin: auto;
+    aspect-ratio: 1 / 1;
 }
 
 .product-copy h1 {
@@ -717,6 +786,21 @@ body.frontend-layout {
     background:
         radial-gradient(circle at 15% 0%, color-mix(in srgb, var(--core-brand) 18%, transparent), transparent 30%),
         #0b1220;
+}
+
+.footer-rich {
+    max-width: 34rem;
+    line-height: 1.68;
+    text-align: justify;
+    text-wrap: pretty;
+}
+
+.footer-rich p {
+    margin-bottom: .8rem;
+}
+
+.footer-grid section:first-child .footer-rich {
+    max-width: 38rem;
 }
 
 .footer-top {
@@ -757,7 +841,7 @@ body.frontend-layout {
 }
 
 .layout-corporate .front-hero {
-    min-height: clamp(560px, 74vh, 720px);
+    min-height: clamp(440px, 58vh, 580px);
 }
 
 .layout-corporate .section-band {
@@ -910,7 +994,7 @@ body.frontend-layout {
 }
 
 .front-hero--home {
-    min-height: clamp(520px, 72vh, 680px);
+    min-height: clamp(400px, 54vh, 540px);
 }
 
 .front-hero--inner {
@@ -1275,7 +1359,7 @@ body:has(.core-cookie-banner) .core-contact-float {
 }
 
 .frontend-layout.layout-set_soluciones_ti .front-hero.front-hero--home {
-    min-height: clamp(500px, 68vh, 650px);
+    min-height: clamp(390px, 52vh, 520px);
 }
 
 .frontend-layout.layout-set_soluciones_ti .front-hero.front-hero--inner {
@@ -1391,7 +1475,7 @@ body:has(.core-cookie-banner) .core-contact-float {
     }
 
     .front-hero--home {
-        min-height: 440px;
+        min-height: 380px;
     }
 
     .front-hero--inner {
