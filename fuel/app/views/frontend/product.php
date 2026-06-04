@@ -23,6 +23,53 @@ $tag_url = function ($slug) {
 
 $inquiry_url = !empty($product['inquiry_url']) ? (string) $product['inquiry_url'] : Uri::create('pagina/contacto');
 $inquiry_target = !empty($product['inquiry_target']) ? (string) $product['inquiry_target'] : '_self';
+$conversion_settings = !empty($conversion_settings) && is_array($conversion_settings) ? $conversion_settings : array();
+$whatsapp_configured = trim((string) \Arr::get($conversion_settings, 'whatsapp_url', '')) !== '';
+$product_url = !empty($product['slug']) ? Uri::create('producto/'.$product['slug']) : '';
+$contact_quote_url = Uri::create('pagina/contacto', array(), array(
+    'producto' => \Arr::get($product, 'name', ''),
+    'sku' => \Arr::get($product, 'sku', ''),
+    'url' => $product_url,
+));
+$primary_inquiry_url = $inquiry_url;
+$primary_inquiry_target = $inquiry_target;
+$primary_inquiry_label = $whatsapp_configured ? 'Consultar por WhatsApp' : 'Solicitar cotización';
+
+if ($whatsapp_configured && class_exists('Helper_Core_Web')) {
+    $whatsapp_product_url = Helper_Core_Web::whatsapp_url('product', array(
+        'name' => \Arr::get($product, 'name', ''),
+        'sku' => \Arr::get($product, 'sku', ''),
+        'url' => $product_url,
+    ));
+    if ($whatsapp_product_url !== '') {
+        $primary_inquiry_url = $whatsapp_product_url;
+        $primary_inquiry_target = '_blank';
+    }
+} elseif (!$whatsapp_configured) {
+    $primary_inquiry_url = $contact_quote_url;
+    $primary_inquiry_target = '_self';
+}
+
+$normalize_public_text = function ($value) {
+    return strtr((string) $value, array(
+        'AtenciÃ³n' => 'Atención',
+        'FacturaciÃ³n' => 'Facturación',
+        'EnvÃ­o' => 'Envío',
+        'tÃ©cnico' => 'técnico',
+        'TÃ©cnico' => 'Técnico',
+        'CatÃ¡logo' => 'Catálogo',
+        'informaciÃ³n' => 'información',
+    ));
+};
+
+$trust_badges = !empty($conversion_settings['trust_badges']) && is_array($conversion_settings['trust_badges'])
+    ? $conversion_settings['trust_badges']
+    : array(
+        array('label' => 'Atención personalizada', 'icon' => 'bi bi-person-check'),
+        array('label' => 'Facturación disponible', 'icon' => 'bi bi-receipt'),
+        array('label' => 'Envío o entrega', 'icon' => 'bi bi-truck'),
+        array('label' => 'Soporte técnico', 'icon' => 'bi bi-headset'),
+    );
 ?>
 
 <style>
@@ -256,11 +303,35 @@ $inquiry_target = !empty($product['inquiry_target']) ? (string) $product['inquir
         <?php endif; ?>
 
         <?php if (!empty($product['inquiry_enabled'])): ?>
-        <div class="product-commercial-actions">
-            <a class="product-inquiry-link product-inquiry-link--large" href="<?php echo e($inquiry_url); ?>" target="<?php echo e($inquiry_target); ?>" rel="noopener noreferrer"><i class="bi bi-chat-dots"></i> <?php echo e(\Arr::get($product, 'inquiry_label', 'Consultar producto')); ?></a>
-            <a class="product-secondary-link" href="<?php echo Uri::create('productos'); ?>">Volver al catálogo</a>
+        <div class="product-commercial-actions product-commercial-actions--detail">
+            <a class="product-inquiry-link product-inquiry-link--primary product-inquiry-link--large" href="<?php echo e($primary_inquiry_url); ?>" target="<?php echo e($primary_inquiry_target); ?>" rel="noopener noreferrer"><i class="<?php echo $whatsapp_configured ? 'bi bi-whatsapp' : 'bi bi-chat-dots'; ?>"></i> <?php echo e($primary_inquiry_label); ?></a>
+            <a class="product-secondary-link" href="<?php echo Uri::create('productos'); ?>">Ver catálogo</a>
         </div>
         <?php endif; ?>
+
+        <?php if (!empty($trust_badges)): ?>
+        <div class="product-trust-badges" aria-label="Beneficios comerciales">
+            <?php foreach ($trust_badges as $badge): ?>
+            <?php $badge_label = trim($normalize_public_text(\Arr::get($badge, 'label', ''))); ?>
+            <?php if ($badge_label === '') { continue; } ?>
+            <div class="product-trust-badge">
+                <i class="<?php echo e(\Arr::get($badge, 'icon', 'bi bi-patch-check')); ?>"></i>
+                <span><?php echo e($badge_label); ?></span>
+            </div>
+            <?php endforeach; ?>
+        </div>
+        <?php endif; ?>
+
+        <div class="product-compatibility-help">
+            <h2>¿No estás seguro si este producto es compatible?</h2>
+            <p>Te ayudamos a validar modelo, impresora o consumible correcto.</p>
+            <div class="product-compatibility-actions">
+                <?php if (!empty($product['inquiry_enabled'])): ?>
+                <a class="product-inquiry-link product-inquiry-link--primary" href="<?php echo e($primary_inquiry_url); ?>" target="<?php echo e($primary_inquiry_target); ?>" rel="noopener noreferrer"><i class="<?php echo $whatsapp_configured ? 'bi bi-whatsapp' : 'bi bi-chat-dots'; ?>"></i> <?php echo e($whatsapp_configured ? 'WhatsApp' : 'Contacto'); ?></a>
+                <?php endif; ?>
+                <a class="product-secondary-link" href="<?php echo Uri::create('productos'); ?>">Ver catálogo</a>
+            </div>
+        </div>
 
         <?php if (!empty($product['description'])): ?>
         <div class="product-description">
@@ -288,18 +359,24 @@ $inquiry_target = !empty($product['inquiry_target']) ? (string) $product['inquir
                 <img src="<?php echo e(!empty($related['main_image_path']) ? $media_url($related['main_image_path']) : $no_image_svg); ?>" alt="<?php echo e($related['name']); ?>">
             </a>
             <div class="body">
+                <div class="product-card-meta">
+                    <?php if (!empty($related['sku'])): ?><span>SKU: <?php echo e($related['sku']); ?></span><?php endif; ?>
+                    <?php if (!empty($related['brand_name'])): ?><span><?php echo e($related['brand_name']); ?></span><?php endif; ?>
+                </div>
                 <h3><a href="<?php echo e(Uri::create('producto/'.$related['slug'])); ?>"><?php echo e($related['name']); ?></a></h3>
                 <?php if (!empty($related['short_description'])): ?>
                 <p><?php echo e($related['short_description']); ?></p>
                 <?php endif; ?>
-                <?php if (!empty($related['can_view_price'])): ?>
+                <?php if (!empty($related['can_view_price']) && (float) \Arr::get($related, 'price', 0) > 0): ?>
                 <div class="product-price" style="font-size: 1.05rem; margin: 12px 0 0;">
                     <?php echo e($related['currency_code']); ?> <?php echo number_format((float) $related['price'], 2); ?>
                 </div>
+                <?php else: ?>
+                <div class="product-quote-state">Precio a consultar</div>
                 <?php endif; ?>
                 <div class="product-card-actions">
                     <a class="card-action" href="<?php echo e(Uri::create('producto/'.$related['slug'])); ?>">Ver producto <i class="bi bi-arrow-right"></i></a>
-                    <?php if (!empty($related['inquiry_enabled'])): ?><a class="product-inquiry-link" href="<?php echo e(\Arr::get($related, 'inquiry_url', Uri::create('pagina/contacto'))); ?>" target="<?php echo e(\Arr::get($related, 'inquiry_target', '_self')); ?>" rel="noopener noreferrer"><?php echo e(\Arr::get($related, 'inquiry_label', 'Consultar producto')); ?></a><?php endif; ?>
+                    <?php if (!empty($related['inquiry_enabled'])): ?><a class="product-inquiry-link" href="<?php echo e(\Arr::get($related, 'inquiry_url', Uri::create('pagina/contacto'))); ?>" target="<?php echo e(\Arr::get($related, 'inquiry_target', '_self')); ?>" rel="noopener noreferrer">Consultar producto</a><?php endif; ?>
                 </div>
             </div>
         </article>

@@ -35,6 +35,7 @@
     $conversion_settings = !empty($conversion_settings) && is_array($conversion_settings) ? $conversion_settings : array();
     $whatsapp_url = !empty($whatsapp_url) ? (string) $whatsapp_url : (string) \Arr::get($conversion_settings, 'whatsapp_url', '');
     $mobile_cta = !empty($conversion_settings['mobile_cta']) && is_array($conversion_settings['mobile_cta']) ? $conversion_settings['mobile_cta'] : array();
+    $global_search_q = trim((string) Input::get('q', ''));
     ?>
     <title><?php echo e($full_title); ?></title>
     <meta name="robots" content="<?php echo e($robots); ?>">
@@ -535,6 +536,12 @@
                     <?php endif; ?>
                 </div>
             </nav>
+            <div class="header-search-row">
+                <form class="header-product-search" method="get" action="<?php echo Uri::create('productos'); ?>" role="search">
+                    <input id="header-product-search-q" type="search" name="q" value="<?php echo e($global_search_q); ?>" placeholder="Buscar producto, SKU, modelo o marca" maxlength="80" aria-label="Buscar producto, SKU, modelo o marca">
+                    <button type="submit"><i class="bi bi-search"></i><span>Buscar</span></button>
+                </form>
+            </div>
         </div>
     </header>
 

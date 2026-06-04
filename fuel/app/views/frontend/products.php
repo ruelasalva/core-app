@@ -38,6 +38,13 @@ $options = !empty($options) ? $options : array(
 $scope = !empty($scope) ? $scope : null;
 $catalog_action = Uri::create(Uri::string());
 $display_title = str_ireplace('Catalogo', 'Catálogo', (string) $title);
+$conversion_settings = !empty($conversion_settings) && is_array($conversion_settings) ? $conversion_settings : array();
+$empty_help_url = trim((string) \Arr::get($conversion_settings, 'whatsapp_url', ''));
+$empty_help_target = '_blank';
+if ($empty_help_url === '') {
+    $empty_help_url = Uri::create('pagina/contacto');
+    $empty_help_target = '_self';
+}
 ?>
 
 <style>
@@ -258,9 +265,9 @@ $display_title = str_ireplace('Catalogo', 'Catálogo', (string) $title);
             <aside class="catalog-filters">
                 <h2>Filtrar catálogo</h2>
                 <form method="get" action="<?php echo e($catalog_action); ?>">
-                    <div class="filter-field">
+                    <div class="filter-field catalog-search-field">
                         <label for="catalog-q">Buscar</label>
-                        <input id="catalog-q" type="search" name="q" value="<?php echo e($filters['q']); ?>" placeholder="Nombre, SKU o descripción">
+                        <input id="catalog-q" type="search" name="q" value="<?php echo e($filters['q']); ?>" placeholder="Busca por producto, SKU, modelo o marca">
                     </div>
 
                     <?php if ($scope !== 'category'): ?>
@@ -331,6 +338,11 @@ $display_title = str_ireplace('Catalogo', 'Catálogo', (string) $title);
                     <span>Búsqueda: <span class="catalog-active-search"><?php echo e($filters['q']); ?></span></span>
                     <?php endif; ?>
                 </div>
+                <?php if (!empty($filters['q'])): ?>
+                <div class="catalog-query-banner">
+                    Mostrando resultados para <strong><?php echo e($filters['q']); ?></strong>
+                </div>
+                <?php endif; ?>
 
         <?php if (!empty($products)): ?>
         <div class="catalog-grid">
@@ -340,25 +352,27 @@ $display_title = str_ireplace('Catalogo', 'Catálogo', (string) $title);
                     <img src="<?php echo e(!empty($product['main_image_path']) ? $media_url($product['main_image_path']) : $no_image_svg); ?>" alt="<?php echo e($product['name']); ?>">
                 </a>
                 <div class="body">
-                    <?php if (!empty($product['category_name'])): ?>
-                    <div class="catalog-meta"><?php echo e($product['category_name']); ?></div>
-                    <?php endif; ?>
-                    <?php if (!empty($product['brand_name']) || !empty($product['subcategory_name'])): ?>
-                    <div class="catalog-submeta">
-                        <?php echo e(trim(($product['brand_name'] ?? '').(!empty($product['brand_name']) && !empty($product['subcategory_name']) ? ' / ' : '').($product['subcategory_name'] ?? ''))); ?>
+                    <?php if (!empty($product['sku']) || !empty($product['brand_name']) || !empty($product['category_name'])): ?>
+                    <div class="product-card-meta">
+                        <?php if (!empty($product['sku'])): ?><span>SKU: <?php echo e($product['sku']); ?></span><?php endif; ?>
+                        <?php if (!empty($product['brand_name'])): ?><span><?php echo e($product['brand_name']); ?></span><?php endif; ?>
+                        <?php if (!empty($product['category_name'])): ?><span><?php echo e($product['category_name']); ?></span><?php endif; ?>
                     </div>
+                    <?php endif; ?>
+                    <?php if (!empty($product['subcategory_name'])): ?>
+                    <div class="catalog-submeta"><?php echo e($product['subcategory_name']); ?></div>
                     <?php endif; ?>
                     <h2><a href="<?php echo e($product_url($product['slug'])); ?>"><?php echo e($product['name']); ?></a></h2>
                     <?php if (!empty($product['short_description'])): ?>
                     <p><?php echo e($product['short_description']); ?></p>
                     <?php endif; ?>
-                    <?php if (!empty($product['can_view_price'])): ?>
+                    <?php if (!empty($product['can_view_price']) && (float) $product['price'] > 0): ?>
                     <div class="catalog-price">
                         <?php echo e($product['currency_code']); ?> <?php echo number_format((float) $product['price'], 2); ?>
                     </div>
                     <?php else: ?>
-                    <div class="catalog-login-price">
-                        <a href="<?php echo Uri::create('acceso'); ?>">Inicia sesión</a> para ver precio.
+                    <div class="product-quote-state">
+                        Precio a consultar
                     </div>
                     <?php endif; ?>
                     <div class="product-card-actions">
@@ -371,7 +385,9 @@ $display_title = str_ireplace('Catalogo', 'Catálogo', (string) $title);
         </div>
         <?php else: ?>
         <div class="empty-state">
-            No encontramos productos con esos filtros.
+            <h2>No encontramos productos con esos filtros.</h2>
+            <p>Podemos ayudarte a ubicar una alternativa compatible o confirmar disponibilidad con un asesor.</p>
+            <a class="empty-state-action" href="<?php echo e($empty_help_url); ?>" target="<?php echo e($empty_help_target); ?>" rel="noopener noreferrer">Solicitar ayuda para encontrarlo</a>
         </div>
         <?php endif; ?>
             </div>

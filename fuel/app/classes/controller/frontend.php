@@ -564,18 +564,33 @@ class Controller_Frontend extends Controller_Template
     protected function get_featured_products()
     {
         # SE BUSCAN LOS PRODUCTOS PUBLICADOS PARA EL INICIO
-        $products = DB::select('id', 'sku', 'name', 'slug', 'short_description', 'currency_code', 'price', 'main_image_path')
-            ->from('core_commerce_products')
-            ->where('active', 1)
-            ->where('published', 1)
-            ->where('product_type', 'product')
-            ->where('is_internal_service', 0)
+        $products = DB::select(
+                array('p.id', 'id'),
+                array('p.sku', 'sku'),
+                array('p.name', 'name'),
+                array('p.slug', 'slug'),
+                array('p.short_description', 'short_description'),
+                array('p.currency_code', 'currency_code'),
+                array('p.price', 'price'),
+                array('p.main_image_path', 'main_image_path'),
+                array('b.name', 'brand_name'),
+                array('c.name', 'category_name')
+            )
+            ->from(array('core_commerce_products', 'p'))
+            ->join(array('core_commerce_brands', 'b'), 'left')
+                ->on('p.brand_id', '=', 'b.id')
+            ->join(array('core_commerce_categories', 'c'), 'left')
+                ->on('p.category_id', '=', 'c.id')
+            ->where('p.active', 1)
+            ->where('p.published', 1)
+            ->where('p.product_type', 'product')
+            ->where('p.is_internal_service', 0)
             ->where_open()
-                ->where('featured', 1)
-                ->or_where('show_in_home', 1)
+                ->where('p.featured', 1)
+                ->or_where('p.show_in_home', 1)
             ->where_close()
-            ->order_by('sort_order', 'asc')
-            ->order_by('id', 'desc')
+            ->order_by('p.sort_order', 'asc')
+            ->order_by('p.id', 'desc')
             ->limit(8)
             ->execute()
             ->as_array();
@@ -627,11 +642,24 @@ class Controller_Frontend extends Controller_Template
      */
     protected function get_featured_brands()
     {
-        # SE BUSCAN MARCAS ACTIVAS PARA FRONTEND
-        return DB::select('id', 'name', 'slug', 'description', 'logo_path')
+        # SE BUSCAN MARCAS ACTIVAS DESTACADAS PARA FRONTEND
+        $rows = DB::select('id', 'name', 'slug', 'description', 'logo_path')
             ->from('core_commerce_brands')
             ->where('active', 1)
             ->where('show_in_home', 1)
+            ->order_by('sort_order', 'asc')
+            ->order_by('name', 'asc')
+            ->limit(12)
+            ->execute()
+            ->as_array();
+
+        if (!empty($rows)) {
+            return $rows;
+        }
+
+        return DB::select('id', 'name', 'slug', 'description', 'logo_path')
+            ->from('core_commerce_brands')
+            ->where('active', 1)
             ->order_by('sort_order', 'asc')
             ->order_by('name', 'asc')
             ->limit(12)

@@ -375,6 +375,21 @@ $contact_product_url = !empty($contact_product_url) ? (string) $contact_product_
     </section>
 <?php endif; ?>
 
+<?php if ($is_home_page): ?>
+<section class="home-product-search">
+    <div class="section-shell home-product-search-shell">
+        <div class="home-product-search-copy">
+            <span>Encuentra rápido lo que necesitas</span>
+            <h2>Busca productos por nombre, SKU, modelo o marca</h2>
+        </div>
+        <form class="home-product-search-form" method="get" action="<?php echo Uri::create('productos'); ?>">
+            <input id="home-product-search-q" type="search" name="q" placeholder="Busca por producto, SKU, modelo o marca" maxlength="80" aria-label="Busca por producto, SKU, modelo o marca">
+            <button type="submit"><i class="bi bi-search"></i> Buscar</button>
+        </form>
+    </div>
+</section>
+<?php endif; ?>
+
 <?php if (!empty($trust_badges)): ?>
 <section class="trust-badges-band">
     <div class="section-shell trust-badges">
@@ -445,6 +460,13 @@ $contact_product_url = !empty($contact_product_url) ? (string) $contact_product_
                         <img src="<?php echo e(!empty($product['main_image_path']) ? $media_url($product['main_image_path']) : $no_image_svg); ?>" alt="<?php echo e($product['name']); ?>">
                     </a>
                     <div class="body">
+                        <?php if (!empty($product['sku']) || !empty($product['brand_name']) || !empty($product['category_name'])): ?>
+                        <div class="product-card-meta">
+                            <?php if (!empty($product['sku'])): ?><span>SKU: <?php echo e($product['sku']); ?></span><?php endif; ?>
+                            <?php if (!empty($product['brand_name'])): ?><span><?php echo e($product['brand_name']); ?></span><?php endif; ?>
+                            <?php if (!empty($product['category_name'])): ?><span><?php echo e($product['category_name']); ?></span><?php endif; ?>
+                        </div>
+                        <?php endif; ?>
                         <h3><a href="<?php echo e(Uri::create('producto/'.$product['slug'])); ?>"><?php echo e($product['name']); ?></a></h3>
                         <?php if (!empty($product['short_description'])): ?>
                         <p><?php echo e($product['short_description']); ?></p>
@@ -454,8 +476,8 @@ $contact_product_url = !empty($contact_product_url) ? (string) $contact_product_
                             <?php echo e($product['currency_code']); ?> <?php echo number_format((float) $product['price'], 2); ?>
                         </div>
                         <?php else: ?>
-                        <div class="product-login-price">
-                            <a href="<?php echo Uri::create('acceso'); ?>">Inicia sesión</a> para ver precio.
+                        <div class="product-quote-state">
+                            Precio a consultar
                         </div>
                         <?php endif; ?>
                         <div class="product-card-actions">
