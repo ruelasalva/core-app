@@ -43,6 +43,9 @@
                 <li class="nav-item">
                     <a class="nav-link <?php echo Uri::segment(2) == 'quotes' ? 'active' : ''; ?>" href="<?php echo Uri::create($portal_code.'/quotes'); ?>">Cotizaciones</a>
                 </li>
+                <li class="nav-item">
+                    <a class="nav-link <?php echo Uri::segment(2) == 'contracts' ? 'active' : ''; ?>" href="<?php echo Uri::create($portal_code.'/contracts'); ?>">Mis Contratos</a>
+                </li>
                 <?php endif; ?>
                 <?php if ($portal_code === 'revendedores'): ?>
                 <li class="nav-item">
