@@ -27,6 +27,35 @@ class Controller_Admin_Billing extends Controller_Adminbase
     }
 
     /**
+     * REQUIRE BILLING GRANULAR ACCESS
+     *
+     * VALIDA PERMISO GRANULAR DE FACTURACION CON COMPATIBILIDAD TEMPORAL.
+     *
+     * @access  protected
+     * @param   String  $permission
+     * @param   String  $action
+     * @return  Void
+     */
+    protected function require_billing_granular_access($permission, $action)
+    {
+        if ($this->is_super_admin || \Auth::has_access($permission)) {
+            return;
+        }
+
+        if (\Auth::has_access('billing.access[edit]')) {
+            \Log::warning('Billing granular permission fallback used '.json_encode([
+                'required_permission' => (string) $permission,
+                'fallback_permission' => 'billing.access[edit]',
+                'action' => (string) $action,
+                'user_id' => (int) $this->user_id,
+            ]));
+            return;
+        }
+
+        throw new \HttpNoAccessException;
+    }
+
+    /**
      * INDEX
      *
      * MUESTRA PANEL DE FACTURACION
@@ -85,8 +114,8 @@ class Controller_Admin_Billing extends Controller_Adminbase
      */
     public function action_save_invoice()
     {
-        # VALIDAR PERMISO PARA EDITAR
-        $this->require_access('billing.access[edit]');
+        # VALIDAR PERMISO PARA CREAR O EDITAR BORRADORES
+        $this->require_billing_granular_access('billing.access[create]', 'save_invoice');
 
         # SE OBTIENE PAYLOAD JSON
         $val = (array) \Input::json();
@@ -177,8 +206,8 @@ class Controller_Admin_Billing extends Controller_Adminbase
      */
     public function action_save_item()
     {
-        # VALIDAR PERMISO PARA EDITAR
-        $this->require_access('billing.access[edit]');
+        # VALIDAR PERMISO PARA CREAR O EDITAR CONCEPTOS
+        $this->require_billing_granular_access('billing.access[create]', 'save_item');
 
         # SE OBTIENE PAYLOAD JSON
         $val = (array) \Input::json();
@@ -302,7 +331,7 @@ class Controller_Admin_Billing extends Controller_Adminbase
 
     public function action_stamp_invoice()
     {
-        $this->require_access('billing.access[edit]');
+        $this->require_billing_granular_access('billing.access[stamp]', 'stamp_invoice');
 
         try {
             $invoice = $this->invoice_from_request();
@@ -358,7 +387,7 @@ class Controller_Admin_Billing extends Controller_Adminbase
 
     public function action_cancel_invoice()
     {
-        $this->require_access('billing.access[edit]');
+        $this->require_billing_granular_access('billing.access[cancel]', 'cancel_invoice');
 
         try {
             $val = (array) \Input::json();
@@ -400,7 +429,7 @@ class Controller_Admin_Billing extends Controller_Adminbase
 
     public function action_save_recurring_profile()
     {
-        $this->require_access('billing.access[edit]');
+        $this->require_billing_granular_access('billing.access[create]', 'save_recurring_profile');
         $val = (array) \Input::json();
 
         try {
@@ -472,7 +501,7 @@ class Controller_Admin_Billing extends Controller_Adminbase
 
     public function action_save_recurring_item()
     {
-        $this->require_access('billing.access[edit]');
+        $this->require_billing_granular_access('billing.access[create]', 'save_recurring_item');
         $val = (array) \Input::json();
 
         try {
@@ -525,7 +554,7 @@ class Controller_Admin_Billing extends Controller_Adminbase
 
     public function action_generate_recurring_invoice()
     {
-        $this->require_access('billing.access[edit]');
+        $this->require_billing_granular_access('billing.access[create]', 'generate_recurring_invoice');
         $val = (array) \Input::json();
         $transaction_started = false;
 
@@ -617,7 +646,7 @@ class Controller_Admin_Billing extends Controller_Adminbase
 
     public function action_create_from_delivery()
     {
-        $this->require_access('billing.access[edit]');
+        $this->require_billing_granular_access('billing.access[create]', 'create_from_delivery');
         $transaction_started = false;
 
         try {

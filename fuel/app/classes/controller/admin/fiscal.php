@@ -13,6 +13,48 @@ class Controller_Admin_Fiscal extends Controller_Adminbase
     protected $taxpayer_rfc_source = 'no configurado';
 
     /**
+     * REQUIRE FISCAL GRANULAR ACCESS
+     *
+     * Valida permisos fiscales granulares conservando compatibilidad temporal
+     * con el permiso amplio fiscal.access.
+     *
+     * @access  protected
+     * @param   String|Array  $permissions
+     * @param   String        $action
+     * @param   Array         $fallbacks
+     * @return  Void
+     */
+    protected function require_fiscal_granular_access($permissions, $action, $fallbacks = ['fiscal.access'])
+    {
+        $permissions = is_array($permissions) ? $permissions : [$permissions];
+        $fallbacks = is_array($fallbacks) ? $fallbacks : [$fallbacks];
+
+        if ($this->is_super_admin) {
+            return;
+        }
+
+        foreach ($permissions as $permission) {
+            if (\Auth::has_access($permission)) {
+                return;
+            }
+        }
+
+        foreach ($fallbacks as $fallback) {
+            if (\Auth::has_access($fallback)) {
+                \Log::warning('Fiscal granular permission fallback used '.json_encode([
+                    'required_permissions' => $permissions,
+                    'fallback_permission' => $fallback,
+                    'action' => (string) $action,
+                    'user_id' => (int) $this->user_id,
+                ]));
+                return;
+            }
+        }
+
+        throw new \HttpNoAccessException;
+    }
+
+    /**
      * INDEX
      *
      * MUESTRA EL DASHBOARD FISCAL MENSUAL.
@@ -22,8 +64,8 @@ class Controller_Admin_Fiscal extends Controller_Adminbase
      */
     public function action_index()
     {
-        # VALIDAR PERMISO DEL MODULO FISCAL
-        $this->require_access('fiscal.access');
+        # VALIDAR PERMISO GRANULAR DEL PANEL FISCAL
+        $this->require_fiscal_granular_access('fiscal.access[view]', 'index');
 
         # SE PREPARAN FILTROS DE CONSULTA
         $rfc = $this->resolve_taxpayer_rfc();
@@ -54,8 +96,8 @@ class Controller_Admin_Fiscal extends Controller_Adminbase
      */
     public function action_ledger()
     {
-        # VALIDAR PERMISO DEL MODULO FISCAL
-        $this->require_access('fiscal.access');
+        # VALIDAR PERMISO GRANULAR DEL LIBRO FISCAL
+        $this->require_fiscal_granular_access('fiscal.access[ledger]', 'ledger');
 
         # SE PREPARAN FILTROS DE CONSULTA
         $rfc = $this->resolve_taxpayer_rfc();
@@ -87,8 +129,8 @@ class Controller_Admin_Fiscal extends Controller_Adminbase
      */
     public function action_validations()
     {
-        # VALIDAR PERMISO DEL MODULO FISCAL
-        $this->require_access('fiscal.access');
+        # VALIDAR PERMISO GRANULAR DEL LIBRO FISCAL
+        $this->require_fiscal_granular_access('fiscal.access[ledger]', 'validations');
 
         # SE PREPARAN FILTROS DE CONSULTA
         $rfc = $this->resolve_taxpayer_rfc();
@@ -118,8 +160,8 @@ class Controller_Admin_Fiscal extends Controller_Adminbase
      */
     public function action_events()
     {
-        # VALIDAR PERMISO DEL MODULO FISCAL
-        $this->require_access('fiscal.access');
+        # VALIDAR PERMISO GRANULAR DEL PANEL FISCAL
+        $this->require_fiscal_granular_access('fiscal.access[view]', 'events');
 
         # SE PREPARAN FILTROS DE CONSULTA
         $rfc = $this->resolve_taxpayer_rfc();
@@ -151,8 +193,8 @@ class Controller_Admin_Fiscal extends Controller_Adminbase
      */
     public function action_rep_audit()
     {
-        # VALIDAR PERMISO DEL MODULO FISCAL
-        $this->require_access('fiscal.access');
+        # VALIDAR PERMISO GRANULAR DE AUDITORIA REP/PPD
+        $this->require_fiscal_granular_access(['fiscal.access[view]', 'billing.access[rep]'], 'rep_audit');
 
         # SE PREPARAN FILTROS DE CONSULTA
         $rfc = $this->resolve_taxpayer_rfc();
@@ -184,8 +226,8 @@ class Controller_Admin_Fiscal extends Controller_Adminbase
      */
     public function action_vat()
     {
-        # VALIDAR PERMISO DEL MODULO FISCAL
-        $this->require_access('fiscal.access');
+        # VALIDAR PERMISO GRANULAR DE IVA
+        $this->require_fiscal_granular_access('fiscal.access[iva]', 'vat');
 
         # SE PREPARAN FILTROS DE CONSULTA
         $rfc = $this->resolve_taxpayer_rfc();
@@ -215,8 +257,8 @@ class Controller_Admin_Fiscal extends Controller_Adminbase
      */
     public function action_diot()
     {
-        # VALIDAR PERMISO DEL MODULO FISCAL
-        $this->require_access('fiscal.access');
+        # VALIDAR PERMISO GRANULAR DE DIOT
+        $this->require_fiscal_granular_access('fiscal.access[diot]', 'diot');
 
         # SE PREPARAN FILTROS DE CONSULTA
         $rfc = $this->resolve_taxpayer_rfc();
@@ -246,8 +288,8 @@ class Controller_Admin_Fiscal extends Controller_Adminbase
      */
     public function action_reconciliation()
     {
-        # VALIDAR PERMISO DEL MODULO FISCAL
-        $this->require_access('fiscal.access');
+        # VALIDAR PERMISO GRANULAR DE CONCILIACION FISCAL-CONTABLE
+        $this->require_fiscal_granular_access(['fiscal.access[ledger]', 'accounting.access[view]'], 'reconciliation');
 
         # SE PREPARAN FILTROS DE CONSULTA
         $rfc = $this->resolve_taxpayer_rfc();
@@ -277,8 +319,8 @@ class Controller_Admin_Fiscal extends Controller_Adminbase
      */
     public function action_closing()
     {
-        # VALIDAR PERMISO DEL MODULO FISCAL
-        $this->require_access('fiscal.access');
+        # VALIDAR PERMISO GRANULAR DE CIERRE FISCAL
+        $this->require_fiscal_granular_access('fiscal.access[closing]', 'closing');
 
         # SE PREPARAN FILTROS DE CONSULTA
         $rfc = $this->resolve_taxpayer_rfc();
@@ -309,8 +351,8 @@ class Controller_Admin_Fiscal extends Controller_Adminbase
     public function action_data()
     {
         try {
-            # VALIDAR PERMISO DEL MODULO FISCAL
-            $this->require_access('fiscal.access');
+            # VALIDAR PERMISO GRANULAR DEL PANEL FISCAL
+            $this->require_fiscal_granular_access('fiscal.access[view]', 'data');
 
             # SE PREPARAN FILTROS DE CONSULTA
             $rfc = $this->resolve_taxpayer_rfc();
@@ -341,8 +383,8 @@ class Controller_Admin_Fiscal extends Controller_Adminbase
     public function action_ledger_data()
     {
         try {
-            # VALIDAR PERMISO DEL MODULO FISCAL
-            $this->require_access('fiscal.access');
+            # VALIDAR PERMISO GRANULAR DEL LIBRO FISCAL
+            $this->require_fiscal_granular_access('fiscal.access[ledger]', 'ledger_data');
 
             # SE PREPARAN FILTROS DE CONSULTA
             $rfc = $this->resolve_taxpayer_rfc();
@@ -374,8 +416,8 @@ class Controller_Admin_Fiscal extends Controller_Adminbase
     public function action_validations_data()
     {
         try {
-            # VALIDAR PERMISO DEL MODULO FISCAL
-            $this->require_access('fiscal.access');
+            # VALIDAR PERMISO GRANULAR DEL LIBRO FISCAL
+            $this->require_fiscal_granular_access('fiscal.access[ledger]', 'validations_data');
 
             # SE PREPARAN FILTROS DE CONSULTA
             $rfc = $this->resolve_taxpayer_rfc();
@@ -406,8 +448,8 @@ class Controller_Admin_Fiscal extends Controller_Adminbase
     public function action_events_data()
     {
         try {
-            # VALIDAR PERMISO DEL MODULO FISCAL
-            $this->require_access('fiscal.access');
+            # VALIDAR PERMISO GRANULAR DEL PANEL FISCAL
+            $this->require_fiscal_granular_access('fiscal.access[view]', 'events_data');
 
             # SE PREPARAN FILTROS DE CONSULTA
             $rfc = $this->resolve_taxpayer_rfc();
@@ -439,8 +481,8 @@ class Controller_Admin_Fiscal extends Controller_Adminbase
     public function action_rep_audit_data()
     {
         try {
-            # VALIDAR PERMISO DEL MODULO FISCAL
-            $this->require_access('fiscal.access');
+            # VALIDAR PERMISO GRANULAR DE AUDITORIA REP/PPD
+            $this->require_fiscal_granular_access(['fiscal.access[view]', 'billing.access[rep]'], 'rep_audit_data');
 
             # SE PREPARAN FILTROS DE CONSULTA
             $rfc = $this->resolve_taxpayer_rfc();
@@ -472,8 +514,8 @@ class Controller_Admin_Fiscal extends Controller_Adminbase
     public function action_vat_data()
     {
         try {
-            # VALIDAR PERMISO DEL MODULO FISCAL
-            $this->require_access('fiscal.access');
+            # VALIDAR PERMISO GRANULAR DE IVA
+            $this->require_fiscal_granular_access('fiscal.access[iva]', 'vat_data');
 
             # SE PREPARAN FILTROS DE CONSULTA
             $rfc = $this->resolve_taxpayer_rfc();
@@ -504,8 +546,8 @@ class Controller_Admin_Fiscal extends Controller_Adminbase
     public function action_diot_data()
     {
         try {
-            # VALIDAR PERMISO DEL MODULO FISCAL
-            $this->require_access('fiscal.access');
+            # VALIDAR PERMISO GRANULAR DE DIOT
+            $this->require_fiscal_granular_access('fiscal.access[diot]', 'diot_data');
 
             # SE PREPARAN FILTROS DE CONSULTA
             $rfc = $this->resolve_taxpayer_rfc();
@@ -536,8 +578,8 @@ class Controller_Admin_Fiscal extends Controller_Adminbase
     public function action_reconciliation_data()
     {
         try {
-            # VALIDAR PERMISO DEL MODULO FISCAL
-            $this->require_access('fiscal.access');
+            # VALIDAR PERMISO GRANULAR DE CONCILIACION FISCAL-CONTABLE
+            $this->require_fiscal_granular_access(['fiscal.access[ledger]', 'accounting.access[view]'], 'reconciliation_data');
 
             # SE PREPARAN FILTROS DE CONSULTA
             $rfc = $this->resolve_taxpayer_rfc();
@@ -568,8 +610,8 @@ class Controller_Admin_Fiscal extends Controller_Adminbase
     public function action_closing_data()
     {
         try {
-            # VALIDAR PERMISO DEL MODULO FISCAL
-            $this->require_access('fiscal.access');
+            # VALIDAR PERMISO GRANULAR DE CIERRE FISCAL
+            $this->require_fiscal_granular_access('fiscal.access[closing]', 'closing_data');
 
             # SE PREPARAN FILTROS DE CONSULTA
             $rfc = $this->resolve_taxpayer_rfc();

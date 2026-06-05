@@ -27,6 +27,35 @@ class Controller_Admin_Sat extends Controller_Adminbase
     }
 
     /**
+     * REQUIRE SAT GRANULAR ACCESS
+     *
+     * Valida permisos SAT granulares conservando compatibilidad temporal con sat.access[edit].
+     *
+     * @access  protected
+     * @param   String  $permission
+     * @param   String  $action
+     * @return  Void
+     */
+    protected function require_sat_granular_access($permission, $action)
+    {
+        if ($this->is_super_admin || \Auth::has_access($permission)) {
+            return;
+        }
+
+        if (\Auth::has_access('sat.access[edit]')) {
+            \Log::warning('SAT granular permission fallback used '.json_encode([
+                'required_permission' => $permission,
+                'fallback_permission' => 'sat.access[edit]',
+                'action' => $action,
+                'user_id' => (int) $this->user_id,
+            ]));
+            return;
+        }
+
+        throw new \HttpNoAccessException;
+    }
+
+    /**
      * INDEX
      *
      * MUESTRA EL PANEL PRINCIPAL SAT
@@ -126,8 +155,8 @@ class Controller_Admin_Sat extends Controller_Adminbase
      */
     public function post_save_catalog()
     {
-        # VALIDAR PERMISO PARA EDITAR
-        $this->require_access('sat.access[edit]');
+        # VALIDAR PERMISO GRANULAR PARA CATALOGOS SAT
+        $this->require_sat_granular_access('sat.access[catalog_sync]', 'save_catalog');
 
         # SE OBTIENE PAYLOAD JSON
         $val = (array) \Input::json();
@@ -205,7 +234,7 @@ class Controller_Admin_Sat extends Controller_Adminbase
 
     public function post_save_catalog_sync_source()
     {
-        $this->require_access('sat.access[edit]');
+        $this->require_sat_granular_access('sat.access[catalog_sync]', 'save_catalog_sync_source');
         $val = (array) \Input::json();
 
         try {
@@ -252,7 +281,7 @@ class Controller_Admin_Sat extends Controller_Adminbase
 
     public function post_sync_catalog()
     {
-        $this->require_access('sat.access[edit]');
+        $this->require_sat_granular_access('sat.access[catalog_sync]', 'sync_catalog');
         $val = (array) \Input::json();
 
         try {
@@ -313,8 +342,8 @@ class Controller_Admin_Sat extends Controller_Adminbase
      */
     public function post_save_config()
     {
-        # VALIDAR PERMISO PARA EDITAR
-        $this->require_access('sat.access[edit]');
+        # VALIDAR PERMISO GRANULAR PARA CREDENCIALES/CONFIGURACION SAT
+        $this->require_sat_granular_access('sat.access[credentials]', 'save_config');
 
         # SE OBTIENE PAYLOAD JSON
         $val = (array) \Input::json();
@@ -352,8 +381,8 @@ class Controller_Admin_Sat extends Controller_Adminbase
      */
     public function post_save_credential()
     {
-        # VALIDAR PERMISO PARA EDITAR
-        $this->require_access('sat.access[edit]');
+        # VALIDAR PERMISO GRANULAR PARA CREDENCIALES SAT
+        $this->require_sat_granular_access('sat.access[credentials]', 'save_credential');
 
         # SE OBTIENE PAYLOAD JSON
         $val = (array) \Input::json();
@@ -429,7 +458,7 @@ class Controller_Admin_Sat extends Controller_Adminbase
 
     public function post_upload_credential_file()
     {
-        $this->require_access('sat.access[edit]');
+        $this->require_sat_granular_access('sat.access[credentials]', 'upload_credential_file');
 
         try {
             $this->assert_schema_ready();
@@ -521,8 +550,8 @@ class Controller_Admin_Sat extends Controller_Adminbase
      */
     public function action_save_request()
     {
-        # VALIDAR PERMISO PARA EDITAR
-        $this->require_access('sat.access[edit]');
+        # VALIDAR PERMISO GRANULAR PARA DESCARGAS SAT
+        $this->require_sat_granular_access('sat.access[download]', 'save_request');
 
         # SE OBTIENE PAYLOAD JSON
         $val = (array) \Input::json();
@@ -558,7 +587,7 @@ class Controller_Admin_Sat extends Controller_Adminbase
      */
     public function action_submit_requests()
     {
-        $this->require_access('sat.access[edit]');
+        $this->require_sat_granular_access('sat.access[download]', 'submit_requests');
 
         try {
             $this->assert_schema_ready();
@@ -581,7 +610,7 @@ class Controller_Admin_Sat extends Controller_Adminbase
      */
     public function action_verify_requests()
     {
-        $this->require_access('sat.access[edit]');
+        $this->require_sat_granular_access('sat.access[download]', 'verify_requests');
 
         try {
             $this->assert_schema_ready();
@@ -604,7 +633,7 @@ class Controller_Admin_Sat extends Controller_Adminbase
      */
     public function action_download_packages()
     {
-        $this->require_access('sat.access[edit]');
+        $this->require_sat_granular_access('sat.access[download]', 'download_packages');
 
         try {
             $this->assert_schema_ready();

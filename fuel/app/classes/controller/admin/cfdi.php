@@ -13,7 +13,47 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
     public function before()
     {
         parent::before();
-        $this->require_access('sat.access[view]');
+        $this->require_cfdi_granular_access(['cfdi.access[view]', 'cfdi.access[audit]'], 'view', ['sat.access[view]']);
+    }
+
+    /**
+     * REQUIRE CFDI GRANULAR ACCESS
+     *
+     * Valida permisos CFDI granulares conservando compatibilidad temporal con permisos SAT anteriores.
+     *
+     * @access  protected
+     * @param   Array|String  $permissions
+     * @param   String        $action
+     * @param   Array         $fallbacks
+     * @return  Void
+     */
+    protected function require_cfdi_granular_access($permissions, $action, array $fallbacks = [])
+    {
+        $permissions = is_array($permissions) ? $permissions : [$permissions];
+
+        if ($this->is_super_admin) {
+            return;
+        }
+
+        foreach ($permissions as $permission) {
+            if (\Auth::has_access($permission)) {
+                return;
+            }
+        }
+
+        foreach ($fallbacks as $fallback) {
+            if (\Auth::has_access($fallback)) {
+                \Log::warning('CFDI granular permission fallback used '.json_encode([
+                    'required_permissions' => $permissions,
+                    'fallback_permission' => $fallback,
+                    'action' => $action,
+                    'user_id' => (int) $this->user_id,
+                ]));
+                return;
+            }
+        }
+
+        throw new \HttpNoAccessException;
     }
 
     public function action_index()
@@ -46,7 +86,7 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
 
     public function post_import_xml()
     {
-        $this->require_access('sat.access[import]');
+        $this->require_cfdi_granular_access('cfdi.access[classify]', 'import_xml', ['sat.access[import]', 'sat.access[edit]']);
 
         try {
             $file = \Input::file('file');
@@ -102,7 +142,7 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
      */
     public function action_convert_purchase()
     {
-        $this->require_access('sat.access[edit]');
+        $this->require_cfdi_granular_access('cfdi.access[convert_purchase]', 'convert_purchase', ['sat.access[edit]']);
         $this->require_access('purchases.access[create]');
 
         $transaction_started = false;
@@ -192,7 +232,7 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
      */
     public function action_save_supplier_mappings()
     {
-        $this->require_access('sat.access[edit]');
+        $this->require_cfdi_granular_access('cfdi.access[link]', 'save_supplier_mappings', ['sat.access[edit]']);
         $this->require_access('purchases.access[edit]');
 
         try {
@@ -263,7 +303,7 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
      */
     public function action_convert_sale()
     {
-        $this->require_access('sat.access[edit]');
+        $this->require_cfdi_granular_access('cfdi.access[convert_sale]', 'convert_sale', ['sat.access[edit]']);
         $this->require_access('billing.access[edit]');
 
         $transaction_started = false;
@@ -348,7 +388,7 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
      */
     public function action_materialize_catalogs()
     {
-        $this->require_access('sat.access[edit]');
+        $this->require_cfdi_granular_access('cfdi.access[classify]', 'materialize_catalogs', ['sat.access[edit]']);
 
         $transaction_started = false;
         try {
@@ -433,7 +473,7 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
      */
     public function action_materialize_batch()
     {
-        $this->require_access('sat.access[edit]');
+        $this->require_cfdi_granular_access('cfdi.access[classify]', 'materialize_batch', ['sat.access[edit]']);
 
         try {
             $this->assert_schema_ready();
@@ -539,7 +579,7 @@ class Controller_Admin_Cfdi extends Controller_Adminbase
      */
     public function action_import_selected_documents()
     {
-        $this->require_access('sat.access[edit]');
+        $this->require_cfdi_granular_access('cfdi.access[classify]', 'import_selected_documents', ['sat.access[edit]']);
         $this->require_access('parties.access[edit]');
         $this->require_access('purchases.access[create]');
         $this->require_access('billing.access[edit]');

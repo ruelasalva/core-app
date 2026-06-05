@@ -16,6 +16,48 @@ class Controller_Admin_Accounting extends Controller_Adminbase
         $this->require_access('accounting.access[view]');
     }
 
+    /**
+     * REQUIRE ACCOUNTING GRANULAR ACCESS
+     *
+     * Valida permisos contables granulares conservando compatibilidad temporal
+     * con el permiso amplio accounting.access[edit].
+     *
+     * @access  protected
+     * @param   String|Array  $permissions
+     * @param   String        $action
+     * @param   Array         $fallbacks
+     * @return  Void
+     */
+    protected function require_accounting_granular_access($permissions, $action, $fallbacks = ['accounting.access[edit]'])
+    {
+        $permissions = is_array($permissions) ? $permissions : [$permissions];
+        $fallbacks = is_array($fallbacks) ? $fallbacks : [$fallbacks];
+
+        if ($this->is_super_admin) {
+            return;
+        }
+
+        foreach ($permissions as $permission) {
+            if (\Auth::has_access($permission)) {
+                return;
+            }
+        }
+
+        foreach ($fallbacks as $fallback) {
+            if (\Auth::has_access($fallback)) {
+                \Log::warning('Accounting granular permission fallback used '.json_encode([
+                    'required_permissions' => $permissions,
+                    'fallback_permission' => $fallback,
+                    'action' => (string) $action,
+                    'user_id' => (int) $this->user_id,
+                ]));
+                return;
+            }
+        }
+
+        throw new \HttpNoAccessException;
+    }
+
     public function action_index()
     {
         $this->template->title = 'Contabilidad';
@@ -79,7 +121,7 @@ class Controller_Admin_Accounting extends Controller_Adminbase
 
     public function action_save_fiscal_mappings()
     {
-        $this->require_access('accounting.access[edit]');
+        $this->require_accounting_granular_access('accounting.access[chart]', 'save_fiscal_mappings');
         $payload = (array) \Input::json();
 
         try {
@@ -157,7 +199,7 @@ class Controller_Admin_Accounting extends Controller_Adminbase
 
     public function action_save_account()
     {
-        $this->require_access('accounting.access[edit]');
+        $this->require_accounting_granular_access('accounting.access[chart]', 'save_account');
         $val = (array) \Input::json();
 
         try {
@@ -213,7 +255,7 @@ class Controller_Admin_Accounting extends Controller_Adminbase
 
     public function action_save_entry()
     {
-        $this->require_access('accounting.access[edit]');
+        $this->require_accounting_granular_access('accounting.access[post]', 'save_entry');
         $val = (array) \Input::json();
 
         try {
@@ -273,7 +315,7 @@ class Controller_Admin_Accounting extends Controller_Adminbase
 
     public function action_save_line()
     {
-        $this->require_access('accounting.access[edit]');
+        $this->require_accounting_granular_access('accounting.access[post]', 'save_line');
         $val = (array) \Input::json();
 
         try {
@@ -326,7 +368,7 @@ class Controller_Admin_Accounting extends Controller_Adminbase
 
     public function action_post_entry()
     {
-        $this->require_access('accounting.access[edit]');
+        $this->require_accounting_granular_access('accounting.access[post]', 'post_entry');
         $id = (int) \Arr::get((array) \Input::json(), 'id', 0);
 
         try {
@@ -363,7 +405,7 @@ class Controller_Admin_Accounting extends Controller_Adminbase
 
     public function action_save_rule()
     {
-        $this->require_access('accounting.access[edit]');
+        $this->require_accounting_granular_access('accounting.access[post]', 'save_rule');
         $val = (array) \Input::json();
 
         try {
@@ -407,7 +449,7 @@ class Controller_Admin_Accounting extends Controller_Adminbase
 
     public function action_save_period()
     {
-        $this->require_access('accounting.access[edit]');
+        $this->require_accounting_granular_access('accounting.access[periods]', 'save_period');
         $val = (array) \Input::json();
 
         try {
@@ -466,7 +508,7 @@ class Controller_Admin_Accounting extends Controller_Adminbase
 
     public function action_save_cost_center()
     {
-        $this->require_access('accounting.access[edit]');
+        $this->require_accounting_granular_access('accounting.access[chart]', 'save_cost_center');
         $val = (array) \Input::json();
 
         try {
