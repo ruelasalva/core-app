@@ -69,30 +69,36 @@ class Service_Core_Admin_MenuBuilder
             $this->header('RECURSOS HUMANOS', $menu['hr']),
             $this->item('Empleados y n&oacute;mina', 'bi bi-person-badge', \Uri::create('admin/hr'), $segment === 'hr', $menu['hr']),
 
-            $this->header('FINANZAS', $menu['billing'] || $menu['receivables'] || $menu['payables'] || $menu['payments'] || $menu['treasury'] || $menu['budgets']),
+            $this->header('FINANZAS', $menu['billing'] || $menu['billing_rep'] || $menu['receivables'] || $menu['payables'] || $menu['payments'] || $menu['treasury'] || $menu['budgets']),
             $this->item('Facturaci&oacute;n CFDI', 'bi bi-receipt-cutoff', \Uri::create('admin/billing'), $segment === 'billing', $menu['billing']),
+            $this->item('Complementos de pago REP', 'bi bi-cash-stack', \Uri::create('admin/billing'), $segment === 'billing' && \Input::get('view') === 'rep', $menu['billing_rep']),
             $this->item('Cuentas por cobrar', 'bi bi-wallet2', \Uri::create('admin/receivables'), $segment === 'receivables', $menu['receivables']),
             $this->item('Cuentas por pagar', 'bi bi-receipt-cutoff', \Uri::create('admin/payables'), $segment === 'payables', $menu['payables']),
             $this->item('Bancos y pagos', 'bi bi-bank', \Uri::create('admin/payments'), $segment === 'payments', $menu['payments']),
             $this->item('Tesorer&iacute;a', 'bi bi-graph-up-arrow', \Uri::create('admin/treasury'), $segment === 'treasury', $menu['treasury']),
             $this->item('Presupuestos', 'bi bi-clipboard-data', \Uri::create('admin/budgets'), $segment === 'budgets', $menu['budgets']),
 
-            $this->header('FISCAL', $menu['fiscal'] || $menu['sat'] || $menu['catalogs']),
+            $this->header('FISCAL', $menu['fiscal'] || $menu['fiscal_ledger'] || $menu['fiscal_diot'] || $menu['fiscal_iva'] || $menu['fiscal_closing'] || $menu['sat'] || $menu['sat_download'] || $menu['sat_catalog_sync'] || $menu['sat_credentials'] || $menu['cfdi'] || $menu['cfdi_audit']),
             $this->item('Panel fiscal', 'bi bi-speedometer', \Uri::create('admin/fiscal'), $segment === 'fiscal' && $subsegment === '', $menu['fiscal']),
-            $this->item('Libro Fiscal', 'bi bi-journal-text', \Uri::create('admin/fiscal/ledger'), $segment === 'fiscal' && $subsegment === 'ledger', $menu['fiscal']),
+            $this->item('Libro Fiscal', 'bi bi-journal-text', \Uri::create('admin/fiscal/ledger'), $segment === 'fiscal' && $subsegment === 'ledger', $menu['fiscal_ledger']),
             $this->item('Validaciones Fiscales', 'bi bi-check2-square', \Uri::create('admin/fiscal/validations'), $segment === 'fiscal' && $subsegment === 'validations', $menu['fiscal']),
             $this->item('Bitacora Fiscal', 'bi bi-clock-history', \Uri::create('admin/fiscal/events'), $segment === 'fiscal' && $subsegment === 'events', $menu['fiscal']),
-            $this->item('Auditor&iacute;a REP/PPD', 'bi bi-receipt-cutoff', \Uri::create('admin/fiscal/rep_audit'), $segment === 'fiscal' && $subsegment === 'rep_audit', $menu['fiscal']),
-            $this->item('IVA mensual', 'bi bi-percent', \Uri::create('admin/fiscal/vat'), $segment === 'fiscal' && $subsegment === 'vat', $menu['fiscal']),
-            $this->item('Preparacion DIOT', 'bi bi-file-earmark-spreadsheet', \Uri::create('admin/fiscal/diot'), $segment === 'fiscal' && $subsegment === 'diot', $menu['fiscal']),
-            $this->item('Conciliaci&oacute;n fiscal-contable', 'bi bi-columns-gap', \Uri::create('admin/fiscal/reconciliation'), $segment === 'fiscal' && $subsegment === 'reconciliation', $menu['fiscal']),
-            $this->item('Centro de Cierre Fiscal', 'bi bi-clipboard-check', \Uri::create('admin/fiscal/closing'), $segment === 'fiscal' && $subsegment === 'closing', $menu['fiscal']),
+            $this->item('Auditor&iacute;a REP/PPD', 'bi bi-receipt-cutoff', \Uri::create('admin/fiscal/rep_audit'), $segment === 'fiscal' && $subsegment === 'rep_audit', $menu['fiscal'] || $menu['billing_rep']),
+            $this->item('IVA mensual', 'bi bi-percent', \Uri::create('admin/fiscal/vat'), $segment === 'fiscal' && $subsegment === 'vat', $menu['fiscal_iva']),
+            $this->item('Preparacion DIOT', 'bi bi-file-earmark-spreadsheet', \Uri::create('admin/fiscal/diot'), $segment === 'fiscal' && $subsegment === 'diot', $menu['fiscal_diot']),
+            $this->item('Conciliaci&oacute;n fiscal-contable', 'bi bi-columns-gap', \Uri::create('admin/fiscal/reconciliation'), $segment === 'fiscal' && $subsegment === 'reconciliation', $menu['fiscal_ledger'] || $menu['accounting']),
+            $this->item('Centro de Cierre Fiscal', 'bi bi-clipboard-check', \Uri::create('admin/fiscal/closing'), $segment === 'fiscal' && $subsegment === 'closing', $menu['fiscal_closing']),
             $this->item('SAT y CFDI', 'bi bi-receipt', \Uri::create('admin/sat'), $segment === 'sat' && $subsegment === '', $menu['sat']),
-            $this->item('Auditoria SAT', 'bi bi-search', \Uri::create('admin/cfdi'), $segment === 'cfdi', $menu['sat']),
-            $this->item('Catalogos SAT', 'bi bi-collection', \Uri::create('admin/sat/catalogs'), $segment === 'sat' && $subsegment === 'catalogs', $menu['catalogs']),
+            $this->item('Descargas SAT', 'bi bi-cloud-arrow-down', \Uri::create('admin/sat'), $segment === 'sat' && \Input::get('view') === 'downloads', $menu['sat_download']),
+            $this->item('Credenciales SAT', 'bi bi-shield-lock', \Uri::create('admin/sat'), $segment === 'sat' && \Input::get('view') === 'credentials', $menu['sat_credentials']),
+            $this->item('Auditoria CFDI', 'bi bi-search', \Uri::create('admin/cfdi'), $segment === 'cfdi', $menu['cfdi'] || $menu['cfdi_audit']),
+            $this->item('Catalogos SAT', 'bi bi-collection', \Uri::create('admin/sat/catalogs'), $segment === 'sat' && $subsegment === 'catalogs', $menu['sat_catalog_sync']),
 
-            $this->header('CONTABILIDAD', $menu['accounting'] || $menu['catalogs']),
+            $this->header('CONTABILIDAD', $menu['accounting'] || $menu['accounting_chart'] || $menu['accounting_post'] || $menu['accounting_periods'] || $menu['catalogs']),
             $this->item('Contabilidad', 'bi bi-journal-check', \Uri::create('admin/accounting'), $segment === 'accounting' && $subsegment === '', $menu['accounting']),
+            $this->item('Catalogo de cuentas', 'bi bi-diagram-3', \Uri::create('admin/accounting'), $segment === 'accounting' && \Input::get('view') === 'chart', $menu['accounting_chart']),
+            $this->item('Polizas y posteo', 'bi bi-journal-plus', \Uri::create('admin/accounting'), $segment === 'accounting' && \Input::get('view') === 'post', $menu['accounting_post']),
+            $this->item('Periodos contables', 'bi bi-calendar-range', \Uri::create('admin/accounting'), $segment === 'accounting' && \Input::get('view') === 'periods', $menu['accounting_periods']),
             $this->item('Configuracion Fiscal', 'bi bi-sliders', \Uri::create('admin/accounting/fiscal_config'), $segment === 'accounting' && $subsegment === 'fiscal_config', $menu['accounting']),
             $this->tree('Catalogos base', 'bi bi-collection', $catalog_open, $menu['catalogs'], [
                 $this->item('Generales', 'bi bi-grid', \Uri::create('admin/catalogs').'?group=general', $catalog_open && $catalog_group === 'general'),
@@ -128,13 +134,15 @@ class Service_Core_Admin_MenuBuilder
 
     protected function normalize_menu(array $menu)
     {
-        $has_fiscal_permission = array_key_exists('fiscal', $menu);
-
         $keys = [
             'commerce', 'supplierimport', 'sales', 'commissions', 'inventory', 'purchases', 'contracts',
-            'billing', 'receivables', 'payables', 'payments', 'treasury', 'budgets', 'accounting', 'hr',
+            'billing', 'billing_stamp', 'billing_cancel', 'billing_rep',
+            'receivables', 'payables', 'payments', 'treasury', 'budgets',
+            'accounting', 'accounting_chart', 'accounting_post', 'accounting_periods', 'hr',
             'parties', 'customers', 'crm', 'portals', 'documents', 'helpdesk', 'calendar',
-            'fiscal', 'sat', 'catalogs', 'web', 'web_conversion', 'legal', 'communications', 'integrations', 'frontend',
+            'fiscal', 'fiscal_ledger', 'fiscal_diot', 'fiscal_iva', 'fiscal_closing',
+            'sat', 'sat_download', 'sat_catalog_sync', 'sat_credentials',
+            'cfdi', 'cfdi_audit', 'catalogs', 'web', 'web_conversion', 'legal', 'communications', 'integrations', 'frontend',
             'audit', 'help', 'users', 'acl', 'config',
         ];
 
@@ -143,10 +151,6 @@ class Service_Core_Admin_MenuBuilder
                 $menu[$key] = false;
             }
             $menu[$key] = (bool) $menu[$key];
-        }
-
-        if (!$has_fiscal_permission) {
-            $menu['fiscal'] = $menu['sat'];
         }
 
         return $menu;
