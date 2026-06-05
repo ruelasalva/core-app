@@ -245,7 +245,7 @@
                         <div v-if="ticketDocuments.length === 0" class="text-muted small mb-2">Sin adjuntos</div>
                         <div v-for="document in ticketDocuments" :key="document.id" class="d-flex justify-content-between align-items-center border-bottom py-2">
                             <div>
-                                <a :href="assetUrl(document.file_path)" target="_blank">{{ document.original_name || document.title }}</a>
+                                <a :href="document.download_url" target="_blank" rel="noopener">{{ document.filename || document.original_name || document.title }}</a>
                                 <div class="text-muted small">{{ document.created_at }} · {{ document.file_extension }} · {{ formatSize(document.file_size) }}</div>
                             </div>
                             <span v-if="document.is_evidence == 1" class="badge badge-info">Evidencia</span>

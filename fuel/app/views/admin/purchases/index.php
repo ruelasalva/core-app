@@ -99,7 +99,7 @@
                     <thead><tr><th>Documento</th><th>Registro</th><th>Visibilidad</th><th>Evidencia</th><th>Fecha</th></tr></thead>
                     <tbody>
                         <tr v-for="document in documents" :key="document.id">
-                            <td><a :href="baseUrl + document.file_path" target="_blank">{{ document.title || document.original_name }}</a><div class="text-muted small">{{ document.original_name }}</div></td>
+                            <td><a :href="document.download_url" target="_blank" rel="noopener">{{ document.title || document.filename || document.original_name }}</a><div class="text-muted small">{{ document.filename || document.original_name }}</div></td>
                             <td>{{ entityLabel(document.entity_type) }} #{{ document.entity_id }}</td>
                             <td>{{ document.visibility }}</td>
                             <td>{{ document.is_evidence == 1 ? 'Si' : 'No' }}</td>

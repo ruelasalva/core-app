@@ -55,7 +55,7 @@
                         <td>{{ document.title }}</td>
                         <td><span class="badge badge-light">{{ document.document_type }}</span></td>
                         <td>
-                            <a :href="assetUrl(document.file_path)" target="_blank">{{ document.original_name || document.file_path }}</a>
+                            <a :href="document.download_url" target="_blank" rel="noopener">{{ document.filename || document.original_name || 'Descargar' }}</a>
                         </td>
                         <td>{{ document.visibility }}</td>
                         <td>{{ document.is_evidence == 1 ? 'Si' : 'No' }}</td>
@@ -323,11 +323,6 @@ window.onload = function() {
                     this.stats = data.stats || {};
                     this.hideModal('modal-document-link');
                 });
-            },
-            assetUrl(path) {
-                if (!path) return '';
-                if (/^https?:\/\//.test(path)) return path;
-                return '<?php echo Uri::base(false); ?>' + path.replace(/^\/+/, '');
             },
             showModal(id) {
                 const element = document.getElementById(id);

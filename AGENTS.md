@@ -2,67 +2,76 @@
 
 ## Project Overview
 
-CORE-APP ERP is a modular ERP system built with FuelPHP and Vue.js.
+CORE-APP ERP is a modular enterprise platform built with FuelPHP.
 
-CORE-APP ERP is not multitenant by default.
-It is installed for one active company at a time.
+The platform includes:
 
-Fiscal RFC resolution must use the active company configuration first.
-SAT credentials are fallback.
-Manual RFC input is only for debugging or admin override.
+- ERP
+- CRM
+- SAT Integration
+- CFDI Management
+- Fiscal Compliance
+- Accounting
+- Treasury
+- Accounts Receivable
+- Accounts Payable
+- Purchasing
+- Sales
+- Inventory
+- Human Resources
+- Contracts Management
+- Document Management
+- Helpdesk
+- Knowledge Base
+- Customer Portal
+- Supplier Portal
+- Reseller Portal
+- Partner Portal
+- Commerce Frontend
+- CMS
+- Web Conversion Tracking
 
-USER INTERFACE LANGUAGE
+CORE-APP is designed for long-term maintainability, scalability and business continuity.
 
-CORE-APP ERP is a Spanish-language ERP.
+The system is not multitenant by default.
 
-All user-facing interface elements must be written in Spanish:
-
-- Menus
-- Tabs
-- Labels
-- Buttons
-- Alerts
-- Notifications
-- Dashboard cards
-- Help text
-
-English is reserved for source code only.
-
-The system supports:
-
-* Administration Portal
-* Customer Portal
-* Supplier Portal
-* Reseller Portal
-* Partner Portal
-
-The ERP includes:
-
-* Product Catalog
-* Inventory
-* Purchasing
-* Sales
-* CRM
-* Helpdesk
-* SAT Integration
-* CFDI
-* Accounting
-* Accounts Receivable
-* Accounts Payable
-* Treasury
-* Budget Control
-* Human Resources
-* Calendar
-* Knowledge Base
-* Dashboard
-* Commerce Frontend
+One active company is managed per installation.
 
 ---
 
-## Backend Stack
+# User Interface Language
+
+CORE-APP ERP is a Spanish-language application.
+
+All user-facing elements must be written in Spanish:
+
+- Menus
+- Labels
+- Buttons
+- Tabs
+- Notifications
+- Alerts
+- Dashboard cards
+- Help text
+- Validation messages
+
+English is reserved for:
+
+- Source code
+- Classes
+- Methods
+- Variables
+- Services
+- Documentation
+
+---
+
+# Technology Stack
+
+## Backend
 
 Framework:
-FuelPHP 1.9
+FuelPHP 1.9.x
 
 Authentication:
 ORMAuth
@@ -70,249 +79,474 @@ ORMAuth
 Database:
 MySQL
 
-Pattern:
-MVC
+Architecture:
+MVC + Services
 
 ---
 
-## Frontend Stack
+## Frontend
 
-Vue.js 2.7.16
+Vue.js 2.7.x
 
-AdminLTE
+Options API only.
 
-Bootstrap
+Libraries:
 
-jQuery
+- Bootstrap
+- AdminLTE
+- jQuery
+- DataTables
+- Chart.js
+- CKEditor 5
+- GrapesJS
+- FullCalendar
+- CodeMirror
 
-DataTables
+Do not generate:
 
-Chart.js
+- Vue 3
+- Composition API
+- Nuxt
+- Laravel
+- React
+- Angular
 
-CKEditor 5
-
-CodeMirror
-
-GrapesJS
-
-FullCalendar
+unless explicitly requested.
 
 ---
 
-## Folder Structure
+# Folder Structure
 
-Controllers:
+Controllers
+
 fuel/app/classes/controller
 
-Models:
+Models
+
 fuel/app/classes/model
 
-Views:
+Services
+
+fuel/app/classes/service/core
+
+Views
+
 fuel/app/views
+
+Tasks
+
+fuel/app/tasks
+
+Migrations
+
+fuel/app/migrations
+
+Documentation
+
+docs/
 
 ---
 
-## User Access Model
+# Human Maintainability Rules
 
-Authentication is handled using ORMAuth.
+Human maintainability is a first-class requirement.
 
-Permissions are action based.
+The ERP must remain understandable by future developers.
+
+Before introducing abstractions:
+
+- Prefer readability.
+- Prefer consistency.
+- Prefer existing architecture.
+
+A developer must be able to locate a feature in less than two minutes.
+
+Controllers should remain thin.
+
+Business logic belongs in Services.
+
+Avoid placing large business processes directly inside controllers.
+
+Avoid duplicating logic across modules.
+
+Prefer reusable services.
+
+---
+
+# Service Architecture
+
+Business logic belongs inside:
+
+fuel/app/classes/service/core
 
 Examples:
 
-users.view
+service/core/sat
+service/core/fiscal
+service/core/accounting
+service/core/payments
+service/core/contracts
+service/core/purchases
+service/core/sales
+service/core/inventory
+service/core/helpdesk
+service/core/crm
 
-users.create
+Controllers should orchestrate.
 
-users.update
-
-users.delete
-
-products.view
-
-products.create
-
-products.update
-
-products.delete
-
-purchases.approve
-
-billing.cfdi.create
-
-billing.cfdi.cancel
-
-sat.download
-
-sat.validate
+Services should execute business rules.
 
 ---
 
-## Main Portals
+# Database Conventions
 
-admin
-
-clientes
-
-proveedores
-
-revendedores
-
-socios
-
-Each portal may have independent menus, permissions and dashboards.
-
----
-
-## Database Conventions
-
-ERP tables use the prefix:
+ERP tables use prefix:
 
 core_
 
 Examples:
 
 core_companies
-
 core_parties
-
-core_commerce_products
-
-core_purchase_orders
-
+core_documents
 core_sales_quotes
-
+core_sales_orders
+core_purchase_orders
 core_billing_invoices
-
+core_payments
 core_sat_cfdi
-
 core_accounting_accounts
+core_contracts
+
+Never create duplicate tables for existing business entities.
+
+Always reuse existing structures when possible.
 
 ---
 
-## Coding Rules
+# Authentication and Permissions
 
-Always generate complete files.
+Authentication uses ORMAuth.
 
-Always include logging.
+Permissions are action based.
 
-Always validate permissions.
+Examples:
 
-Always validate user input.
+users.access[view]
+users.access[create]
+users.access[edit]
+users.access[delete]
 
-Always respect existing architecture.
+sales.access[view]
+sales.access[create]
+sales.access[edit]
 
-Do not replace FuelPHP components with third-party frameworks.
+contracts.access[view]
+contracts.access[create]
+contracts.access[edit]
 
-Do not generate Laravel code.
+sat.access[view]
+sat.access[download]
 
-Do not generate Vue 3 code.
+Never bypass permission validation.
 
-Do not introduce breaking architectural changes.
+All administrative actions must validate permissions.
 
 ---
 
-## Logging Standard
+# Portal Security Rules
+
+Applicable to:
+
+- clientes
+- proveedores
+- revendedores
+- socios
+
+Always use:
+
+$this->portal_link->party_id
+
+Never accept:
+
+party_id
+customer_id
+supplier_id
+
+from portal requests.
+
+Portal ownership must always be validated.
+
+Every portal query must validate:
+
+- active portal link
+- active party
+- allowed party type
+- portal ownership
+
+before returning data.
+
+---
+
+# Document Security Rules
+
+Never expose:
+
+- file_path
+- storage_path
+- physical paths
+- upload directories
+
+Public downloads must use controlled endpoints.
+
+Every document download must validate:
+
+- authenticated user
+- active ownership
+- active document
+- active relationship
+
+before returning a file.
+
+---
+
+# ERP Workflow Rules
+
+## Sales
+
+Quote
+→ Order
+→ Delivery
+→ Invoice
+→ Collection
+
+## Purchasing
+
+Request
+→ Approval
+→ Purchase Order
+→ Receipt
+→ Supplier Invoice
+→ Counter Receipt
+→ Payment
+
+## Helpdesk
+
+Ticket
+→ Assignment
+→ Resolution
+→ Closure
+
+## Contracts
+
+Contract
+→ Documents
+→ Relations
+→ Events
+→ Expiration
+→ Renewal
+
+---
+
+# SAT Rules
+
+SAT modules are critical.
+
+Includes:
+
+- CFDI
+- REP
+- DIOT
+- Fiscal Ledger
+- SAT Downloads
+- Validation
+
+Before modifying SAT logic:
+
+Provide:
+
+1. Technical analysis
+2. Business impact
+3. Affected tables
+4. Risks
+5. Testing plan
+
+Never change SAT behavior blindly.
+
+---
+
+# Accounting Rules
+
+Accounting modules are critical.
+
+Includes:
+
+- Journal Entries
+- Fiscal Ledger
+- Accounts Receivable
+- Accounts Payable
+- Treasury
+- Tax Calculations
+
+Never modify:
+
+- balances
+- reconciliations
+- allocations
+- accounting postings
+
+without impact analysis.
+
+---
+
+# Contracts Rules
+
+Contracts support:
+
+- Customers
+- Suppliers
+- Employees
+- Partners
+- Resellers
+
+Documents must use:
+
+core_documents
+core_document_links
+
+Relations must use:
+
+core_contract_relations
+
+Events must use:
+
+core_contract_events
+
+Never create parallel contract systems.
+
+---
+
+# Frontend Rules
+
+Frontend must remain commercially focused.
+
+Priority:
+
+1. Lead generation
+2. Product discovery
+3. Conversion
+4. Contact acquisition
+
+Frontend CMS must remain editable by non-technical users.
+
+Avoid requiring code changes for content updates.
+
+---
+
+# View Structure Rules
+
+Small modules:
+
+index.php
+
+Medium modules:
+
+index.php
+_list.php
+_detail.php
+_modals.php
+_scripts.php
+
+Large modules:
+
+index.php
+_tabs.php
+_documents.php
+_relations.php
+_events.php
+_scripts.php
+
+Avoid extremely large view files whenever practical.
+
+---
+
+# Logging Standard
 
 Use:
 
 Log::info()
-
 Log::warning()
-
 Log::error()
 
-for all critical operations.
+for critical operations.
+
+Log:
+
+- creation
+- updates
+- approvals
+- cancellations
+- imports
+- fiscal actions
+
+when applicable.
 
 ---
 
-## JSON Response Standard
+# JSON Response Standard
 
 {
-"success": true,
-"message": "",
-"data": {},
-"errors": []
+    "success": true,
+    "message": "",
+    "data": {},
+    "errors": []
 }
 
----
-
-## Migration Standard
-
-All schema changes must be generated as Oil migrations.
-
-Never modify existing production tables directly without migrations.
-
-Always provide rollback support.
+All AJAX endpoints should follow this structure.
 
 ---
 
-## Development Goal
+# Migration Standard
 
-Maintain a scalable modular ERP platform with long-term compatibility and minimal architectural disruption.
+Schema changes must use Oil migrations.
 
-## Production Readiness Rules
+Never modify production schema manually.
 
-CORE-APP ERP is close to production.
+Every migration must support rollback.
 
-All changes must be safe, traceable and documented.
+If a migration was already executed:
 
-Before editing files, Codex must provide:
+Create a new corrective migration.
 
-1. Technical analysis.
-2. Impacted files.
-3. Impacted database tables.
-4. Impacted business processes.
-5. Migration requirements.
-6. Data repair requirements.
-7. Testing checklist.
-8. Risk list.
-
-Codex must not commit or push unless explicitly requested.
+Never modify old executed migrations.
 
 ---
 
-## Critical Business Modules
+# Repair Tasks
 
-The following modules are critical:
+When existing data may require correction:
 
-- SAT / CFDI
-- Billing
-- Accounts Receivable
-- Accounts Payable
-- Payments
-- Bank Reconciliation
-- Purchases
-- Sales
-- Inventory
-- Accounting
-- Treasury
+Create reusable Oil tasks.
 
-Changes in these modules must be implemented in small phases.
+Example:
 
-Never change balances, payments, invoices, CFDI links or reconciliation logic without explaining the impact first.
+php oil refine repaircfdisaldos
+
+Tasks must:
+
+- be idempotent
+- avoid duplicates
+- log actions
+- report totals
+- explain repairs
 
 ---
 
-## Documentation Standard
+# Documentation Standard
 
-Every new module or major change must include documentation.
+Every major module must include documentation.
 
-Documentation must explain:
-
-- Purpose
-- Business flow
-- Database tables
-- Controllers
-- Models
-- Views
-- Permissions
-- Commands / tasks
-- Common errors
-- Repair processes
-- Testing checklist
-
-Documentation files should be stored in:
+Store documentation in:
 
 docs/
 
@@ -320,44 +554,76 @@ Recommended structure:
 
 docs/modules/
 docs/database/
-docs/permissions/
 docs/business-flows/
-docs/maintenance/
+docs/permissions/
 docs/testing/
+docs/maintenance/
+
+Documentation should include:
+
+- Purpose
+- Business Flow
+- Controllers
+- Models
+- Services
+- Views
+- Tables
+- Permissions
+- Common Errors
+- Repair Procedures
+- Testing Checklist
 
 ---
 
-## Testing Standard
+# Testing Standard
 
-For every critical feature, include a test checklist.
-
-Minimum checklist:
+For critical features include:
 
 - Syntax validation
-- Migration validation
 - Permission validation
-- Empty database scenario
+- Empty data scenario
 - Existing data scenario
 - Duplicate data scenario
 - Error handling
-- User interface validation
-- Audit log validation
+- UI validation
+- Audit validation
 
 ---
 
-## Data Repair Rules
+# Production Readiness Rules
 
-If a change affects existing imported data, create a reusable Oil task.
+CORE-APP ERP is production-oriented.
 
-Example:
+Before modifying files, always provide:
 
-php oil refine repaircfdisaldos
+1. Technical analysis
+2. Impacted files
+3. Impacted database tables
+4. Business impact
+5. Migration requirements
+6. Data repair requirements
+7. Testing checklist
+8. Risk list
 
-Repair tasks must:
+Do not implement immediately.
 
-- Be safe to run multiple times.
-- Avoid duplicates.
-- Log actions.
-- Report totals.
-- Explain what was repaired.
+Wait for approval before modifying files.
 
+---
+
+# Commit Rules
+
+Never commit automatically.
+
+Never push automatically.
+
+Wait for explicit approval.
+
+---
+
+# Final Rule
+
+When architecture and maintainability conflict:
+
+Prefer the solution that remains understandable for future developers while preserving ERP integrity, security and long-term maintainability.
+```

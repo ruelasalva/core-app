@@ -69,6 +69,64 @@ class Controller_Admin_Documents extends Controller_Adminbase
     }
 
     /**
+     * DOWNLOAD
+     *
+     * DESCARGA CONTROLADA DE DOCUMENTOS ADMINISTRATIVOS.
+     *
+     * @access  public
+     * @param   Int  $document_id
+     * @return  Response
+     */
+    public function action_download($document_id = null)
+    {
+        $document_id = (int) $document_id;
+        if ($document_id < 1) {
+            \Log::warning('Documentos: intento de descarga con id invalido por usuario '.$this->user_id);
+            return new \Response('Documento no valido.', 404);
+        }
+
+        try {
+            $this->assert_schema_ready();
+
+            $document = Model_Core_Document::query()
+                ->where('id', $document_id)
+                ->where('active', 1)
+                ->get_one();
+
+            if (!$document) {
+                \Log::warning('Documentos: descarga denegada, documento inexistente o inactivo id='.$document_id.' usuario='.$this->user_id);
+                return new \Response('Documento no encontrado.', 404);
+            }
+
+            $absolute_path = $this->resolve_download_path($document);
+            if ($absolute_path === '') {
+                \Log::warning('Documentos: descarga bloqueada por ruta no permitida documento='.$document_id.' usuario='.$this->user_id);
+                return new \Response('Documento no disponible.', 403);
+            }
+
+            if (!is_file($absolute_path) || !is_readable($absolute_path)) {
+                \Log::error('Documentos: archivo no encontrado o no legible documento='.$document_id.' ruta='.str_replace(DOCROOT, '', $absolute_path));
+                return new \Response('Archivo no encontrado.', 404);
+            }
+
+            $filename = $this->download_filename($document);
+            $mime_type = trim((string) $document->mime_type) ?: 'application/octet-stream';
+
+            \Log::info('Documentos: descarga autorizada documento='.$document_id.' usuario='.$this->user_id);
+
+            return \Response::forge(file_get_contents($absolute_path), 200, [
+                'Content-Type' => $mime_type,
+                'Content-Length' => (string) filesize($absolute_path),
+                'Content-Disposition' => 'attachment; filename="'.$filename.'"',
+                'X-Content-Type-Options' => 'nosniff',
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Documentos: error descargando documento '.$document_id.': '.$e->getMessage());
+            return new \Response('No se pudo descargar el documento.', 500);
+        }
+    }
+
+    /**
      * UPLOAD
      *
      * SUBE UN DOCUMENTO Y CREA SU VINCULO OPCIONAL
@@ -229,14 +287,18 @@ class Controller_Admin_Documents extends Controller_Adminbase
         foreach ($rows as $row) {
             $documents[] = [
                 'id' => (int) $row->id,
+                'document_id' => (int) $row->id,
                 'document_type' => (string) $row->document_type,
                 'title' => (string) $row->title,
                 'description' => (string) $row->description,
-                'file_path' => (string) $row->file_path,
+                'filename' => (string) $row->original_name,
                 'original_name' => (string) $row->original_name,
                 'mime_type' => (string) $row->mime_type,
                 'file_extension' => (string) $row->file_extension,
+                'size' => (int) $row->file_size,
                 'file_size' => (int) $row->file_size,
+                'status' => ((int) $row->active === 1) ? 'active' : 'inactive',
+                'download_url' => \Uri::create('admin/documents/download/'.(int) $row->id),
                 'visibility' => (string) $row->visibility,
                 'is_evidence' => (int) $row->is_evidence,
                 'active' => (int) $row->active,
@@ -348,6 +410,102 @@ class Controller_Admin_Documents extends Controller_Adminbase
                 throw new \RuntimeException('Falta ejecutar migraciones de documentos.');
             }
         }
+    }
+
+    /**
+     * RESOLVE DOWNLOAD PATH
+     *
+     * VALIDA QUE LA RUTA GUARDADA SEA RELATIVA Y QUE APUNTE A UN DIRECTORIO PERMITIDO.
+     *
+     * @access  protected
+     * @param   Model_Core_Document  $document
+     * @return  String
+     */
+    protected function resolve_download_path(Model_Core_Document $document)
+    {
+        $relative = str_replace('\\', '/', trim((string) $document->file_path));
+
+        if ($relative === '') {
+            return '';
+        }
+
+        if (preg_match('#^[a-z][a-z0-9+\-.]*://#i', $relative)) {
+            return '';
+        }
+
+        if (preg_match('#^[a-z]:#i', $relative) || strpos($relative, ':') !== false) {
+            return '';
+        }
+
+        if (strpos($relative, '/') === 0 || strpos($relative, '\\') === 0) {
+            return '';
+        }
+
+        $parts = explode('/', $relative);
+        foreach ($parts as $part) {
+            if ($part === '..') {
+                return '';
+            }
+        }
+
+        $candidate = DOCROOT.str_replace('/', DS, $relative);
+        $real_path = realpath($candidate);
+        if ($real_path === false) {
+            $normalized_candidate = rtrim(str_replace(['/', '\\'], DS, $candidate), DS);
+            foreach ($this->allowed_document_roots() as $root) {
+                $normalized_root = rtrim(str_replace(['/', '\\'], DS, $root), DS);
+                if (strpos($normalized_candidate, $normalized_root.DS) === 0) {
+                    return $candidate;
+                }
+            }
+
+            return '';
+        }
+
+        foreach ($this->allowed_document_roots() as $root) {
+            $real_root = realpath($root);
+            if ($real_root !== false && strpos(strtolower($real_path), strtolower(rtrim($real_root, DS).DS)) === 0) {
+                return $real_path;
+            }
+        }
+
+        return '';
+    }
+
+    /**
+     * ALLOWED DOCUMENT ROOTS
+     *
+     * DIRECTORIOS PERMITIDOS PARA DESCARGAS DOCUMENTALES ADMIN.
+     *
+     * @access  protected
+     * @return  Array
+     */
+    protected function allowed_document_roots()
+    {
+        return [
+            DOCROOT.'assets'.DS.'uploads'.DS.'documents',
+            APPPATH.'storage'.DS.'documents',
+        ];
+    }
+
+    /**
+     * DOWNLOAD FILENAME
+     *
+     * GENERA UN NOMBRE SEGURO PARA CONTENT-DISPOSITION.
+     *
+     * @access  protected
+     * @param   Model_Core_Document  $document
+     * @return  String
+     */
+    protected function download_filename(Model_Core_Document $document)
+    {
+        $filename = trim((string) $document->original_name);
+        if ($filename === '') {
+            $extension = trim((string) $document->file_extension);
+            $filename = 'documento_'.$document->id.($extension ? '.'.$extension : '');
+        }
+
+        return str_replace(['"', "\r", "\n"], '', $filename);
     }
 
     /**

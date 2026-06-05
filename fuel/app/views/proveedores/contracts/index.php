@@ -1,6 +1,6 @@
 <?php
 /**
- * Portal clientes - Mis contratos.
+ * Portal proveedores - Mis contratos.
  *
  * Vista de lectura para contratos visibles en portal.
  */
@@ -27,7 +27,7 @@
     }
 </style>
 
-<div id="app-customer-contracts">
+<div id="app-supplier-contracts">
     <div class="d-flex justify-content-between align-items-center flex-wrap mb-3">
         <div>
             <h1 class="h4 mb-1">Mis Contratos</h1>
@@ -192,7 +192,7 @@
 <script>
 window.addEventListener('load', function() {
     new Vue({
-        el: '#app-customer-contracts',
+        el: '#app-supplier-contracts',
         data: function() {
             return {
                 loading: false,
@@ -227,7 +227,7 @@ window.addEventListener('load', function() {
                 self.loading = true;
                 self.error = '';
 
-                fetch(<?php echo json_encode(Uri::create('clientes/contracts_data')); ?>, {
+                fetch(<?php echo json_encode(Uri::create('proveedores/contracts_data')); ?>, {
                     headers: { 'Accept': 'application/json' },
                     credentials: 'same-origin'
                 })

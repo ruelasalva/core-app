@@ -544,7 +544,7 @@ class Controller_Admin_Purchases extends Controller_Adminbase
     protected function documents(array $filters = [])
     {
         $filters = $filters ?: $this->period_filters();
-        $rows = \DB::select(['d.id', 'id'], ['l.entity_type', 'entity_type'], ['l.entity_id', 'entity_id'], ['d.title', 'title'], ['d.original_name', 'original_name'], ['d.file_path', 'file_path'], ['d.file_extension', 'file_extension'], ['d.visibility', 'visibility'], ['d.is_evidence', 'is_evidence'], ['d.created_at', 'created_at'])
+        $rows = \DB::select(['d.id', 'id'], ['l.entity_type', 'entity_type'], ['l.entity_id', 'entity_id'], ['d.title', 'title'], ['d.original_name', 'original_name'], ['d.mime_type', 'mime_type'], ['d.file_extension', 'file_extension'], ['d.file_size', 'file_size'], ['d.visibility', 'visibility'], ['d.is_evidence', 'is_evidence'], ['d.created_at', 'created_at'])
             ->from(['core_document_links', 'l'])
             ->join(['core_documents', 'd'], 'inner')->on('d.id', '=', 'l.document_id')
             ->where('l.entity_type', 'in', ['purchase_order', 'purchase_invoice', 'purchase_receipt'])
@@ -557,6 +557,11 @@ class Controller_Admin_Purchases extends Controller_Adminbase
             ->execute()
             ->as_array();
         foreach ($rows as &$row) {
+            $row['document_id'] = (int) $row['id'];
+            $row['filename'] = (string) $row['original_name'];
+            $row['size'] = (int) $row['file_size'];
+            $row['status'] = 'active';
+            $row['download_url'] = \Uri::create('admin/documents/download/'.(int) $row['id']);
             $row['created_label'] = $row['created_at'] ? date('d/m/Y H:i', (int) $row['created_at']) : '';
         }
         return $rows;
