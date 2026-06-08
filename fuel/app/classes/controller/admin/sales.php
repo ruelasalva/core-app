@@ -11,6 +11,7 @@
 class Controller_Admin_Sales extends Controller_Adminbase
 {
     protected $sales_read_model;
+    protected $sales_catalog;
 
     /**
      * BEFORE
@@ -98,7 +99,7 @@ class Controller_Admin_Sales extends Controller_Adminbase
             $this->assert_schema_ready();
 
             return $this->json_response([
-                'products' => $this->sales_read_model()->product_options([
+                'products' => $this->sales_catalog()->product_options([
                     'q' => trim((string) \Input::get('q', '')),
                     'brand_id' => (int) \Input::get('brand_id', 0),
                     'category_id' => (int) \Input::get('category_id', 0),
@@ -124,6 +125,15 @@ class Controller_Admin_Sales extends Controller_Adminbase
         }
 
         return $this->sales_read_model;
+    }
+
+    protected function sales_catalog()
+    {
+        if (!$this->sales_catalog) {
+            $this->sales_catalog = Service_Core_Sales_Catalog::forge();
+        }
+
+        return $this->sales_catalog;
     }
 
 

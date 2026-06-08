@@ -10,6 +10,7 @@
 class Service_Core_Sales_ReadModel
 {
     protected $context = [];
+    protected $catalog;
 
     public function __construct(array $context = [])
     {
@@ -117,7 +118,7 @@ class Service_Core_Sales_ReadModel
             ->as_array();
 
         foreach ($rows as &$row) {
-            $row['image_url'] = $this->media_url((string) $row['image_path']);
+            $row['image_url'] = $this->catalog()->media_url((string) $row['image_path']);
             $row['available_stock'] = max(0, (float) $row['stock_quantity'] - (float) $row['stock_reserved']);
         }
         unset($row);
@@ -198,7 +199,7 @@ class Service_Core_Sales_ReadModel
             ->execute() as $row) {
             $row['pending_quantity'] = max(0, (float) $row['quantity'] - (float) $row['delivered_quantity']);
             $row['available_stock'] = max(0, (float) $row['stock_quantity'] - (float) $row['stock_reserved']);
-            $row['image_url'] = $this->media_url((string) $row['image_path']);
+            $row['image_url'] = $this->catalog()->media_url((string) $row['image_path']);
             $items[] = $row;
         }
 
@@ -257,7 +258,7 @@ class Service_Core_Sales_ReadModel
         return [
             'customers' => $this->select_rows('core_parties', 'id', 'name', ['party_type' => 'customer']),
             'sellers' => \DBUtil::table_exists('core_sales_sellers') ? $this->select_rows('core_sales_sellers', 'id', 'name') : [],
-            'products' => $this->product_options(['limit' => 60]),
+            'products' => $this->catalog()->product_options(['limit' => 60]),
             'brands' => $this->select_rows('core_commerce_brands', 'id', 'name'),
             'categories' => $this->select_rows('core_commerce_categories', 'id', 'name'),
             'warehouses' => $this->select_rows('core_inventory_warehouses', 'id', 'name'),
@@ -283,101 +284,17 @@ class Service_Core_Sales_ReadModel
 
     public function product_options(array $filters = [])
     {
-        $items = [];
-        $limit = min(120, max(10, (int) \Arr::get($filters, 'limit', 60)));
-        $query = \DB::select(
-                ['p.id', 'id'],
-                ['p.sku', 'sku'],
-                ['p.name', 'name'],
-                ['p.currency_code', 'currency_code'],
-                ['p.price', 'price'],
-                ['p.main_image_path', 'main_image_path'],
-                ['p.brand_id', 'brand_id'],
-                ['p.category_id', 'category_id'],
-                ['p.stock_quantity', 'stock_quantity'],
-                ['p.stock_reserved', 'stock_reserved'],
-                ['b.name', 'brand_name'],
-                ['c.name', 'category_name']
-            )
-            ->from(['core_commerce_products', 'p'])
-            ->join(['core_commerce_brands', 'b'], 'left')->on('p.brand_id', '=', 'b.id')
-            ->join(['core_commerce_categories', 'c'], 'left')->on('p.category_id', '=', 'c.id')
-            ->where('p.active', '=', 1)
-            ->where('p.published', '=', 1)
-            ->order_by('p.name', 'asc')
-            ->limit($limit);
-
-        $q = trim((string) \Arr::get($filters, 'q', ''));
-        if ($q !== '') {
-            $query->and_where_open()
-                ->where('p.name', 'like', '%'.$q.'%')
-                ->or_where('p.sku', 'like', '%'.$q.'%')
-                ->or_where('b.name', 'like', '%'.$q.'%')
-                ->or_where('c.name', 'like', '%'.$q.'%')
-                ->and_where_close();
-        }
-        if ((int) \Arr::get($filters, 'brand_id', 0) > 0) {
-            $query->where('p.brand_id', '=', (int) \Arr::get($filters, 'brand_id', 0));
-        }
-        if ((int) \Arr::get($filters, 'category_id', 0) > 0) {
-            $query->where('p.category_id', '=', (int) \Arr::get($filters, 'category_id', 0));
-        }
-        if (\Arr::get($filters, 'stock', '') === 'available') {
-            $query->where(\DB::expr('(p.stock_quantity - p.stock_reserved)'), '>', 0);
-        } elseif (\Arr::get($filters, 'stock', '') === 'zero') {
-            $query->where(\DB::expr('(p.stock_quantity - p.stock_reserved)'), '<=', 0);
-        }
-
-        $rows = $query->execute();
-
-        foreach ($rows as $row) {
-            $items[] = [
-                'value' => (int) $row['id'],
-                'sku' => (string) $row['sku'],
-                'label' => trim($row['name'].' '.($row['sku'] ? '('.$row['sku'].')' : '')),
-                'currency_code' => (string) $row['currency_code'],
-                'price' => (float) $row['price'],
-                'brand_id' => (int) $row['brand_id'],
-                'brand_name' => (string) $row['brand_name'],
-                'category_id' => (int) $row['category_id'],
-                'category_name' => (string) $row['category_name'],
-                'stock_quantity' => (float) $row['stock_quantity'],
-                'stock_reserved' => (float) $row['stock_reserved'],
-                'available_stock' => max(0, (float) $row['stock_quantity'] - (float) $row['stock_reserved']),
-                'image_url' => $this->media_url((string) $row['main_image_path']),
-                'price_ranges' => $this->product_price_ranges((int) $row['id']),
-            ];
-        }
-
-        return $items;
+        return $this->catalog()->product_options($filters);
     }
 
     public function product_price_ranges($product_id)
     {
-        if (!\DBUtil::table_exists('core_commerce_product_prices')) {
-            return [];
-        }
-
-        return \DB::select('price_list_id', 'currency_code', 'price', 'min_quantity', 'max_quantity')
-            ->from('core_commerce_product_prices')
-            ->where('product_id', '=', (int) $product_id)
-            ->where('active', '=', 1)
-            ->order_by('min_quantity', 'asc')
-            ->limit(8)
-            ->execute()
-            ->as_array();
+        return $this->catalog()->product_price_ranges($product_id);
     }
 
     public function media_url($path)
     {
-        if ($path === '') {
-            return '';
-        }
-        if (preg_match('/^https?:\/\//i', $path)) {
-            return $path;
-        }
-
-        return \Uri::base(false).ltrim($path, '/');
+        return $this->catalog()->media_url($path);
     }
 
     protected function default_filters()
@@ -386,6 +303,15 @@ class Service_Core_Sales_ReadModel
             'start_date' => date('Y-m-01'),
             'end_date' => date('Y-m-t'),
         ];
+    }
+
+    protected function catalog()
+    {
+        if (!$this->catalog) {
+            $this->catalog = Service_Core_Sales_Catalog::forge();
+        }
+
+        return $this->catalog;
     }
 
     protected function can_view_all_operational()
