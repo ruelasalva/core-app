@@ -29,7 +29,29 @@ require COREPATH.'bootstrap.php';
  * Fuel::STAGING
  * Fuel::PRODUCTION
  */
-Fuel::$env = Arr::get($_SERVER, 'FUEL_ENV', Arr::get($_ENV, 'FUEL_ENV', getenv('FUEL_ENV') ?: Fuel::DEVELOPMENT));
+$env = getenv('FUEL_ENV') ?: Arr::get($_SERVER, 'FUEL_ENV', Arr::get($_ENV, 'FUEL_ENV', null));
+
+if ($env) {
+	Fuel::$env = strtolower((string) $env);
+} else {
+	$host = $_SERVER['HTTP_HOST']
+		?? $_SERVER['SERVER_NAME']
+		?? php_uname('n')
+		?? 'localhost';
+	$host = strtolower((string) $host);
+
+	if (
+		strpos($host, 'localhost') !== false ||
+		strpos($host, '127.0.0.1') !== false ||
+		strpos($host, '.local') !== false ||
+		strpos($host, '.test') !== false ||
+		strpos($host, '.dev') !== false
+	) {
+		Fuel::$env = Fuel::DEVELOPMENT;
+	} else {
+		Fuel::$env = Fuel::PRODUCTION;
+	}
+}
 
 // Initialize the framework with the config file.
 \Fuel::init('config.php');

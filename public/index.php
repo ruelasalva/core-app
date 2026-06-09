@@ -26,7 +26,34 @@
  *
  */
 
-$fuel_env = getenv('FUEL_ENV') ?: 'development';
+$detect_fuel_env = function() {
+	$env = getenv('FUEL_ENV');
+	if ($env) {
+		return strtolower($env);
+	}
+
+	$host = $_SERVER['HTTP_HOST']
+		?? $_SERVER['SERVER_NAME']
+		?? php_uname('n')
+		?? 'localhost';
+	$host = strtolower((string) $host);
+
+	if (
+		strpos($host, 'localhost') !== false ||
+		strpos($host, '127.0.0.1') !== false ||
+		strpos($host, '.local') !== false ||
+		strpos($host, '.test') !== false ||
+		strpos($host, '.dev') !== false
+	) {
+		return 'development';
+	}
+
+	return 'production';
+};
+
+$fuel_env = $detect_fuel_env();
+$_SERVER['FUEL_ENV'] = $fuel_env;
+$_ENV['FUEL_ENV'] = $fuel_env;
 if ($fuel_env === 'production') {
 	error_reporting(0);
 	ini_set('display_errors', 0);

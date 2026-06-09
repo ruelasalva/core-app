@@ -627,3 +627,27 @@ When architecture and maintainability conflict:
 
 Prefer the solution that remains understandable for future developers while preserving ERP integrity, security and long-term maintainability.
 ```
+Documentation Security Rule:
+
+Technical documentation must be stored outside DOCROOT/public.
+
+Recommended location:
+docs/
+
+Never store technical documentation under:
+public/
+public/docs/
+public/assets/docs/
+
+Documentation must not include:
+- passwords
+- API keys
+- SAT private keys
+- PAC credentials
+- database credentials
+- real customer personal data
+- real RFC certificates
+- production tokens
+- server secrets
+
+If the production server exposes the project root instead of only public/, docs/ must be excluded from deployment or blocked by web server rules.

@@ -1,16 +1,22 @@
-# Multiple Environment config, set this to development, staging or production
-# SetEnv FUEL_ENV production
+# Multiple Environment config, set this to development, staging or production.
+# Prefer setting FUEL_ENV in the server/panel. If omitted, CORE-APP detects
+# localhost as development and public domains as production.
 
 <IfModule mod_rewrite.c>
 
-	RewriteEngine on
+	RewriteEngine On
 
 	# NOTICE: If you get a 404 play with combinations of the following commented out lines
 	#AllowOverride All
 	#RewriteBase /wherever/fuel/is
 
     # Make sure directory listing is disabled
-	Options +FollowSymLinks -Indexes
+	Options -Indexes +FollowSymLinks
+
+	# Block private project files if they are accidentally copied into webroot.
+	RedirectMatch 403 ^/(fuel|docs|vendor|node_modules|\.git|\.agents|\.codex)(/|$)
+	RedirectMatch 403 ^/(AGENTS\.md|AGENTS_old\.md|composer\.json|composer\.lock|composer\.phar|oil|package\.json|package-lock\.json|README\.md|TESTING\.md)$
+	RedirectMatch 403 ^/fuel/app/(config|logs|migrations|tasks|storage)(/|$)
 
 	# Restrict your site to only one domain
 	# !important USE ONLY ONE OPTION
@@ -27,9 +33,9 @@
 	#RewriteRule ^(.*)$ http://www.%1/$1 [R=301,L]
 
 	# Remove index.php from URL
-	#RewriteCond %{HTTP:X-Requested-With}	!^XMLHttpRequest$
-	#RewriteCond %{THE_REQUEST}				^[^/]*/index\.php [NC]
-	#RewriteRule ^index\.php(.*)$			$1 [R=301,NS,L]
+	RewriteCond %{HTTP:X-Requested-With}	!^XMLHttpRequest$
+	RewriteCond %{THE_REQUEST}				\s/index\.php[/?\s] [NC]
+	RewriteRule ^index\.php/?(.*)$			$1 [R=301,L]
 
     # make HTTP Basic Authentication work on php-fcgi installs
     <IfModule mod_fcgid.c>

@@ -27,7 +27,7 @@ return array(
 	 *
 	 */
 
-	// 'base_url' => null,
+	'base_url' => '/',
 
 	/**
 	 * -------------------------------------------------------------------------
@@ -54,7 +54,7 @@ return array(
 	 *
 	 */
 
-	// 'index_file' => false,
+	'index_file' => false,
 
 	'profiling' => false,
 
