@@ -1,24 +1,44 @@
 <div id="app-portal-helpdesk">
-    <div class="row">
-        <div class="col-lg-6">
-            <div class="small-box bg-info">
-                <div class="inner"><h3>{{ stats.tickets || 0 }}</h3><p>Tickets registrados</p></div>
-                <div class="icon"><i class="bi bi-life-preserver"></i></div>
+    <div class="portal-page-hero">
+        <div class="d-flex justify-content-between align-items-center flex-wrap">
+            <div>
+                <h1 class="h4 mb-1">Tickets de soporte</h1>
+                <div class="text-muted">Crea solicitudes, revisa respuestas y adjunta evidencias de seguimiento.</div>
             </div>
-        </div>
-        <div class="col-lg-6">
-            <div class="small-box bg-warning">
-                <div class="inner"><h3>{{ stats.open || 0 }}</h3><p>Tickets abiertos</p></div>
-                <div class="icon"><i class="bi bi-hourglass-split"></i></div>
+            <div class="portal-page-actions mt-3 mt-md-0">
+                <button class="btn btn-outline-secondary btn-sm" @click="loadData" :disabled="loading">
+                    <span v-if="loading" class="spinner-border spinner-border-sm mr-1"></span>
+                    Actualizar
+                </button>
+                <button class="btn btn-primary btn-sm" @click="openCreate">
+                    <i class="bi bi-plus-lg mr-1"></i> Nuevo ticket
+                </button>
             </div>
         </div>
     </div>
 
-    <div class="card card-primary card-outline">
-        <div class="card-header">
+    <div class="portal-kpi-grid">
+        <div class="portal-kpi">
+            <div>
+                <div class="portal-kpi-label">Tickets registrados</div>
+                <div class="portal-kpi-value">{{ stats.tickets || 0 }}</div>
+            </div>
+            <i class="bi bi-life-preserver portal-kpi-icon"></i>
+        </div>
+        <div class="portal-kpi">
+            <div>
+                <div class="portal-kpi-label">Tickets abiertos</div>
+                <div class="portal-kpi-value">{{ stats.open || 0 }}</div>
+            </div>
+            <i class="bi bi-hourglass-split portal-kpi-icon"></i>
+        </div>
+    </div>
+
+    <div class="portal-panel">
+        <div class="portal-panel-header">
             <div class="d-flex justify-content-between align-items-center">
                 <div>
-                    <h3 class="card-title mb-0">Soporte y seguimiento</h3>
+                    <h3 class="h6 mb-0">Soporte y seguimiento</h3>
                     <p class="text-muted small mb-0">Crea solicitudes y revisa respuestas del equipo de atencion.</p>
                 </div>
                 <button class="btn btn-primary btn-sm" @click="openCreate">
@@ -26,7 +46,7 @@
                 </button>
             </div>
         </div>
-        <div class="card-body">
+        <div class="portal-panel-body">
             <div v-if="error" class="alert alert-danger">{{ error }}</div>
 
             <div v-if="loading" class="text-center p-5">
@@ -35,7 +55,7 @@
             </div>
 
             <div v-show="!loading" class="table-responsive">
-                <table class="table table-bordered table-hover">
+                <table class="table table-bordered table-hover portal-table">
                     <thead>
                         <tr>
                             <th>Folio</th>
@@ -62,7 +82,7 @@
                             </td>
                         </tr>
                         <tr v-if="tickets.length === 0">
-                            <td colspan="7" class="text-center text-muted">Sin tickets registrados</td>
+                            <td colspan="7"><div class="portal-empty">Sin tickets registrados. Usa "Nuevo ticket" para crear tu primera solicitud.</div></td>
                         </tr>
                     </tbody>
                 </table>

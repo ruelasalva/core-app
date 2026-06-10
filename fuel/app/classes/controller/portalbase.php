@@ -255,6 +255,54 @@ class Controller_Portalbase extends Controller_Template
     }
 
     /**
+     * PERFIL PASSWORD
+     *
+     * Permite al usuario autenticado cambiar su propia contrasena sin modificar
+     * grupos, permisos ni datos del tercero vinculado.
+     *
+     * @access  public
+     * @return  Response
+     */
+    public function post_perfil_password()
+    {
+        $val = (array) \Input::json();
+
+        try {
+            $current = (string) \Arr::get($val, 'current_password', '');
+            $password = (string) \Arr::get($val, 'password', '');
+            $confirm = (string) \Arr::get($val, 'password_confirm', '');
+
+            if ($current === '') {
+                return $this->json_response(['error' => 'Captura tu contrasena actual.'], 422);
+            }
+
+            if ($password !== $confirm) {
+                return $this->json_response(['error' => 'La confirmacion de contrasena no coincide.'], 422);
+            }
+
+            if (!$this->current_password_matches($current)) {
+                \Log::warning('PORTAL PASSWORD: contrasena actual incorrecta user_id='.$this->user_id.' portal='.$this->portal_code.' timestamp='.time());
+                return $this->json_response(['error' => 'La contrasena actual no es correcta.'], 422);
+            }
+
+            $this->password_policy()->change_forced_password($this->user_id, $password);
+            \Log::warning('PORTAL PASSWORD: usuario cambio su propia contrasena user_id='.$this->user_id.' portal='.$this->portal_code.' timestamp='.time());
+
+            return $this->json_response(['status' => 'ok', 'message' => 'Contrasena actualizada.']);
+        } catch (\InvalidArgumentException $e) {
+            return $this->json_response(['error' => $e->getMessage()], 422);
+        } catch (\Exception $e) {
+            \Log::error('Error cambiando contrasena portal '.$this->portal_code.' user_id='.$this->user_id.': '.$e->getMessage());
+            return $this->json_response(['error' => 'No se pudo cambiar la contrasena.'], 400);
+        }
+    }
+
+    public function action_perfil_password()
+    {
+        return $this->post_perfil_password();
+    }
+
+    /**
      * PERFIL ADDRESS
      *
      * CREA O ACTUALIZA DIRECCIONES DEL TERCERO.
@@ -1074,6 +1122,7 @@ class Controller_Portalbase extends Controller_Template
         $party_id = (int) $this->portal_link->party_id;
 
         return array_merge([
+            'user' => $this->portal_user_summary(),
             'party' => $this->party ? $this->party->to_array() : [],
             'addresses' => $this->portal_party_addresses($party_id),
             'contacts' => $this->portal_party_contacts($party_id),
@@ -1089,6 +1138,26 @@ class Controller_Portalbase extends Controller_Template
             ],
             'labels' => $this->portal_profile_labels(),
         ], $extra);
+    }
+
+    protected function portal_user_summary()
+    {
+        $row = \DB::select('id', 'username', 'email')
+            ->from('users')
+            ->where('id', '=', (int) $this->user_id)
+            ->execute()
+            ->current();
+
+        if (!$row) {
+            return [];
+        }
+
+        return [
+            'id' => (int) $row['id'],
+            'username' => (string) $row['username'],
+            'email' => (string) $row['email'],
+            'name' => \Auth::get_screen_name(),
+        ];
     }
 
     protected function portal_profile_labels()
@@ -1159,7 +1228,7 @@ class Controller_Portalbase extends Controller_Template
             return [];
         }
 
-        return \DB::select(
+        $rows = \DB::select(
                 ['d.id', 'id'], ['d.document_type', 'document_type'], ['d.title', 'title'],
                 ['d.original_name', 'original_name'],
                 ['d.file_extension', 'file_extension'], ['d.file_size', 'file_size'],
@@ -1292,6 +1361,50 @@ class Controller_Portalbase extends Controller_Template
         ])->save();
 
         return $document;
+    }
+
+    /**
+     * CURRENT PASSWORD MATCHES
+     *
+     * Verifica la contrasena actual contra el hash ORMAuth sin exponer password
+     * ni salt en respuestas o logs.
+     *
+     * @access  protected
+     * @return  Bool
+     */
+    protected function current_password_matches($password)
+    {
+        $row = \DB::select('password', 'salt')
+            ->from('users')
+            ->where('id', '=', (int) $this->user_id)
+            ->execute()
+            ->current();
+
+        if (!$row) {
+            return false;
+        }
+
+        $expected = (string) \Arr::get($row, 'password', '');
+        $salt = (string) \Arr::get($row, 'salt', '');
+        if ($expected === '') {
+            return false;
+        }
+
+        $hash = \Auth::instance()->hash_password((string) $password.$salt);
+        return hash_equals($expected, $hash);
+    }
+
+    /**
+     * PASSWORD POLICY
+     *
+     * Servicio centralizado para conservar hashing compatible con ORMAuth.
+     *
+     * @access  protected
+     * @return  Service_Core_Auth_PasswordPolicy
+     */
+    protected function password_policy()
+    {
+        return new \Service_Core_Auth_PasswordPolicy();
     }
 
     /**

@@ -1,12 +1,17 @@
 <div id="portal-profile" v-cloak>
-    <div class="card">
-        <div class="card-body">
+    <div class="portal-page-hero">
+        <div>
             <div class="d-flex justify-content-between align-items-start flex-wrap">
                 <div>
                     <h1 class="h4 mb-1">{{ labels.profile || 'Mi cuenta' }}</h1>
                     <p class="text-muted mb-0">Administra informacion operativa del portal sin depender del administrador para cada ajuste.</p>
                 </div>
-                <button class="btn btn-outline-primary btn-sm" v-on:click="load"><i class="bi bi-arrow-clockwise"></i> Actualizar</button>
+                <div class="portal-page-actions mt-3 mt-md-0">
+                    <a class="btn btn-outline-secondary btn-sm" v-bind:href="baseUrl + portal">
+                        <i class="bi bi-arrow-left mr-1"></i> Inicio
+                    </a>
+                    <button class="btn btn-primary btn-sm" v-on:click="load"><i class="bi bi-arrow-clockwise mr-1"></i> Actualizar</button>
+                </div>
             </div>
         </div>
     </div>
@@ -16,9 +21,9 @@
 
     <div class="row mt-3">
         <div class="col-lg-4">
-            <div class="card card-primary card-outline">
-                <div class="card-header"><h2 class="card-title h6 mb-0">Datos fiscales y comerciales</h2></div>
-                <div class="card-body">
+            <div class="portal-panel">
+                <div class="portal-panel-header"><h2 class="h6 mb-0">Datos fiscales y comerciales</h2></div>
+                <div class="portal-panel-body">
                     <div class="form-group">
                         <label>Nombre comercial</label>
                         <input class="form-control" v-model="party.name">
@@ -56,9 +61,9 @@
                 </div>
             </div>
 
-            <div class="card card-info card-outline">
-                <div class="card-header"><h2 class="card-title h6 mb-0">{{ labels.credit || 'Credito' }}</h2></div>
-                <div class="card-body">
+            <div class="portal-panel">
+                <div class="portal-panel-header"><h2 class="h6 mb-0">{{ labels.credit || 'Credito' }}</h2></div>
+                <div class="portal-panel-body">
                     <dl class="row mb-0">
                         <dt class="col-6">Dias</dt>
                         <dd class="col-6">{{ party.credit_days || 0 }}</dd>
@@ -68,15 +73,51 @@
                     <small class="text-muted">Estos valores los autoriza administracion para mantener control de riesgo.</small>
                 </div>
             </div>
+
+            <div class="portal-panel">
+                <div class="portal-panel-header"><h2 class="h6 mb-0">Acceso y contraseña</h2></div>
+                <div class="portal-panel-body">
+                    <dl class="row mb-3">
+                        <dt class="col-5">Usuario</dt>
+                        <dd class="col-7">{{ user.username || '-' }}</dd>
+                        <dt class="col-5">Correo</dt>
+                        <dd class="col-7">{{ user.email || '-' }}</dd>
+                        <dt class="col-5">Cliente</dt>
+                        <dd class="col-7">{{ party.name || '-' }}</dd>
+                    </dl>
+
+                    <div class="alert alert-light border small">
+                        Cambia solo tu contrasena de acceso. Debe tener minimo 12 caracteres. Esto no modifica permisos, grupo, correo ni datos fiscales.
+                    </div>
+
+                    <div class="form-group">
+                        <label>Contrasena actual</label>
+                        <input type="password" class="form-control" v-model="password_form.current_password" autocomplete="current-password">
+                    </div>
+                    <div class="form-group">
+                        <label>Nueva contrasena</label>
+                        <input type="password" class="form-control" v-model="password_form.password" autocomplete="new-password">
+                        <small class="text-muted">Minimo 12 caracteres.</small>
+                    </div>
+                    <div class="form-group">
+                        <label>Confirmar nueva contrasena</label>
+                        <input type="password" class="form-control" v-model="password_form.password_confirm" autocomplete="new-password">
+                    </div>
+                    <button class="btn btn-primary btn-sm" v-on:click="changePassword" v-bind:disabled="password_saving">
+                        <span v-if="password_saving" class="spinner-border spinner-border-sm mr-1"></span>
+                        Cambiar contrasena
+                    </button>
+                </div>
+            </div>
         </div>
 
         <div class="col-lg-8">
-            <div class="card card-success card-outline">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h2 class="card-title h6 mb-0">{{ labels.addresses || 'Direcciones' }}</h2>
+            <div class="portal-panel">
+                <div class="portal-panel-header">
+                    <h2 class="h6 mb-0">{{ labels.addresses || 'Direcciones' }}</h2>
                     <button class="btn btn-success btn-xs ml-auto" v-on:click="newAddress"><i class="bi bi-plus"></i> Nueva</button>
                 </div>
-                <div class="card-body">
+                <div class="portal-panel-body">
                     <div class="form-row">
                         <div class="form-group col-md-4">
                             <label>Tipo</label>
@@ -109,7 +150,7 @@
                         <div class="form-group col-md-3"><button class="btn btn-success btn-block" v-on:click="saveAddress">Guardar</button></div>
                     </div>
                     <div class="table-responsive">
-                        <table class="table table-sm table-striped">
+                        <table class="table table-sm table-striped portal-table">
                             <thead><tr><th>Tipo</th><th>Nombre</th><th>Direccion</th><th></th></tr></thead>
                             <tbody>
                                 <tr v-for="row in addresses" v-bind:key="row.id">
@@ -118,19 +159,19 @@
                                     <td>{{ row.street }} {{ row.exterior_number }}, {{ row.city }} {{ row.state }} {{ row.postal_code }}</td>
                                     <td><button class="btn btn-outline-secondary btn-xs" v-on:click="editAddress(row)">Editar</button></td>
                                 </tr>
-                                <tr v-if="!addresses.length"><td colspan="4" class="text-muted">Sin direcciones.</td></tr>
+                                <tr v-if="!addresses.length"><td colspan="4"><div class="portal-empty">Sin direcciones registradas.</div></td></tr>
                             </tbody>
                         </table>
                     </div>
                 </div>
             </div>
 
-            <div class="card card-warning card-outline">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h2 class="card-title h6 mb-0">{{ labels.contacts || 'Contactos' }}</h2>
+            <div class="portal-panel">
+                <div class="portal-panel-header">
+                    <h2 class="h6 mb-0">{{ labels.contacts || 'Contactos' }}</h2>
                     <button class="btn btn-warning btn-xs ml-auto" v-on:click="newContact"><i class="bi bi-plus"></i> Nuevo</button>
                 </div>
-                <div class="card-body">
+                <div class="portal-panel-body">
                     <div class="form-row">
                         <div class="form-group col-md-4"><label>Nombre</label><input class="form-control" v-model="contact.name"></div>
                         <div class="form-group col-md-3"><label>Puesto / funcion</label><input class="form-control" v-model="contact.position"></div>
@@ -139,23 +180,23 @@
                     </div>
                     <button class="btn btn-warning btn-sm" v-on:click="saveContact">Guardar contacto</button>
                     <div class="table-responsive mt-3">
-                        <table class="table table-sm table-striped">
+                        <table class="table table-sm table-striped portal-table">
                             <thead><tr><th>Nombre</th><th>Funcion</th><th>Correo</th><th>Telefono</th><th></th></tr></thead>
                             <tbody>
                                 <tr v-for="row in contacts" v-bind:key="row.id">
                                     <td>{{ row.name }}</td><td>{{ row.position }}</td><td>{{ row.email }}</td><td>{{ row.phone }}</td>
                                     <td><button class="btn btn-outline-secondary btn-xs" v-on:click="editContact(row)">Editar</button></td>
                                 </tr>
-                                <tr v-if="!contacts.length"><td colspan="5" class="text-muted">Sin contactos.</td></tr>
+                                <tr v-if="!contacts.length"><td colspan="5"><div class="portal-empty">Sin contactos registrados.</div></td></tr>
                             </tbody>
                         </table>
                     </div>
                 </div>
             </div>
 
-            <div class="card card-secondary card-outline">
-                <div class="card-header"><h2 class="card-title h6 mb-0">{{ labels.documents || 'Documentos' }}</h2></div>
-                <div class="card-body">
+            <div class="portal-panel">
+                <div class="portal-panel-header"><h2 class="h6 mb-0">{{ labels.documents || 'Documentos' }}</h2></div>
+                <div class="portal-panel-body">
                     <form v-on:submit.prevent="uploadDocument" enctype="multipart/form-data">
                         <div class="form-row align-items-end">
                             <div class="form-group col-md-3">
@@ -175,7 +216,7 @@
                         </div>
                     </form>
                     <div class="table-responsive">
-                        <table class="table table-sm table-striped">
+                        <table class="table table-sm table-striped portal-table">
                             <thead><tr><th>Tipo</th><th>Titulo</th><th>Archivo</th><th>Fecha</th></tr></thead>
                             <tbody>
                                 <tr v-for="row in documents" v-bind:key="row.id">
@@ -183,16 +224,16 @@
                                     <td><a v-bind:href="row.download_url" target="_blank" rel="noopener">{{ row.original_name }}</a></td>
                                     <td>{{ date(row.created_at) }}</td>
                                 </tr>
-                                <tr v-if="!documents.length"><td colspan="4" class="text-muted">Sin documentos.</td></tr>
+                                <tr v-if="!documents.length"><td colspan="4"><div class="portal-empty">Sin documentos cargados.</div></td></tr>
                             </tbody>
                         </table>
                     </div>
                 </div>
             </div>
 
-            <div id="clientes" class="card card-danger card-outline" v-if="features.reseller">
-                <div class="card-header"><h2 class="card-title h6 mb-0">Clientes del revendedor</h2></div>
-                <div class="card-body">
+            <div id="clientes" class="portal-panel" v-if="features.reseller">
+                <div class="portal-panel-header"><h2 class="h6 mb-0">Clientes del revendedor</h2></div>
+                <div class="portal-panel-body">
                     <div class="form-row">
                         <div class="form-group col-md-4"><label>Nombre</label><input class="form-control" v-model="reseller_customer.name"></div>
                         <div class="form-group col-md-4"><label>Razon social</label><input class="form-control" v-model="reseller_customer.legal_name"></div>
@@ -204,11 +245,11 @@
                         <div class="form-group col-md-4 d-flex align-items-end"><button class="btn btn-danger btn-block" v-on:click="createResellerCustomer">Crear cliente</button></div>
                     </div>
                     <div class="table-responsive">
-                        <table class="table table-sm table-striped">
+                        <table class="table table-sm table-striped portal-table">
                             <thead><tr><th>Cliente</th><th>RFC</th><th>Correo</th><th>Telefono</th></tr></thead>
                             <tbody>
                                 <tr v-for="row in reseller_customers" v-bind:key="row.id"><td>{{ row.name }}</td><td>{{ row.rfc }}</td><td>{{ row.email }}</td><td>{{ row.phone }}</td></tr>
-                                <tr v-if="!reseller_customers.length"><td colspan="4" class="text-muted">Sin clientes registrados.</td></tr>
+                                <tr v-if="!reseller_customers.length"><td colspan="4"><div class="portal-empty">Sin clientes registrados.</div></td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -225,6 +266,7 @@ document.addEventListener('DOMContentLoaded', function() {
         data: {
             baseUrl: <?php echo json_encode(Uri::base(false)); ?>,
             portal: <?php echo json_encode($portal_code); ?>,
+            user: {},
             party: {},
             addresses: [],
             contacts: [],
@@ -236,6 +278,8 @@ document.addEventListener('DOMContentLoaded', function() {
             address: {},
             contact: {},
             reseller_customer: {},
+            password_form: { current_password: '', password: '', password_confirm: '' },
+            password_saving: false,
             document_type: 'constancia_fiscal',
             document_title: '',
             message: '',
@@ -266,6 +310,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     .catch(function(err) { self.error = err && err.error ? err.error : 'No se pudo cargar la informacion. Revisa sesion, permisos o conexion.'; });
             },
             apply: function(json) {
+                this.user = json.user || {};
                 this.party = json.party || {};
                 this.addresses = json.addresses || [];
                 this.contacts = json.contacts || [];
@@ -277,6 +322,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 this.message = json.message || '';
             },
             saveParty: function() { this.request('perfil_save', this.party); },
+            changePassword: function() {
+                var self = this;
+                self.password_saving = true;
+                self.request('perfil_password', self.password_form).then(function(json) {
+                    if (json && json.status === 'ok') {
+                        self.password_form = { current_password: '', password: '', password_confirm: '' };
+                    }
+                }).finally(function() {
+                    self.password_saving = false;
+                });
+            },
             saveAddress: function() { this.request('perfil_address', this.address); },
             saveContact: function() { this.request('perfil_contact', this.contact); },
             editAddress: function(row) { this.address = Object.assign({}, row); },

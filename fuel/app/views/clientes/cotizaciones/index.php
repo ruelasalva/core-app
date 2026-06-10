@@ -19,30 +19,33 @@ $no_image_svg = 'data:image/svg+xml;charset=UTF-8,'.rawurlencode('<svg xmlns="ht
     }
 </style>
 <div id="app-clientes">
-    <div class="card quote-cta">
-        <div class="card-body d-flex justify-content-between align-items-center flex-wrap">
+    <div class="portal-page-hero quote-cta">
+        <div class="d-flex justify-content-between align-items-center flex-wrap">
             <div>
-                <h1 class="h5 mb-1">Portal de clientes</h1>
-                <div class="text-muted">Consulta tu estado de cuenta y solicita cotizaciones desde el catalogo publicado.</div>
+                <h1 class="h4 mb-1">Cotizaciones y pedidos</h1>
+                <div class="text-muted">Solicita cotizaciones desde el catálogo publicado y da seguimiento a tus pedidos.</div>
             </div>
-            <button class="btn btn-primary mt-2 mt-md-0" @click="tab = 'new_quote'">
-                Nueva cotizacion
-            </button>
+            <div class="portal-page-actions mt-3 mt-md-0">
+                <a class="btn btn-outline-secondary btn-sm" href="<?php echo Uri::create('clientes'); ?>">Inicio</a>
+                <button class="btn btn-primary btn-sm" @click="tab = 'new_quote'">
+                    <i class="bi bi-plus-lg mr-1"></i> Nueva cotizacion
+                </button>
+            </div>
         </div>
     </div>
 
-    <div class="row">
-        <div class="col-md-3"><div class="card card-primary card-outline"><div class="card-body"><div class="text-muted small">CFDI visibles</div><div class="h3 mb-0">{{ stats.cfdi || 0 }}</div></div></div></div>
-        <div class="col-md-3"><div class="card card-info card-outline"><div class="card-body"><div class="text-muted small">Cotizaciones</div><div class="h3 mb-0">{{ stats.quotes || 0 }}</div></div></div></div>
-        <div class="col-md-3"><div class="card card-success card-outline"><div class="card-body"><div class="text-muted small">Pedidos</div><div class="h3 mb-0">{{ stats.orders || 0 }}</div></div></div></div>
-        <div class="col-md-3"><div class="card card-warning card-outline"><div class="card-body"><div class="text-muted small">Saldo pendiente</div><div class="h5 mb-0">{{ money(stats.open_balance) }}</div></div></div></div>
+    <div class="portal-kpi-grid">
+        <div class="portal-kpi"><div><div class="portal-kpi-label">CFDI visibles</div><div class="portal-kpi-value">{{ stats.cfdi || 0 }}</div></div><i class="bi bi-file-earmark-text portal-kpi-icon"></i></div>
+        <div class="portal-kpi"><div><div class="portal-kpi-label">Cotizaciones</div><div class="portal-kpi-value">{{ stats.quotes || 0 }}</div></div><i class="bi bi-clipboard-check portal-kpi-icon"></i></div>
+        <div class="portal-kpi"><div><div class="portal-kpi-label">Pedidos</div><div class="portal-kpi-value">{{ stats.orders || 0 }}</div></div><i class="bi bi-box-seam portal-kpi-icon"></i></div>
+        <div class="portal-kpi"><div><div class="portal-kpi-label">Saldo pendiente</div><div class="portal-kpi-value">{{ money(stats.open_balance) }}</div></div><i class="bi bi-wallet2 portal-kpi-icon"></i></div>
     </div>
 
     <div v-if="error" class="alert alert-danger">{{ error }}</div>
 
-    <div class="card">
-        <div class="card-header p-2">
-            <ul class="nav nav-pills">
+    <div class="portal-panel">
+        <div class="portal-panel-header p-2">
+            <ul class="nav nav-pills portal-tabs">
                 <li class="nav-item"><a class="nav-link" :class="{active: tab === 'account'}" href="#" @click.prevent="tab = 'account'">Estado de cuenta</a></li>
                 <li class="nav-item"><a class="nav-link" :class="{active: tab === 'cfdi'}" href="#" @click.prevent="tab = 'cfdi'">CFDI</a></li>
                 <li class="nav-item"><a class="nav-link" :class="{active: tab === 'quotes'}" href="#" @click.prevent="tab = 'quotes'">Cotizaciones</a></li>
@@ -50,7 +53,7 @@ $no_image_svg = 'data:image/svg+xml;charset=UTF-8,'.rawurlencode('<svg xmlns="ht
                 <li class="nav-item"><a class="nav-link" :class="{active: tab === 'new_quote'}" href="#" @click.prevent="tab = 'new_quote'">Nueva cotizacion</a></li>
             </ul>
         </div>
-        <div class="card-body">
+        <div class="portal-panel-body">
             <div v-if="loading" class="text-center p-4"><div class="spinner-border text-primary"></div></div>
 
             <div v-show="!loading && tab === 'account'">
@@ -74,7 +77,7 @@ $no_image_svg = 'data:image/svg+xml;charset=UTF-8,'.rawurlencode('<svg xmlns="ht
                                 <td class="text-right">{{ money(invoice.total, invoice.currency_code) }}</td>
                                 <td class="text-right">{{ money(invoice.balance_due, invoice.currency_code) }}</td>
                             </tr>
-                            <tr v-if="account.invoices.length === 0"><td colspan="6" class="text-center text-muted">Sin facturas disponibles.</td></tr>
+                            <tr v-if="account.invoices.length === 0"><td colspan="6"><div class="portal-empty">Sin facturas disponibles.</div></td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -98,7 +101,7 @@ $no_image_svg = 'data:image/svg+xml;charset=UTF-8,'.rawurlencode('<svg xmlns="ht
                                 <td><span class="badge" :class="statusClass(payment.status)">{{ statusLabel(payment.status) }}</span></td>
                                 <td class="text-right">{{ money(payment.amount, payment.currency_code) }}</td>
                             </tr>
-                            <tr v-if="account.payments.length === 0"><td colspan="5" class="text-center text-muted">Sin pagos registrados.</td></tr>
+                            <tr v-if="account.payments.length === 0"><td colspan="5"><div class="portal-empty">Sin pagos registrados.</div></td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -122,7 +125,7 @@ $no_image_svg = 'data:image/svg+xml;charset=UTF-8,'.rawurlencode('<svg xmlns="ht
                                 <td class="text-right">{{ money(item.total, item.currency) }}</td>
                                 <td><span class="badge" :class="item.sat_status === 'cancelado' ? 'badge-danger' : 'badge-success'">{{ item.sat_status }}</span></td>
                             </tr>
-                            <tr v-if="cfdi.length === 0"><td colspan="6" class="text-center text-muted">Sin CFDI visibles.</td></tr>
+                            <tr v-if="cfdi.length === 0"><td colspan="6"><div class="portal-empty">Sin CFDI visibles.</div></td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -154,7 +157,7 @@ $no_image_svg = 'data:image/svg+xml;charset=UTF-8,'.rawurlencode('<svg xmlns="ht
                                     </div>
                                 </td>
                             </tr>
-                            <tr v-if="quotes.length === 0"><td colspan="6" class="text-center text-muted">Sin cotizaciones.</td></tr>
+                            <tr v-if="quotes.length === 0"><td colspan="6"><div class="portal-empty">Sin cotizaciones. Puedes crear una nueva solicitud desde el catálogo.</div></td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -176,7 +179,7 @@ $no_image_svg = 'data:image/svg+xml;charset=UTF-8,'.rawurlencode('<svg xmlns="ht
                                 <td>{{ order.created_label }}</td>
                                 <td class="text-right">{{ money(order.total, order.currency_code) }}</td>
                             </tr>
-                            <tr v-if="orders.length === 0"><td colspan="4" class="text-center text-muted">Sin pedidos disponibles.</td></tr>
+                            <tr v-if="orders.length === 0"><td colspan="4"><div class="portal-empty">Sin pedidos disponibles.</div></td></tr>
                         </tbody>
                     </table>
                 </div>

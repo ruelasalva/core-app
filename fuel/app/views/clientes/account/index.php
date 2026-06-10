@@ -2,30 +2,34 @@
     .customer-account-card .icon { opacity: .2; }
     .customer-account-table td,
     .customer-account-table th { vertical-align: middle; }
-    .customer-account-empty { min-height: 84px; display: flex; align-items: center; justify-content: center; }
     .customer-account-filters .form-group { margin-bottom: .75rem; }
 </style>
 
 <div id="app-customer-account" v-cloak>
-    <div class="card card-primary card-outline">
-        <div class="card-body d-flex justify-content-between align-items-center flex-wrap">
+    <div class="portal-page-hero">
+        <div class="d-flex justify-content-between align-items-center flex-wrap">
             <div>
                 <h1 class="h4 mb-1">Estado de cuenta</h1>
                 <p class="text-muted mb-0">Consulta facturas, pagos recibidos y saldos sin realizar acciones de pago.</p>
             </div>
-            <a class="btn btn-outline-secondary btn-sm mt-3 mt-md-0" href="<?php echo Uri::create('clientes'); ?>">
-                <i class="bi bi-arrow-left"></i> Volver al portal
-            </a>
+            <div class="portal-page-actions mt-3 mt-md-0">
+                <a class="btn btn-primary btn-sm" href="<?php echo Uri::create('clientes/cfdi'); ?>">
+                    <i class="bi bi-file-earmark-text mr-1"></i> Ver CFDI
+                </a>
+                <a class="btn btn-outline-secondary btn-sm" href="<?php echo Uri::create('clientes'); ?>">
+                    <i class="bi bi-arrow-left mr-1"></i> Volver al portal
+                </a>
+            </div>
         </div>
     </div>
 
     <div v-if="error" class="alert alert-danger">{{ error }}</div>
 
-    <div class="card customer-account-filters">
-        <div class="card-header">
-            <h2 class="card-title h6 mb-0">Filtros</h2>
+    <div class="portal-panel customer-account-filters">
+        <div class="portal-panel-header">
+            <h2 class="h6 mb-0">Filtros</h2>
         </div>
-        <div class="card-body">
+        <div class="portal-panel-body">
             <form @submit.prevent="load">
                 <div class="form-row">
                     <div class="form-group col-md-2">
@@ -72,59 +76,49 @@
     </div>
 
     <div v-show="!loading">
-        <div class="row">
-            <div class="col-sm-6 col-lg">
-                <div class="small-box bg-info customer-account-card">
-                    <div class="inner">
-                        <h3>{{ money(account.balance_due) }}</h3>
-                        <p>Saldo pendiente</p>
-                    </div>
-                    <div class="icon"><i class="bi bi-wallet2"></i></div>
+        <div class="portal-kpi-grid">
+            <div class="portal-kpi">
+                <div>
+                    <div class="portal-kpi-label">Saldo pendiente</div>
+                    <div class="portal-kpi-value">{{ money(account.balance_due) }}</div>
                 </div>
+                <i class="bi bi-wallet2 portal-kpi-icon"></i>
             </div>
-            <div class="col-sm-6 col-lg">
-                <div class="small-box bg-warning customer-account-card">
-                    <div class="inner">
-                        <h3>{{ money(account.overdue_balance) }}</h3>
-                        <p>Saldo vencido</p>
-                    </div>
-                    <div class="icon"><i class="bi bi-exclamation-triangle"></i></div>
+            <div class="portal-kpi">
+                <div>
+                    <div class="portal-kpi-label">Saldo vencido</div>
+                    <div class="portal-kpi-value">{{ money(account.overdue_balance) }}</div>
                 </div>
+                <i class="bi bi-exclamation-triangle portal-kpi-icon"></i>
             </div>
-            <div class="col-sm-6 col-lg">
-                <div class="small-box bg-primary customer-account-card">
-                    <div class="inner">
-                        <h3>{{ summary.open_invoices || 0 }}</h3>
-                        <p>Facturas abiertas</p>
-                    </div>
-                    <div class="icon"><i class="bi bi-file-earmark-text"></i></div>
+            <div class="portal-kpi">
+                <div>
+                    <div class="portal-kpi-label">Facturas abiertas</div>
+                    <div class="portal-kpi-value">{{ summary.open_invoices || 0 }}</div>
                 </div>
+                <i class="bi bi-file-earmark-text portal-kpi-icon"></i>
             </div>
-            <div class="col-sm-6 col-lg">
-                <div class="small-box bg-success customer-account-card">
-                    <div class="inner">
-                        <h3>{{ summary.paid_invoices || 0 }}</h3>
-                        <p>Facturas pagadas</p>
-                    </div>
-                    <div class="icon"><i class="bi bi-check2-circle"></i></div>
+            <div class="portal-kpi">
+                <div>
+                    <div class="portal-kpi-label">Facturas pagadas</div>
+                    <div class="portal-kpi-value">{{ summary.paid_invoices || 0 }}</div>
                 </div>
+                <i class="bi bi-check2-circle portal-kpi-icon"></i>
             </div>
-            <div class="col-sm-6 col-lg">
-                <div class="small-box bg-secondary customer-account-card">
-                    <div class="inner">
-                        <h3>{{ summary.payments_received || 0 }}</h3>
-                        <p>Pagos recibidos</p>
-                    </div>
-                    <div class="icon"><i class="bi bi-cash-coin"></i></div>
+            <div class="portal-kpi">
+                <div>
+                    <div class="portal-kpi-label">Pagos recibidos</div>
+                    <div class="portal-kpi-value">{{ summary.payments_received || 0 }}</div>
                 </div>
+                <i class="bi bi-cash-coin portal-kpi-icon"></i>
             </div>
         </div>
 
-        <div class="card card-warning card-outline">
-            <div class="card-header">
-                <h2 class="card-title h6 mb-0">Antigüedad de saldo</h2>
+        <div class="portal-panel">
+            <div class="portal-panel-header">
+                <h2 class="h6 mb-0">Antigüedad de saldo</h2>
             </div>
-            <div class="card-body">
+            <div class="portal-panel-body">
                 <div class="row text-center">
                     <div class="col-6 col-md">
                         <strong>{{ money(aging.current) }}</strong>
@@ -150,13 +144,13 @@
             </div>
         </div>
 
-        <div class="card card-info card-outline">
-            <div class="card-header">
-                <h2 class="card-title h6 mb-0">Facturas</h2>
+        <div class="portal-panel">
+            <div class="portal-panel-header">
+                <h2 class="h6 mb-0">Facturas</h2>
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
-                    <table class="table table-sm table-hover customer-account-table mb-0">
+                    <table class="table table-sm table-hover customer-account-table portal-table mb-0">
                         <thead>
                             <tr>
                                 <th>Folio</th>
@@ -183,7 +177,7 @@
                                 <td class="text-right">{{ invoice.days_overdue || 0 }}</td>
                             </tr>
                             <tr v-if="account.invoices.length === 0">
-                                <td colspan="7" class="text-muted text-center customer-account-empty">Sin facturas para los filtros seleccionados.</td>
+                                <td colspan="7"><div class="portal-empty m-3">Sin facturas para los filtros seleccionados.</div></td>
                             </tr>
                         </tbody>
                     </table>
@@ -191,13 +185,13 @@
             </div>
         </div>
 
-        <div class="card card-success card-outline">
-            <div class="card-header">
-                <h2 class="card-title h6 mb-0">Pagos recibidos</h2>
+        <div class="portal-panel">
+            <div class="portal-panel-header">
+                <h2 class="h6 mb-0">Pagos recibidos</h2>
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
-                    <table class="table table-sm table-hover customer-account-table mb-0">
+                    <table class="table table-sm table-hover customer-account-table portal-table mb-0">
                         <thead>
                             <tr>
                                 <th>Folio</th>
@@ -216,7 +210,7 @@
                                 <td class="text-right">{{ money(payment.amount, payment.currency_code) }}</td>
                             </tr>
                             <tr v-if="account.payments.length === 0">
-                                <td colspan="5" class="text-muted text-center customer-account-empty">Sin pagos recibidos para los filtros seleccionados.</td>
+                                <td colspan="5"><div class="portal-empty m-3">Sin pagos recibidos para los filtros seleccionados.</div></td>
                             </tr>
                         </tbody>
                     </table>
@@ -224,13 +218,13 @@
             </div>
         </div>
 
-        <div class="card card-secondary card-outline">
-            <div class="card-header">
-                <h2 class="card-title h6 mb-0">Aplicaciones</h2>
+        <div class="portal-panel">
+            <div class="portal-panel-header">
+                <h2 class="h6 mb-0">Aplicaciones</h2>
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
-                    <table class="table table-sm table-hover customer-account-table mb-0">
+                    <table class="table table-sm table-hover customer-account-table portal-table mb-0">
                         <thead>
                             <tr>
                                 <th>Pago</th>
@@ -249,7 +243,7 @@
                                 <td class="text-right">{{ money(allocation.amount, allocation.currency_code) }}</td>
                             </tr>
                             <tr v-if="account.allocations.length === 0">
-                                <td colspan="5" class="text-muted text-center customer-account-empty">Sin aplicaciones para los filtros seleccionados.</td>
+                                <td colspan="5"><div class="portal-empty m-3">Sin aplicaciones para los filtros seleccionados.</div></td>
                             </tr>
                         </tbody>
                     </table>

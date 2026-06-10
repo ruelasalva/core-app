@@ -1,10 +1,31 @@
 <div id="app-clientes-cfdi">
-    <div class="card">
-        <div class="card-header d-flex align-items-center justify-content-between">
-            <h3 class="card-title mb-0"><?php echo e($portal_title); ?></h3>
+    <div class="portal-page-hero">
+        <div class="d-flex justify-content-between align-items-center flex-wrap">
+            <div>
+                <h1 class="h4 mb-1"><?php echo e($portal_title); ?></h1>
+                <p class="text-muted mb-0">Consulta y descarga tus XML/PDF disponibles sin exponer rutas físicas.</p>
+            </div>
+            <div class="portal-page-actions mt-3 mt-md-0">
+                <a class="btn btn-outline-primary btn-sm" href="<?php echo Uri::create('clientes/estado-cuenta'); ?>">
+                    <i class="bi bi-wallet2 mr-1"></i> Estado de cuenta
+                </a>
+                <button class="btn btn-primary btn-sm" @click="load" :disabled="loading">
+                    <span v-if="loading" class="spinner-border spinner-border-sm mr-1"></span>
+                    Actualizar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="portal-panel">
+        <div class="portal-panel-header">
+            <div>
+                <h2 class="h6 mb-0">CFDI visibles</h2>
+                <div class="text-muted small">Filtra por fecha, UUID, folio, estatus SAT o tipo de comprobante.</div>
+            </div>
             <span class="badge badge-light">{{ items.length }} CFDI</span>
         </div>
-        <div class="card-body">
+        <div class="portal-panel-body">
             <div v-if="error" class="alert alert-danger">{{ error }}</div>
             <div v-if="message" class="alert alert-info">{{ message }}</div>
 
@@ -58,7 +79,7 @@
             </form>
 
             <div class="table-responsive">
-                <table class="table table-sm table-hover">
+                <table class="table table-sm table-hover portal-table">
                     <thead>
                         <tr>
                             <th>UUID</th>
@@ -91,19 +112,19 @@
                             </td>
                             <td>
                                 <a v-if="item.has_xml == 1" class="btn btn-outline-primary btn-xs" :href="item.xml_download_url">
-                                    XML
+                                    <i class="bi bi-filetype-xml mr-1"></i> XML
                                 </a>
                                 <span v-else class="text-muted">No disponible</span>
                             </td>
                             <td>
                                 <a v-if="item.has_pdf == 1" class="btn btn-outline-danger btn-xs" :href="item.pdf_download_url">
-                                    PDF
+                                    <i class="bi bi-file-earmark-pdf mr-1"></i> PDF
                                 </a>
                                 <span v-else class="text-muted">No disponible</span>
                             </td>
                         </tr>
                         <tr v-if="items.length === 0 && !loading">
-                            <td colspan="9" class="text-center text-muted py-4">Sin CFDI disponibles para este portal.</td>
+                            <td colspan="9"><div class="portal-empty my-3">Sin CFDI disponibles para este portal.</div></td>
                         </tr>
                     </tbody>
                 </table>

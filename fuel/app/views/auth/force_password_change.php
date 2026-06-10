@@ -6,40 +6,82 @@
     <title>Cambio de contrasena requerido</title>
     <?php echo Asset::css('css/bootstrap.min.css'); ?>
     <?php echo Asset::css('css/adminlte.min.css'); ?>
+    <style>
+        .password-policy-page {
+            min-height: 100vh;
+            background: #eef3f8;
+        }
+        .password-policy-card {
+            width: min(100%, 460px);
+            border: 0;
+            border-radius: 10px;
+            box-shadow: 0 18px 45px rgba(15, 23, 42, .16);
+        }
+        .password-policy-brand {
+            border-bottom: 1px solid #e5e9f0;
+            padding: 24px 28px 18px;
+        }
+        .password-policy-body {
+            padding: 26px 28px 28px;
+        }
+        .password-rule-list {
+            margin: 0;
+            padding-left: 18px;
+        }
+        .password-rule-list li {
+            margin-bottom: 4px;
+        }
+    </style>
 </head>
-<body class="hold-transition login-page">
-<div class="login-box">
-    <div class="card card-outline card-primary">
-        <div class="card-header text-center">
-            <strong>CORE-APP</strong>
+<body class="hold-transition password-policy-page d-flex align-items-center justify-content-center">
+<div class="password-policy-card card">
+    <div class="password-policy-brand text-center">
+        <div class="h4 mb-1 font-weight-bold">CORE-APP</div>
+        <div class="text-muted">Seguridad de acceso</div>
+    </div>
+    <div class="password-policy-body">
+        <div class="mb-3">
+            <h1 class="h5 mb-2">Cambio de contrasena requerido</h1>
+            <p class="text-muted mb-0">
+                Por seguridad debes crear una nueva contrasena antes de continuar al sistema.
+            </p>
         </div>
-        <div class="card-body">
-            <p class="login-box-msg">Debes cambiar tu contrasena antes de continuar.</p>
 
-            <?php if (!empty($error)): ?>
-                <div class="alert alert-danger"><?php echo e($error); ?></div>
-            <?php endif; ?>
+        <?php if (!empty($error)): ?>
+            <div class="alert alert-danger"><?php echo e($error); ?></div>
+        <?php endif; ?>
 
-            <form method="post" action="<?php echo Uri::create('auth/force_password_change'); ?>">
-                <?php echo \Form::csrf(); ?>
+        <?php if (!empty($success)): ?>
+            <div class="alert alert-success"><?php echo e($success); ?></div>
+        <?php endif; ?>
 
-                <div class="form-group">
-                    <label>Nueva contrasena</label>
-                    <input type="password" name="password" class="form-control" autocomplete="new-password" required>
-                    <small class="form-text text-muted">Minimo 12 caracteres.</small>
-                </div>
+        <div class="alert alert-light border small">
+            <strong>Reglas de contrasena</strong>
+            <ul class="password-rule-list mt-2">
+                <li>Minimo 12 caracteres.</li>
+                <li>No compartas esta contrasena con otros usuarios.</li>
+                <li>Evita usar datos obvios como nombre, empresa o telefono.</li>
+            </ul>
+        </div>
 
-                <div class="form-group">
-                    <label>Confirmar contrasena</label>
-                    <input type="password" name="password_confirm" class="form-control" autocomplete="new-password" required>
-                </div>
+        <form method="post" action="<?php echo Uri::create('auth/force_password_change'); ?>">
+            <?php echo \Form::csrf(); ?>
 
-                <button type="submit" class="btn btn-primary btn-block">Cambiar contrasena</button>
-            </form>
-
-            <div class="text-center mt-3">
-                <a href="<?php echo Uri::create('logout'); ?>">Cerrar sesion</a>
+            <div class="form-group">
+                <label>Nueva contrasena</label>
+                <input type="password" name="password" class="form-control" autocomplete="new-password" required autofocus>
             </div>
+
+            <div class="form-group">
+                <label>Confirmar contrasena</label>
+                <input type="password" name="password_confirm" class="form-control" autocomplete="new-password" required>
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-block">Guardar nueva contrasena</button>
+        </form>
+
+        <div class="text-center mt-3">
+            <a class="text-muted" href="<?php echo Uri::create('logout'); ?>">Cancelar y cerrar sesion</a>
         </div>
     </div>
 </div>
