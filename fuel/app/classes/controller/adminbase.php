@@ -37,6 +37,11 @@ class Controller_Adminbase extends Controller_Template
         $this->user_id = isset($user_id_data[1]) ? (int) $user_id_data[1] : 0;
         $username = \Auth::get_screen_name();
 
+        if ((new \Service_Core_Auth_PasswordPolicy())->must_change($this->user_id)) {
+            \Log::warning('Admin bloqueado por cambio de password requerido. user_id='.$this->user_id.' uri='.\Uri::string().' timestamp='.time());
+            \Response::redirect('auth/force_password_change');
+        }
+
         # SE OBTIENE EL GRUPO PRINCIPAL ORM AUTH
         $groups = \Auth::get_groups();
         if (!empty($groups)) {

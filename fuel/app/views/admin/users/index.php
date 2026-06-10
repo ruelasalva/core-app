@@ -33,11 +33,15 @@
                             <td>{{ user.username }}</td>
                             <td>{{ user.email }}</td>
                             <td>
-                                <span class="badge badge-info">{{ user.group_id }}</span>
+                                <span class="badge badge-info">{{ user.group_name || user.group_id }}</span>
+                                <span v-if="parseInt(user.password_must_change) === 1" class="badge badge-warning ml-1">Cambio requerido</span>
                             </td>
                             <td class="text-center">
                                 <button class="btn btn-xs btn-warning" title="Editar" @click="editUser(user)">
                                     <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="btn btn-xs btn-danger" title="Resetear contrasena" @click="openPasswordReset(user)">
+                                    <i class="fas fa-lock"></i>
                                 </button>
                                 <button class="btn btn-xs btn-info" @click="openSpecialPermissions(user)" title="Permisos Especiales">
                                     <i class="fas fa-key"></i>
@@ -140,6 +144,42 @@
         </div>
     </div>
 
+    <div class="modal fade" id="modal-reset-password" tabindex="-1" role="dialog">
+        <div class="modal-dialog">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title"><i class="fas fa-lock mr-2"></i> Resetear contrasena: {{ selectedUser.username }}</h5>
+                    <button type="button" class="close text-white" @click="closePasswordResetModal"><span>&times;</span></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-warning">
+                        La contrasena no se mostrara ni se registrara en logs. Comparte la nueva contrasena por un canal seguro.
+                    </div>
+                    <div v-if="passwordReset.error" class="alert alert-danger">{{ passwordReset.error }}</div>
+                    <div class="form-group">
+                        <label>Nueva contrasena</label>
+                        <input type="password" class="form-control" v-model="passwordReset.password" autocomplete="new-password">
+                        <small class="form-text text-muted">Minimo 12 caracteres.</small>
+                    </div>
+                    <div class="form-group">
+                        <label>Confirmar contrasena</label>
+                        <input type="password" class="form-control" v-model="passwordReset.password_confirm" autocomplete="new-password">
+                    </div>
+                    <div class="custom-control custom-checkbox">
+                        <input type="checkbox" class="custom-control-input" id="force-password-change" v-model="passwordReset.force_password_change">
+                        <label class="custom-control-label" for="force-password-change">Forzar cambio al iniciar sesion</label>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary" @click="closePasswordResetModal">Cancelar</button>
+                    <button type="button" class="btn btn-danger" @click="resetPassword" :disabled="passwordReset.loading">
+                        {{ passwordReset.loading ? 'Guardando...' : 'Resetear contrasena' }}
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="modal fade" id="modal-dashboards" tabindex="-1" role="dialog">
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
@@ -181,6 +221,13 @@ window.onload = function() {
             specialPerms: [],   
             dashboards: [],
             assignedDashboards: [],
+            passwordReset: {
+                password: '',
+                password_confirm: '',
+                force_password_change: true,
+                loading: false,
+                error: ''
+            },
             // Formulario único para Nuevo/Editar
             form: { 
                 id: null,
@@ -204,7 +251,14 @@ window.onload = function() {
                 fetch('<?php echo Uri::create('admin/users/list'); ?>')
                     .then(res => res.json())
                     .then(data => {
-                        this.users = data;
+                        if (data.error) {
+                            alert('Error: ' + data.error);
+                            this.users = [];
+                        } else if (Array.isArray(data)) {
+                            this.users = data.filter(user => user && typeof user === 'object' && user.id);
+                        } else {
+                            this.users = (data.users || []).filter(user => user && typeof user === 'object' && user.id);
+                        }
                         this.loading = false;
                         this.initDataTable();
                     });
@@ -262,6 +316,53 @@ window.onload = function() {
             },
             closeUserModal() {
                 this.hideModal('modal-user');
+            },
+            openPasswordReset(user) {
+                this.selectedUser = user;
+                this.passwordReset = {
+                    password: '',
+                    password_confirm: '',
+                    force_password_change: true,
+                    loading: false,
+                    error: ''
+                };
+                this.showModal('modal-reset-password');
+            },
+            resetPassword() {
+                if (!this.selectedUser || !this.selectedUser.id) {
+                    this.passwordReset.error = 'Selecciona un usuario valido.';
+                    return;
+                }
+
+                this.passwordReset.error = '';
+                this.passwordReset.loading = true;
+
+                fetch('<?php echo Uri::create('admin/users/reset_password'); ?>', {
+                    ...window.coreAppFetchOptions({
+                        user_id: this.selectedUser.id,
+                        password: this.passwordReset.password,
+                        password_confirm: this.passwordReset.password_confirm,
+                        force_password_change: this.passwordReset.force_password_change ? 1 : 0
+                    })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    this.passwordReset.loading = false;
+                    if (data.error) {
+                        this.passwordReset.error = data.error;
+                        return;
+                    }
+                    this.closePasswordResetModal();
+                    this.fetchUsers();
+                    alert('Contrasena reseteada correctamente.');
+                })
+                .catch(() => {
+                    this.passwordReset.loading = false;
+                    this.passwordReset.error = 'No se pudo procesar la solicitud.';
+                });
+            },
+            closePasswordResetModal() {
+                this.hideModal('modal-reset-password');
             },
 
             // --- GESTIÓN DE PERMISOS ESPECIALES (EXCEPCIONES) ---
