@@ -97,6 +97,7 @@ return array(
     'proveedores/compras_data' => 'proveedores/compras_data',
     'proveedores/compras_invoice' => 'proveedores/compras_invoice',
     'proveedores/compras_upload' => 'proveedores/compras_upload',
+    'proveedores/compras_document_download/(:num)' => 'proveedores/compras/compras_document_download/$1',
     'proveedores/contracts' => 'proveedores/contracts',
     'proveedores/contracts_data' => 'proveedores/contracts_data',
     'proveedores/contracts_document_download/(:num)' => 'proveedores/contracts_document_download/$1',
