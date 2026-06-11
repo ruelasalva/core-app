@@ -1,26 +1,30 @@
-<div class="row">
-    <div class="col-md-3">
-        <div class="small-box bg-info">
-            <div class="inner"><h3>{{ orders.length }}</h3><p>Ordenes</p></div>
-            <div class="icon"><i class="bi bi-cart-check"></i></div>
+<div class="portal-kpi-grid">
+    <div class="portal-kpi">
+        <div>
+            <div class="portal-kpi-label">Órdenes</div>
+            <div class="portal-kpi-value">{{ orders.length }}</div>
         </div>
+        <i class="bi bi-cart-check portal-kpi-icon"></i>
     </div>
-    <div class="col-md-3">
-        <div class="small-box bg-primary">
-            <div class="inner"><h3>{{ invoices.length }}</h3><p>Facturas</p></div>
-            <div class="icon"><i class="bi bi-file-earmark-text"></i></div>
+    <div class="portal-kpi">
+        <div>
+            <div class="portal-kpi-label">Facturas</div>
+            <div class="portal-kpi-value">{{ invoices.length }}</div>
         </div>
+        <i class="bi bi-file-earmark-text portal-kpi-icon"></i>
     </div>
-    <div class="col-md-3">
-        <div class="small-box bg-success">
-            <div class="inner"><h3>{{ receipts.length }}</h3><p>Contrarecibos</p></div>
-            <div class="icon"><i class="bi bi-receipt-cutoff"></i></div>
+    <div class="portal-kpi">
+        <div>
+            <div class="portal-kpi-label">Contrarecibos</div>
+            <div class="portal-kpi-value">{{ receipts.length }}</div>
         </div>
+        <i class="bi bi-receipt-cutoff portal-kpi-icon"></i>
     </div>
-    <div class="col-md-3">
-        <div class="small-box bg-secondary">
-            <div class="inner"><h3>{{ documents.length }}</h3><p>Evidencias</p></div>
-            <div class="icon"><i class="bi bi-folder2-open"></i></div>
+    <div class="portal-kpi">
+        <div>
+            <div class="portal-kpi-label">Evidencias</div>
+            <div class="portal-kpi-value">{{ documents.length }}</div>
         </div>
+        <i class="bi bi-folder2-open portal-kpi-icon"></i>
     </div>
 </div>

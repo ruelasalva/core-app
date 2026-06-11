@@ -2,7 +2,7 @@
     <button class="btn btn-primary btn-sm mb-3" @click="newInvoice">
         <i class="bi bi-plus-lg"></i> Subir factura
     </button>
-    <table class="table table-bordered table-hover">
+    <table class="table table-bordered table-hover portal-table">
         <thead>
             <tr>
                 <th>Folio</th>
@@ -25,7 +25,7 @@
                 </td>
             </tr>
             <tr v-if="invoices.length === 0">
-                <td colspan="6" class="text-center text-muted">Sin facturas registradas.</td>
+                <td colspan="6"><div class="portal-empty">Sin facturas registradas. Usa "Subir factura" para iniciar la revisión.</div></td>
             </tr>
         </tbody>
     </table>

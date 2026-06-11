@@ -1,5 +1,5 @@
 <div v-show="!loading && tab === 'receipts'">
-    <table class="table table-bordered table-hover">
+    <table class="table table-bordered table-hover portal-table">
         <thead>
             <tr>
                 <th>Folio</th>
@@ -20,7 +20,7 @@
                 </td>
             </tr>
             <tr v-if="receipts.length === 0">
-                <td colspan="5" class="text-center text-muted">Sin contrarecibos.</td>
+                <td colspan="5"><div class="portal-empty">Sin contrarecibos disponibles.</div></td>
             </tr>
         </tbody>
     </table>

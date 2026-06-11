@@ -218,6 +218,46 @@ class Controller_Proveedores_Compras extends Controller_Proveedores_Base
         return $this->post_upload();
     }
 
+    /**
+     * COMPRAS DOCUMENT DOWNLOAD
+     *
+     * Descarga documentos de compras solo si pertenecen a una orden, factura o
+     * contrarecibo del proveedor autenticado.
+     *
+     * @access  public
+     * @return  Response
+     */
+    public function action_compras_document_download($document_id = 0)
+    {
+        try {
+            $party_id = (int) $this->portal_link->party_id;
+            $document = $this->purchase_document_by_id((int) $document_id, $party_id);
+            if (!$document) {
+                \Log::warning('Portal proveedores: intento de descarga no autorizada de documento de compra document_id='.(int) $document_id.' party_id='.$party_id.' user_id='.$this->user_id);
+                throw new \HttpNotFoundException;
+            }
+
+            $relative = str_replace('\\', '/', ltrim((string) \Arr::get($document, 'file_path', ''), '/'));
+            if ($relative === '' || strpos($relative, '..') !== false || preg_match('/^[a-z]+:/i', $relative)) {
+                \Log::warning('Portal proveedores: ruta invalida en documento de compra document_id='.(int) $document_id.' party_id='.$party_id);
+                throw new \HttpNotFoundException;
+            }
+
+            $absolute = DOCROOT.$relative;
+            if (!is_file($absolute) || !is_readable($absolute)) {
+                \Log::error('Portal proveedores: archivo de documento de compra no disponible document_id='.(int) $document_id.' path='.$relative);
+                throw new \HttpNotFoundException;
+            }
+
+            return $this->download_portal_document($document);
+        } catch (\HttpNotFoundException $e) {
+            throw $e;
+        } catch (\Exception $e) {
+            \Log::error('Error descargando documento de compras portal proveedores: '.$e->getMessage());
+            throw new \HttpNotFoundException;
+        }
+    }
+
     protected function purchase_payload($party_id, array $extra = [])
     {
         return $this->json_response(array_merge([
@@ -296,7 +336,7 @@ class Controller_Proveedores_Compras extends Controller_Proveedores_Base
 
         $documents = [];
         foreach ($parts as $part) {
-            $rows = \DB::select(['d.id', 'id'], ['l.entity_type', 'entity_type'], ['l.entity_id', 'entity_id'], ['l.relation_type', 'relation_type'], ['l.notes', 'link_notes'], ['d.document_type', 'document_type'], ['d.title', 'title'], ['d.description', 'description'], ['d.original_name', 'original_name'], ['d.file_path', 'file_path'], ['d.file_extension', 'file_extension'], ['d.file_size', 'file_size'], ['d.is_evidence', 'is_evidence'], ['d.created_at', 'created_at'])
+            $rows = \DB::select(['d.id', 'document_id'], ['l.entity_type', 'entity_type'], ['l.entity_id', 'entity_id'], ['l.relation_type', 'relation_type'], ['l.notes', 'link_notes'], ['d.document_type', 'document_type'], ['d.title', 'title'], ['d.description', 'description'], ['d.original_name', 'original_name'], ['d.mime_type', 'mime_type'], ['d.file_extension', 'file_extension'], ['d.file_size', 'file_size'], ['d.is_evidence', 'is_evidence'], ['d.created_at', 'created_at'])
                 ->from(['core_document_links', 'l'])
                 ->join(['core_documents', 'd'], 'inner')->on('d.id', '=', 'l.document_id')
                 ->where('l.entity_type', '=', $part[0])
@@ -307,9 +347,70 @@ class Controller_Proveedores_Compras extends Controller_Proveedores_Base
                 ->order_by('d.id', 'desc')
                 ->execute()
                 ->as_array();
-            $documents = array_merge($documents, $rows);
+
+            foreach ($rows as $row) {
+                $documents[] = [
+                    'document_id' => (int) $row['document_id'],
+                    'filename' => (string) $row['original_name'],
+                    'document_type' => (string) $row['document_type'],
+                    'mime_type' => (string) $row['mime_type'],
+                    'size' => (int) $row['file_size'],
+                    'status' => 'available',
+                    'download_url' => \Uri::create($this->portal_code.'/compras_document_download/'.(int) $row['document_id']),
+                    'entity_type' => (string) $row['entity_type'],
+                    'entity_id' => (int) $row['entity_id'],
+                    'relation_type' => (string) $row['relation_type'],
+                    'link_notes' => (string) $row['link_notes'],
+                    'title' => (string) $row['title'],
+                    'description' => (string) $row['description'],
+                    'original_name' => (string) $row['original_name'],
+                    'file_extension' => (string) $row['file_extension'],
+                    'file_size' => (int) $row['file_size'],
+                    'is_evidence' => (int) $row['is_evidence'],
+                    'created_at' => (int) $row['created_at'],
+                ];
+            }
         }
         return $documents;
+    }
+
+    protected function purchase_document_by_id($document_id, $party_id)
+    {
+        if ($document_id < 1 || !\DBUtil::table_exists('core_documents') || !\DBUtil::table_exists('core_document_links')) {
+            return null;
+        }
+
+        $entities = [
+            ['purchase_order', 'core_purchase_orders'],
+            ['purchase_invoice', 'core_purchase_invoices'],
+            ['purchase_receipt', 'core_purchase_receipts'],
+        ];
+
+        foreach ($entities as $entity) {
+            if (!\DBUtil::table_exists($entity[1])) {
+                continue;
+            }
+
+            $row = \DB::select(['d.id', 'id'], ['d.file_path', 'file_path'], ['d.original_name', 'original_name'], ['d.mime_type', 'mime_type'])
+                ->from(['core_document_links', 'l'])
+                ->join(['core_documents', 'd'], 'inner')->on('d.id', '=', 'l.document_id')
+                ->join([$entity[1], 'e'], 'inner')->on('e.id', '=', 'l.entity_id')
+                ->where('d.id', '=', (int) $document_id)
+                ->where('l.entity_type', '=', $entity[0])
+                ->where('e.party_id', '=', (int) $party_id)
+                ->where('e.active', '=', 1)
+                ->where('l.active', '=', 1)
+                ->where('d.active', '=', 1)
+                ->where('d.visibility', 'in', ['portal', 'public'])
+                ->execute()
+                ->current();
+
+            if ($row) {
+                return $row;
+            }
+        }
+
+        return null;
     }
 
     protected function portal_order($order_id, $party_id)

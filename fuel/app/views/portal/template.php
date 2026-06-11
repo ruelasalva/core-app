@@ -11,6 +11,14 @@
         :root {
             --portal-primary: <?php echo $branding ? e($branding->primary_color) : '#0d6efd'; ?>;
             --portal-secondary: <?php echo $branding ? e($branding->secondary_color) : '#343a40'; ?>;
+            --portal-accent: #0ea5e9;
+            --portal-soft: #eff6ff;
+        }
+        .portal--proveedores:not(.portal-branded) {
+            --portal-primary: #0f766e;
+            --portal-secondary: #334155;
+            --portal-accent: #f59e0b;
+            --portal-soft: #ecfdf5;
         }
         .portal-header { border-top: 4px solid var(--portal-primary); box-shadow: 0 6px 18px rgba(15, 23, 42, .06); }
         .portal-header .container { gap: .75rem; }
@@ -83,6 +91,13 @@
         .portal-table th { color: #475569; font-size: .78rem; text-transform: uppercase; letter-spacing: .03em; border-top: 0; }
         .portal-tabs .nav-link { border-radius: 999px; color: #475569; }
         .portal-tabs .nav-link.active { background: var(--portal-primary); color: #fff; border-color: var(--portal-primary); }
+        .portal--proveedores:not(.portal-branded) .portal-page-hero {
+            background: linear-gradient(135deg, rgba(15, 118, 110, .12), rgba(255, 251, 235, .88));
+        }
+        .portal--proveedores .portal-nav .nav-link.active {
+            background: rgba(15, 118, 110, .12);
+            color: var(--portal-primary);
+        }
         @media (max-width: 767.98px) {
             .portal-header .container { align-items: flex-start; }
             .portal-nav { order: 3; width: 100%; padding-bottom: .25rem; }
@@ -94,7 +109,7 @@
         <?php echo $branding ? $branding->custom_css : ''; ?>
     </style>
 </head>
-<body class="hold-transition layout-top-nav">
+<body class="hold-transition layout-top-nav portal--<?php echo e($portal_code); ?> <?php echo $branding ? 'portal-branded' : ''; ?>">
 <div class="wrapper">
     <nav class="main-header navbar navbar-expand-md navbar-light navbar-white portal-header">
         <div class="container">

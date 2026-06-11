@@ -8,7 +8,7 @@
 <style>
     .contracts-shell { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 16px; }
     .contract-row { cursor: pointer; }
-    .contract-row.active { background: rgba(13, 110, 253, .08); }
+    .contract-row.active { background: var(--portal-soft); }
     .contract-meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
     .contract-meta-item { border: 1px solid #e5e9f0; border-radius: 8px; padding: 10px; background: #fff; }
     .contract-meta-label { color: #6c757d; font-size: .78rem; text-transform: uppercase; letter-spacing: .03em; margin-bottom: 4px; }
@@ -28,22 +28,29 @@
 </style>
 
 <div id="app-supplier-contracts">
-    <div class="d-flex justify-content-between align-items-center flex-wrap mb-3">
-        <div>
-            <h1 class="h4 mb-1">Mis Contratos</h1>
-            <div class="text-muted">Consulta contratos autorizados para tu portal y sus documentos relacionados.</div>
+    <div class="portal-page-hero">
+        <div class="d-flex justify-content-between align-items-center flex-wrap">
+            <div>
+                <h1 class="h4 mb-1">Contratos de proveedor</h1>
+                <div class="text-muted">Consulta contratos autorizados, documentos relacionados y eventos visibles.</div>
+            </div>
+            <div class="portal-page-actions mt-3 mt-md-0">
+                <a class="btn btn-outline-secondary btn-sm" href="<?php echo Uri::create('proveedores'); ?>">
+                    <i class="bi bi-arrow-left mr-1"></i> Inicio
+                </a>
+                <button class="btn btn-primary btn-sm" @click="load" :disabled="loading">
+                    <span v-if="loading" class="spinner-border spinner-border-sm mr-1"></span>
+                    Actualizar
+                </button>
+            </div>
         </div>
-        <button class="btn btn-outline-primary btn-sm mt-2 mt-md-0" @click="load" :disabled="loading">
-            <span v-if="loading" class="spinner-border spinner-border-sm mr-1"></span>
-            Actualizar
-        </button>
     </div>
 
     <div v-if="error" class="alert alert-danger">{{ error }}</div>
 
     <div class="contracts-shell">
-        <div class="card">
-            <div class="card-header">
+        <div class="portal-panel">
+            <div class="portal-panel-header">
                 <div class="d-flex justify-content-between align-items-center flex-wrap">
                     <h2 class="h6 mb-0">Contratos visibles</h2>
                     <span class="badge badge-light">{{ contracts.length }} contrato(s)</span>
@@ -54,7 +61,7 @@
                     <div class="spinner-border text-primary"></div>
                 </div>
                 <div v-else class="table-responsive">
-                    <table class="table table-sm table-hover mb-0">
+                    <table class="table table-sm table-hover portal-table mb-0">
                         <thead>
                             <tr>
                                 <th>Numero</th>
@@ -82,7 +89,7 @@
                                 <td class="text-right">{{ money(contract.contract_value, contract.currency_code) }}</td>
                             </tr>
                             <tr v-if="contracts.length === 0">
-                                <td colspan="8" class="text-center text-muted py-4">No hay contratos visibles para tu portal.</td>
+                                <td colspan="8"><div class="portal-empty m-3">No hay contratos visibles para tu portal.</div></td>
                             </tr>
                         </tbody>
                     </table>
@@ -90,12 +97,12 @@
             </div>
         </div>
 
-        <div class="card">
-            <div class="card-header">
+        <div class="portal-panel">
+            <div class="portal-panel-header">
                 <h2 class="h6 mb-0">Detalle</h2>
             </div>
-            <div class="card-body">
-                <div v-if="!selected" class="text-muted">Selecciona un contrato para ver su detalle.</div>
+            <div class="portal-panel-body">
+                <div v-if="!selected" class="portal-empty">Selecciona un contrato para ver su detalle.</div>
                 <div v-else>
                     <div class="mb-3">
                         <div class="text-muted small">Contrato</div>
@@ -103,10 +110,10 @@
                         <div>{{ selected.title }}</div>
                     </div>
 
-                    <ul class="nav nav-tabs mb-3">
-                        <li class="nav-item"><a href="#" class="nav-link" :class="{active: tab === 'general'}" @click.prevent="tab = 'general'">General</a></li>
-                        <li class="nav-item"><a href="#" class="nav-link" :class="{active: tab === 'documents'}" @click.prevent="tab = 'documents'">Documentos</a></li>
-                        <li class="nav-item"><a href="#" class="nav-link" :class="{active: tab === 'events'}" @click.prevent="tab = 'events'">Eventos</a></li>
+                    <ul class="nav nav-pills portal-tabs mb-3">
+                        <li class="nav-item"><a href="#" class="nav-link" :class="{active: tab === 'general'}" @click.prevent="tab = 'general'"><i class="bi bi-info-circle mr-1"></i> General</a></li>
+                        <li class="nav-item"><a href="#" class="nav-link" :class="{active: tab === 'documents'}" @click.prevent="tab = 'documents'"><i class="bi bi-paperclip mr-1"></i> Documentos</a></li>
+                        <li class="nav-item"><a href="#" class="nav-link" :class="{active: tab === 'events'}" @click.prevent="tab = 'events'"><i class="bi bi-clock-history mr-1"></i> Eventos</a></li>
                     </ul>
 
                     <div v-show="tab === 'general'">
@@ -157,7 +164,7 @@
                     </div>
 
                     <div v-show="tab === 'documents'">
-                        <div v-if="selectedDocuments.length === 0" class="text-muted">Sin documentos disponibles.</div>
+                        <div v-if="selectedDocuments.length === 0" class="portal-empty">Sin documentos disponibles.</div>
                         <div v-for="document in selectedDocuments" :key="document.link_id" class="border rounded p-2 mb-2">
                             <div class="d-flex justify-content-between align-items-start">
                                 <div>
@@ -173,7 +180,7 @@
                     </div>
 
                     <div v-show="tab === 'events'">
-                        <div v-if="selectedEvents.length === 0" class="text-muted">Sin eventos visibles.</div>
+                        <div v-if="selectedEvents.length === 0" class="portal-empty">Sin eventos visibles.</div>
                         <div v-for="event in selectedEvents" :key="event.id" class="border-left pl-3 mb-3">
                             <div class="font-weight-bold">{{ event.event_label }}</div>
                             <div class="text-muted small">{{ event.created_at || '-' }}</div>

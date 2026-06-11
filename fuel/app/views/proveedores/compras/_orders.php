@@ -1,5 +1,5 @@
 <div v-show="!loading && tab === 'orders'">
-    <table class="table table-bordered table-hover">
+    <table class="table table-bordered table-hover portal-table">
         <thead>
             <tr>
                 <th>Folio</th>
@@ -22,7 +22,7 @@
                 </td>
             </tr>
             <tr v-if="orders.length === 0">
-                <td colspan="6" class="text-center text-muted">Sin ordenes asignadas.</td>
+                <td colspan="6"><div class="portal-empty">Sin órdenes asignadas para este proveedor.</div></td>
             </tr>
         </tbody>
     </table>
