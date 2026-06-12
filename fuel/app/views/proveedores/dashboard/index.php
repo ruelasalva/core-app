@@ -1,3 +1,36 @@
+<style>
+    .supplier-flow-steps {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+        gap: .65rem;
+    }
+    .supplier-flow-steps span {
+        border: 1px solid #dbe7e4;
+        border-radius: 999px;
+        background: #f8fffc;
+        color: #334155;
+        padding: .55rem .75rem;
+        font-size: .86rem;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: .45rem;
+        min-height: 42px;
+    }
+    .supplier-flow-steps strong {
+        width: 24px;
+        height: 24px;
+        border-radius: 999px;
+        background: var(--portal-primary);
+        color: #fff;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: .78rem;
+        flex: 0 0 auto;
+    }
+</style>
+
 <div class="portal-page-hero">
     <div class="d-flex justify-content-between align-items-center flex-wrap">
         <div>
@@ -17,6 +50,23 @@
             <a href="<?php echo Uri::create('proveedores/helpdesk'); ?>" class="btn btn-outline-warning btn-sm">
                 <i class="bi bi-life-preserver mr-1"></i> Abrir ticket
             </a>
+        </div>
+    </div>
+</div>
+
+<div class="portal-panel">
+    <div class="portal-panel-header">
+        <h2 class="h6 mb-0">Flujo operativo</h2>
+    </div>
+    <div class="portal-panel-body">
+        <p class="text-muted mb-3">Revisa tu orden de compra, registra tu factura y adjunta XML/PDF o evidencias. Compras validará la información y, si procede, emitirá contrarecibo y programación de pago.</p>
+        <div class="supplier-flow-steps">
+            <span><strong>1</strong> Orden de compra</span>
+            <span><strong>2</strong> Factura</span>
+            <span><strong>3</strong> Evidencia</span>
+            <span><strong>4</strong> Revisión</span>
+            <span><strong>5</strong> Contrarecibo</span>
+            <span><strong>6</strong> Pago</span>
         </div>
     </div>
 </div>

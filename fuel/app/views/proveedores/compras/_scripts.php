@@ -16,6 +16,34 @@ window.addEventListener('load', function() {
             invoiceForm: {},
             evidenceForm: {}
         },
+        computed: {
+            openOrders: function() {
+                return this.orders.filter(function(order) {
+                    return ['authorized', 'partial', 'pending', 'in_review'].indexOf(String(order.status || '')) >= 0;
+                }).length;
+            },
+            pendingInvoices: function() {
+                return this.invoices.filter(function(invoice) {
+                    return ['pending', 'submitted', 'in_review', ''].indexOf(String(invoice.validation_status || '')) >= 0;
+                }).length;
+            },
+            validatedInvoices: function() {
+                return this.invoices.filter(function(invoice) {
+                    return String(invoice.validation_status || '') === 'validated';
+                }).length;
+            },
+            issuedReceipts: function() {
+                return this.receipts.length;
+            },
+            scheduledReceipts: function() {
+                return this.receipts.filter(function(receipt) {
+                    return String(receipt.scheduled_payment_date || '').trim() !== '';
+                }).length;
+            },
+            evidenceCount: function() {
+                return this.documents.length;
+            }
+        },
         mounted: function() {
             this.load();
         },
@@ -64,6 +92,20 @@ window.addEventListener('load', function() {
                 };
                 this.showModal('modal-portal-invoice');
             },
+            newInvoiceForOrder: function(order) {
+                this.invoiceForm = {
+                    order_id: order && order.id ? order.id : 0,
+                    uuid: '',
+                    invoice_date: this.today(),
+                    subtotal: 0,
+                    tax_total: 0,
+                    retention_total: 0,
+                    total: order && order.balance_total ? Number(order.balance_total) : 0,
+                    message: ''
+                };
+                this.hideModal('modal-portal-order');
+                this.showModal('modal-portal-invoice');
+            },
             openInvoice: function(invoice) {
                 this.invoiceForm = JSON.parse(JSON.stringify(invoice));
                 this.showModal('modal-portal-invoice');
@@ -89,7 +131,7 @@ window.addEventListener('load', function() {
                     entity_type: entity,
                     entity_id: id,
                     entity_label: this.entityLabel(entity) + ' ' + (label || ('#' + id)),
-                    document_type: entity === 'purchase_invoice' ? 'purchase_invoice' : 'other_evidence',
+                    document_type: entity === 'purchase_invoice' ? 'purchase_invoice' : (entity === 'purchase_order' ? 'delivery_evidence' : 'payment_evidence'),
                     title: '',
                     description: ''
                 };
@@ -135,7 +177,7 @@ window.addEventListener('load', function() {
                 return Number(v || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
             },
             statusLabel: function(s) {
-                return ({draft:'Borrador',authorized:'Autorizada',partial:'Parcial',closed:'Cerrada',cancelled:'Cancelada',submitted:'Recibida',pending:'Pendiente',validated:'Validada',rejected:'Rechazada',in_review:'En revision',in_receipt:'En contrarecibo',paid:'Pagada'})[s] || s;
+                return ({draft:'Borrador',authorized:'Autorizada',partial:'Parcial',closed:'Cerrada',cancelled:'Cancelada',submitted:'Recibida',pending:'Pendiente',validated:'Validada',rejected:'Rechazada',in_review:'En revisión',in_receipt:'En contrarecibo',paid:'Pagada'})[s] || s;
             },
             statusClass: function(s) {
                 if (['validated', 'authorized', 'paid', 'closed'].indexOf(s) >= 0) return 'badge-success';
@@ -144,10 +186,34 @@ window.addEventListener('load', function() {
                 return 'badge-info';
             },
             entityLabel: function(e) {
-                return ({purchase_order:'Orden',purchase_invoice:'Factura',purchase_receipt:'Contrarecibo'})[e] || e;
+                return ({purchase_order:'OC',purchase_invoice:'Factura',purchase_receipt:'Contrarecibo'})[e] || e;
             },
             documentTypeLabel: function(e) {
                 return ({purchase_invoice:'Factura',delivery_evidence:'Entrega',payment_evidence:'Pago',tax_document:'Fiscal',other_evidence:'Evidencia'})[e] || e;
+            },
+            relationLabel: function(e) {
+                return ({attachment:'Adjunto',evidence:'Evidencia',invoice_file:'XML/PDF factura',xml_file:'XML',delivery_proof:'Entrega / remisión',payment_proof:'Comprobante de pago'})[e] || e || '-';
+            },
+            validationLabel: function(s) {
+                return ({pending:'Pendiente',submitted:'Recibida',in_review:'En revisión',validated:'Validada',rejected:'Rechazada',in_receipt:'En contrarecibo',paid:'Pagada'})[s] || this.statusLabel(s);
+            },
+            validationHelp: function(s) {
+                return ({
+                    pending: 'Compras revisará XML/PDF y datos fiscales.',
+                    submitted: 'Factura recibida para revisión.',
+                    in_review: 'Compras está validando la documentación.',
+                    validated: 'Factura validada para contrarecibo si aplica.',
+                    rejected: 'Revisa el motivo y adjunta corrección.',
+                    in_receipt: 'Factura relacionada a contrarecibo.',
+                    paid: 'Factura pagada.'
+                })[s] || 'Estado recibido desde compras.';
+            },
+            evidenceTitle: function() {
+                return ({
+                    purchase_order: 'Adjuntar evidencia a OC',
+                    purchase_invoice: 'Adjuntar XML/PDF a factura',
+                    purchase_receipt: 'Adjuntar evidencia a contrarecibo'
+                })[this.evidenceForm.entity_type] || 'Adjuntar evidencia';
             },
             relationForDocument: function(e) {
                 return ({purchase_invoice:'invoice_file',delivery_evidence:'delivery_proof',payment_evidence:'payment_proof',tax_document:'evidence',other_evidence:'evidence'})[e] || 'evidence';

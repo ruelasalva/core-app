@@ -7,6 +7,7 @@
             </div>
             <div class="modal-body">
                 <p><strong>Estado:</strong> <span class="badge" :class="statusClass(selectedOrder.status)">{{ statusLabel(selectedOrder.status) }}</span></p>
+                <p class="text-muted">Revisa las partidas autorizadas antes de facturar. Puedes registrar la factura contra esta OC o adjuntar remisión/evidencia de entrega.</p>
                 <table class="table table-sm table-bordered">
                     <thead>
                         <tr><th>Concepto</th><th>Cantidad</th><th>Precio</th><th>Total</th></tr>
@@ -20,7 +21,10 @@
                         </tr>
                     </tbody>
                 </table>
-                <button class="btn btn-outline-primary btn-sm mt-2" @click="openEvidence('purchase_order', selectedOrder.id, selectedOrder.folio)">Adjuntar evidencia</button>
+                <div class="supplier-row-actions mt-2">
+                    <button class="btn btn-primary btn-sm" @click="newInvoiceForOrder(selectedOrder)">Facturar esta OC</button>
+                    <button class="btn btn-outline-primary btn-sm" @click="openEvidence('purchase_order', selectedOrder.id, selectedOrder.folio)">Adjuntar evidencia</button>
+                </div>
             </div>
         </div>
     </div>
@@ -30,10 +34,13 @@
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header bg-primary text-white">
-                <h5 class="modal-title">{{ invoiceForm.id ? 'Adjuntar factura' : 'Nueva factura' }}</h5>
+                <h5 class="modal-title">{{ invoiceForm.id ? 'Adjuntar XML/PDF a factura' : 'Nueva factura para revisión' }}</h5>
                 <button class="close text-white" @click="hideModal('modal-portal-invoice')"><span>&times;</span></button>
             </div>
             <div class="modal-body">
+                <div v-if="!invoiceForm.id" class="alert alert-light border">
+                    Captura los datos fiscales de la factura. Después de guardar, adjunta XML/PDF o evidencias para que compras valide la información.
+                </div>
                 <div v-if="!invoiceForm.id" class="row">
                     <div class="col-md-6">
                         <label>Orden</label>
@@ -41,17 +48,18 @@
                             <option value="0">Sin orden</option>
                             <option v-for="o in orders" :value="o.id">{{ o.folio }}</option>
                         </select>
+                        <small class="text-muted">Si existe OC, selecciónala para facilitar revisión.</small>
                     </div>
-                    <div class="col-md-6"><label>UUID</label><input class="form-control" v-model="invoiceForm.uuid"></div>
+                    <div class="col-md-6"><label>UUID</label><input class="form-control" v-model="invoiceForm.uuid" placeholder="UUID del CFDI"></div>
                     <div class="col-md-4"><label>Fecha</label><input type="date" class="form-control" v-model="invoiceForm.invoice_date"></div>
                     <div class="col-md-4"><label>Subtotal</label><input type="number" step="0.01" class="form-control" v-model.number="invoiceForm.subtotal"></div>
                     <div class="col-md-4"><label>IVA</label><input type="number" step="0.01" class="form-control" v-model.number="invoiceForm.tax_total"></div>
-                    <div class="col-md-4"><label>Retencion</label><input type="number" step="0.01" class="form-control" v-model.number="invoiceForm.retention_total"></div>
+                    <div class="col-md-4"><label>Retención</label><input type="number" step="0.01" class="form-control" v-model.number="invoiceForm.retention_total"></div>
                     <div class="col-md-4"><label>Total</label><input type="number" step="0.01" class="form-control" v-model.number="invoiceForm.total"></div>
-                    <div class="col-md-12"><label>Mensaje</label><textarea class="form-control" rows="2" v-model="invoiceForm.message"></textarea></div>
+                    <div class="col-md-12"><label>Mensaje</label><textarea class="form-control" rows="2" v-model="invoiceForm.message" placeholder="Comentario para el área de compras"></textarea></div>
                 </div>
                 <div v-if="invoiceForm.id" class="alert alert-light border mt-3">
-                    Adjunta PDF, XML, acuse o evidencia relacionada a esta factura.
+                    Adjunta PDF, XML, acuse o evidencia relacionada a esta factura. Si la factura fue rechazada, adjunta la corrección solicitada.
                 </div>
             </div>
             <div class="modal-footer">
@@ -67,7 +75,7 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header bg-primary text-white">
-                <h5 class="modal-title">Adjuntar evidencia</h5>
+                <h5 class="modal-title">{{ evidenceTitle() }}</h5>
                 <button class="close text-white" @click="hideModal('modal-portal-evidence')"><span>&times;</span></button>
             </div>
             <div class="modal-body">
@@ -78,24 +86,24 @@
                     <label>Tipo de evidencia</label>
                     <select class="form-control" v-model="evidenceForm.document_type">
                         <option value="purchase_invoice">Factura PDF/XML</option>
-                        <option value="delivery_evidence">Entrega / remision</option>
+                        <option value="delivery_evidence">Entrega / remisión</option>
                         <option value="payment_evidence">Pago / complemento</option>
                         <option value="tax_document">Documento fiscal</option>
                         <option value="other_evidence">Otra evidencia</option>
                     </select>
                 </div>
                 <div class="form-group">
-                    <label>Titulo</label>
-                    <input class="form-control" v-model="evidenceForm.title" placeholder="Ej. XML factura, remision firmada">
+                    <label>Título</label>
+                    <input class="form-control" v-model="evidenceForm.title" placeholder="Ej. XML factura, remisión firmada">
                 </div>
                 <div class="form-group">
-                    <label>Descripcion</label>
+                    <label>Descripción</label>
                     <textarea class="form-control" rows="2" v-model="evidenceForm.description"></textarea>
                 </div>
                 <div class="form-group">
                     <label>Archivo</label>
                     <input type="file" class="form-control-file" @change="selectedFile = $event.target.files[0]">
-                    <small class="text-muted">PDF, XML, imagen, Office, CSV o TXT. Maximo 15 MB.</small>
+                    <small class="text-muted">PDF, XML, imagen, Office, CSV o TXT. Máximo 15 MB.</small>
                 </div>
             </div>
             <div class="modal-footer">
