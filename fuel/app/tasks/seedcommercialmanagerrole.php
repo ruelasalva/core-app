@@ -121,7 +121,7 @@ class Seedcommercialmanagerrole
                 'area' => $area,
                 'permission' => 'access',
                 'description' => $definition['description'],
-                'actions' => serialize($definition['actions']),
+                'actions' => serialize($this->auth_permission_actions($definition['actions'])),
                 'user_id' => 0,
                 'created_at' => time(),
                 'updated_at' => time(),
@@ -141,7 +141,7 @@ class Seedcommercialmanagerrole
                 'area' => 'crm',
                 'permission' => 'access',
                 'description' => 'Acceso al modulo CRM comercial',
-                'actions' => serialize($required),
+                'actions' => serialize($this->auth_permission_actions($required)),
                 'user_id' => 0,
                 'created_at' => time(),
                 'updated_at' => time(),
@@ -164,7 +164,7 @@ class Seedcommercialmanagerrole
 
         \DB::update('users_permissions')
             ->set([
-                'actions' => serialize($merged),
+                'actions' => serialize($this->auth_permission_actions($merged)),
                 'updated_at' => time(),
             ])
             ->where('id', '=', (int) $permission['id'])
@@ -218,6 +218,19 @@ class Seedcommercialmanagerrole
     {
         $actions = !empty($row['actions']) ? @unserialize($row['actions']) : [];
         return is_array($actions) ? array_values($actions) : [];
+    }
+
+    protected function auth_permission_actions(array $actions)
+    {
+        $map = [];
+        foreach ($actions as $action) {
+            $action = trim((string) $action);
+            if ($action !== '') {
+                $map[$action] = $action;
+            }
+        }
+
+        return $map;
     }
 
     protected function print_summary()

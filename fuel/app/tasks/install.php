@@ -55,7 +55,7 @@ class Install
             }
 
             // 3. PERMISOS (ORM)
-            $actions = ['view', 'create', 'edit', 'delete', 'import', 'export'];
+            $actions = $this->auth_permission_actions(['view', 'create', 'edit', 'delete', 'import', 'export']);
             $core_permissions = [
                 'admin_dashboard' => 'Panel de control principal',
                 'user'            => 'Gestion de usuarios',
@@ -106,5 +106,18 @@ class Install
             echo "\n [ERROR] " . $e->getMessage() . "\n";
             \Log::error("Fallo en instalación: " . $e->getMessage());
         }
+    }
+
+    protected function auth_permission_actions(array $actions)
+    {
+        $map = [];
+        foreach ($actions as $action) {
+            $action = trim((string) $action);
+            if ($action !== '') {
+                $map[$action] = $action;
+            }
+        }
+
+        return $map;
     }
 }

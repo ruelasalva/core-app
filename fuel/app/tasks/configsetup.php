@@ -3154,7 +3154,7 @@ class Configsetup
 
     protected function sync_permissions()
     {
-        $actions = ['view', 'create', 'edit', 'delete', 'import', 'export', 'authorize'];
+        $actions = $this->auth_permission_actions(['view', 'create', 'edit', 'delete', 'import', 'export', 'authorize']);
         $permissions = [
             'admin_dashboard' => 'Panel de control principal',
             'user' => 'Gestion de usuarios',
@@ -3417,6 +3417,19 @@ class Configsetup
                 }
             }
         }
+    }
+
+    protected function auth_permission_actions(array $actions)
+    {
+        $map = [];
+        foreach ($actions as $action) {
+            $action = trim((string) $action);
+            if ($action !== '') {
+                $map[$action] = $action;
+            }
+        }
+
+        return $map;
     }
 
     /**

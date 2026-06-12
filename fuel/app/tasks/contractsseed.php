@@ -112,7 +112,7 @@ class Contractsseed
                 'area' => 'contracts',
                 'permission' => 'access',
                 'description' => 'Gestión de contratos',
-                'actions' => serialize($this->permission_actions),
+                'actions' => serialize($this->auth_permission_actions($this->permission_actions)),
                 'user_id' => 0,
                 'created_at' => time(),
                 'updated_at' => time(),
@@ -136,7 +136,7 @@ class Contractsseed
         \DB::update('users_permissions')
             ->set([
                 'description' => 'Gestión de contratos',
-                'actions' => serialize($merged),
+                'actions' => serialize($this->auth_permission_actions($merged)),
                 'updated_at' => time(),
             ])
             ->where('id', '=', (int) $row['id'])
@@ -159,6 +159,19 @@ class Contractsseed
     {
         $actions = !empty($row['actions']) ? @unserialize($row['actions']) : [];
         return is_array($actions) ? array_values($actions) : [];
+    }
+
+    protected function auth_permission_actions(array $actions)
+    {
+        $map = [];
+        foreach ($actions as $action) {
+            $action = trim((string) $action);
+            if ($action !== '') {
+                $map[$action] = $action;
+            }
+        }
+
+        return $map;
     }
 
     protected function print_summary()

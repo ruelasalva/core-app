@@ -94,7 +94,7 @@ class Seedcriticalpermissions
                     'area' => $area,
                     'permission' => 'access',
                     'description' => $definition['description'],
-                    'actions' => serialize($definition['actions']),
+                    'actions' => serialize($this->auth_permission_actions($definition['actions'])),
                     'user_id' => 0,
                     'created_at' => time(),
                     'updated_at' => time(),
@@ -120,7 +120,7 @@ class Seedcriticalpermissions
             \DB::update('users_permissions')
                 ->set([
                     'description' => $definition['description'],
-                    'actions' => serialize($merged),
+                    'actions' => serialize($this->auth_permission_actions($merged)),
                     'updated_at' => time(),
                 ])
                 ->where('id', '=', (int) $row['id'])
@@ -177,6 +177,27 @@ class Seedcriticalpermissions
         $merged = array_values(array_unique(array_merge($current, $required)));
         sort($merged);
         return $merged;
+    }
+
+    /**
+     * AUTH PERMISSION ACTIONS
+     *
+     * ORMAuth cruza acciones por llave; users_permissions.actions debe ser mapa.
+     *
+     * @param array $actions
+     * @return array
+     */
+    protected function auth_permission_actions(array $actions)
+    {
+        $map = [];
+        foreach ($actions as $action) {
+            $action = trim((string) $action);
+            if ($action !== '') {
+                $map[$action] = $action;
+            }
+        }
+
+        return $map;
     }
 
     /**
