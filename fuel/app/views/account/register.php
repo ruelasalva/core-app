@@ -15,6 +15,7 @@
     .account-benefits { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; margin: 18px 0 22px; }
     .account-benefit { border: 1px solid #dde3ea; border-radius: 8px; background: #f8fafc; padding: 10px 12px; color: #172033; font-size: .92rem; font-weight: 800; }
     .account-benefit i { color: var(--core-brand); margin-right: 6px; }
+    .account-note { border: 1px solid #bfdbfe; border-radius: 8px; background: #eff6ff; color: #1e3a8a; padding: 11px 12px; margin: -4px 0 18px; font-size: .94rem; }
     @media (max-width: 640px) { .account-grid { grid-template-columns: 1fr; } }
     @media (max-width: 640px) { .account-benefits { grid-template-columns: 1fr; } .account-actions { align-items: stretch; flex-direction: column; } .account-btn, .account-link { width: 100%; text-align: center; } }
 </style>
@@ -23,7 +24,7 @@
     <div class="account-shell">
         <div class="account-panel">
             <h1>Crear cuenta</h1>
-            <p>Regístrate para obtener beneficios empresariales y consultar los precios asignados a tu empresa.</p>
+            <p>Crea tu cuenta empresarial para acceder a precios asignados, historial de cotizaciones, pedidos, estado de cuenta y CFDI.</p>
             <div class="account-benefits" data-track-impression="register_start">
                 <div class="account-benefit"><i class="bi bi-tags"></i> Consulta precios asignados</div>
                 <div class="account-benefit"><i class="bi bi-file-earmark-arrow-down"></i> Descarga CFDI</div>
@@ -32,6 +33,7 @@
                 <div class="account-benefit"><i class="bi bi-truck"></i> Seguimiento de pedidos</div>
                 <div class="account-benefit"><i class="bi bi-headset"></i> Atención empresarial</div>
             </div>
+            <div class="account-note">RFC y datos fiscales se completan después desde tu portal.</div>
 
             <?php if (!empty($error)): ?>
             <div class="account-alert"><?php echo e($error); ?></div>

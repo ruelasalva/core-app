@@ -13,6 +13,12 @@
     .account-alert { border-radius: 6px; padding: 11px 12px; margin-bottom: 16px; }
     .account-alert.error { background: #fee2e2; color: #991b1b; }
     .account-alert.success { background: #dcfce7; color: #166534; }
+    .account-benefits { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; margin: 18px 0 22px; }
+    .account-benefit { border: 1px solid #dde3ea; border-radius: 8px; background: #f8fafc; padding: 10px 12px; color: #172033; font-size: .92rem; font-weight: 800; }
+    .account-benefit i { color: var(--core-brand); margin-right: 6px; }
+    .account-register-callout { border-top: 1px solid #dde3ea; margin-top: 20px; padding-top: 18px; color: #475569; }
+    .account-register-callout strong { display: block; color: #172033; margin-bottom: 4px; }
+    @media (max-width: 640px) { .account-benefits { grid-template-columns: 1fr; } .account-actions { align-items: stretch; flex-direction: column; } .account-btn, .account-link { width: 100%; text-align: center; } }
 </style>
 
 <section class="account-band">
@@ -20,6 +26,12 @@
         <div class="account-panel">
             <h1>Acceso clientes</h1>
             <p>Ingresa para consultar precios y preparar tus compras.</p>
+            <div class="account-benefits">
+                <div class="account-benefit"><i class="bi bi-tags"></i> Precios asignados</div>
+                <div class="account-benefit"><i class="bi bi-file-earmark-arrow-down"></i> CFDI</div>
+                <div class="account-benefit"><i class="bi bi-wallet2"></i> Estado de cuenta</div>
+                <div class="account-benefit"><i class="bi bi-truck"></i> Seguimiento de pedidos</div>
+            </div>
 
             <?php if (!empty($error)): ?>
             <div class="account-alert error"><?php echo e($error); ?></div>
@@ -43,6 +55,10 @@
                     <a class="account-link" href="<?php echo Uri::create('registro'); ?>">Crear cuenta</a>
                 </div>
             <?php echo Form::close(); ?>
+            <div class="account-register-callout">
+                <strong>¿Aún no tienes cuenta empresarial?</strong>
+                Regístrate para consultar precios asignados, CFDI, estado de cuenta y seguimiento de pedidos.
+            </div>
         </div>
     </div>
 </section>

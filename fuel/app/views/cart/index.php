@@ -64,7 +64,7 @@ $cart_whatsapp_url = class_exists('Helper_Core_Web') && !empty($whatsapp_items)
     <div class="cart-shell">
         <div class="cart-title">
             <h1>Carrito</h1>
-            <p>Revisa tus productos. Puedes solicitar cotización, enviar por WhatsApp o continuar con las formas de pago disponibles.</p>
+            <p>Tu carrito se enviará como solicitud. Un asesor confirmará precio, disponibilidad y forma de pago.</p>
         </div>
 
         <?php if (!empty($success)): ?>
@@ -132,7 +132,7 @@ $cart_whatsapp_url = class_exists('Helper_Core_Web') && !empty($whatsapp_items)
                     <p>Envía tus productos a un asesor para confirmar precio, disponibilidad o condiciones especiales.</p>
                 </div>
                 <div class="cart-flow-note">
-                    Por el momento finalizaremos tu carrito como solicitud de cotización. Un asesor confirmará precio, disponibilidad y forma de pago.
+                    Tu carrito se enviará como solicitud. Un asesor confirmará precio, disponibilidad y forma de pago.
                 </div>
                 <div class="cart-notes">
                     <label>Notas para cotización</label>

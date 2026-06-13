@@ -33,7 +33,7 @@ $contact_quote_url = Uri::create('pagina/contacto', array(), array(
 ));
 $primary_inquiry_url = $inquiry_url;
 $primary_inquiry_target = $inquiry_target;
-$primary_inquiry_label = $whatsapp_configured ? 'Consultar por WhatsApp' : 'Solicitar cotización';
+$primary_inquiry_label = $whatsapp_configured ? 'Cotizar por WhatsApp' : 'Solicitar cotización';
 
 if ($whatsapp_configured && class_exists('Helper_Core_Web')) {
     $whatsapp_product_url = Helper_Core_Web::whatsapp_url('product', array(
@@ -357,7 +357,7 @@ $trust_badges = !empty($conversion_settings['trust_badges']) && is_array($conver
             <p>Te ayudamos a validar modelo, impresora, consumible correcto o alternativa compatible antes de cotizar.</p>
             <div class="product-compatibility-actions">
                 <?php if (!empty($product['inquiry_enabled'])): ?>
-                <a class="product-inquiry-link product-inquiry-link--primary" data-track-event="whatsapp_product" href="<?php echo e($primary_inquiry_url); ?>" target="<?php echo e($primary_inquiry_target); ?>" rel="noopener noreferrer"><i class="<?php echo $whatsapp_configured ? 'bi bi-whatsapp' : 'bi bi-chat-dots'; ?>"></i> <?php echo e($whatsapp_configured ? 'WhatsApp' : 'Contacto'); ?></a>
+                <a class="product-inquiry-link product-inquiry-link--primary" data-track-event="quote_click whatsapp_product" href="<?php echo e($primary_inquiry_url); ?>" target="<?php echo e($primary_inquiry_target); ?>" rel="noopener noreferrer"><i class="<?php echo $whatsapp_configured ? 'bi bi-whatsapp' : 'bi bi-chat-dots'; ?>"></i> <?php echo e($whatsapp_configured ? 'Cotizar por WhatsApp' : 'Solicitar cotización'); ?></a>
                 <?php endif; ?>
                 <a class="product-secondary-link" href="<?php echo Uri::create('productos'); ?>">Ver catálogo</a>
             </div>
@@ -415,9 +415,9 @@ $trust_badges = !empty($conversion_settings['trust_badges']) && is_array($conver
                         <?php echo Form::hidden('quantity', 1); ?>
                         <button class="product-inquiry-link product-inquiry-link--primary" type="submit">Agregar al carrito</button>
                     <?php echo Form::close(); ?>
-                    <a class="product-inquiry-link" data-track-event="quote_click whatsapp_product" href="<?php echo e(\Arr::get($related, 'inquiry_url', Uri::create('pagina/contacto', array(), array('producto' => \Arr::get($related, 'name', ''), 'sku' => \Arr::get($related, 'sku', ''))))); ?>" target="<?php echo e(\Arr::get($related, 'inquiry_target', '_self')); ?>" rel="noopener noreferrer">Cotizar</a>
+                    <a class="product-inquiry-link" data-track-event="quote_click whatsapp_product" href="<?php echo e(\Arr::get($related, 'inquiry_url', Uri::create('pagina/contacto', array(), array('producto' => \Arr::get($related, 'name', ''), 'sku' => \Arr::get($related, 'sku', ''))))); ?>" target="<?php echo e(\Arr::get($related, 'inquiry_target', '_self')); ?>" rel="noopener noreferrer">Cotizar por WhatsApp</a>
                     <?php else: ?>
-                    <a class="product-inquiry-link product-inquiry-link--primary" data-track-event="quote_click whatsapp_product" href="<?php echo e(\Arr::get($related, 'inquiry_url', Uri::create('pagina/contacto', array(), array('producto' => \Arr::get($related, 'name', ''), 'sku' => \Arr::get($related, 'sku', ''))))); ?>" target="<?php echo e(\Arr::get($related, 'inquiry_target', '_self')); ?>" rel="noopener noreferrer">Cotizar</a>
+                    <a class="product-inquiry-link product-inquiry-link--primary" data-track-event="quote_click whatsapp_product" href="<?php echo e(\Arr::get($related, 'inquiry_url', Uri::create('pagina/contacto', array(), array('producto' => \Arr::get($related, 'name', ''), 'sku' => \Arr::get($related, 'sku', ''))))); ?>" target="<?php echo e(\Arr::get($related, 'inquiry_target', '_self')); ?>" rel="noopener noreferrer">Cotizar por WhatsApp</a>
                     <?php endif; ?>
                     <a class="card-action secondary" href="<?php echo e(Uri::create('producto/'.$related['slug'])); ?>">Ver producto</a>
                 </div>

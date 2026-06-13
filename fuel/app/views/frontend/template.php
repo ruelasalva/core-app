@@ -536,11 +536,13 @@
                 </a>
                 <?php $header_search('header-product-search--desktop', 'header-product-search-q'); ?>
                 <div class="account-menu ecommerce-actions">
-                    <a class="site-cta primary" href="<?php echo Uri::create('pagina/contacto'); ?>"><i class="bi bi-chat-dots"></i> Solicitar información</a>
+                    <a class="site-cta primary" href="<?php echo Uri::create('pagina/contacto'); ?>"><i class="bi bi-chat-dots"></i> Cotizar con asesor</a>
                     <?php if (!empty($frontend_user['logged_in'])): ?>
                     <a class="account-link" href="<?php echo Uri::create('mi-cuenta'); ?>"><i class="fas fa-user-circle"></i><span>Mi cuenta</span></a>
+                    <a class="account-link account-link-logout" href="<?php echo Uri::create('salir-cuenta'); ?>"><i class="fas fa-sign-out-alt"></i><span>Salir</span></a>
                     <?php else: ?>
                     <a class="account-link" href="<?php echo Uri::create('acceso'); ?>"><i class="fas fa-sign-in-alt"></i><span>Entrar</span></a>
+                    <a class="account-link" href="<?php echo Uri::create('registro'); ?>"><i class="fas fa-user-plus"></i><span>Registrarse</span></a>
                     <?php endif; ?>
                     <a class="cart-link ecommerce-cart-link" data-cart-link href="<?php echo Uri::create('carrito'); ?>" aria-label="Ver carrito">
                         <span class="cart-icon-wrap">
@@ -652,6 +654,12 @@
         <a class="mobile-sticky-cta-item" href="<?php echo Uri::create('productos'); ?>"><i class="bi bi-grid"></i><span><?php echo e(\Arr::get($mobile_cta, 'catalog_label', 'Catálogo')); ?></span></a>
         <?php endif; ?>
         <a class="mobile-sticky-cta-item cart" data-mobile-cart-link href="<?php echo Uri::create('carrito'); ?>"><i class="fas fa-shopping-cart"></i><span>Carrito<?php echo $cart_count > 0 ? ' ('.$cart_count.')' : ''; ?></span></a>
+        <?php if (!empty($frontend_user['logged_in'])): ?>
+        <a class="mobile-sticky-cta-item account" href="<?php echo Uri::create('salir-cuenta'); ?>"><i class="fas fa-sign-out-alt"></i><span>Salir</span></a>
+        <?php else: ?>
+        <a class="mobile-sticky-cta-item account" href="<?php echo Uri::create('acceso'); ?>"><i class="fas fa-sign-in-alt"></i><span>Entrar</span></a>
+        <a class="mobile-sticky-cta-item account" href="<?php echo Uri::create('registro'); ?>"><i class="fas fa-user-plus"></i><span>Registro</span></a>
+        <?php endif; ?>
         <?php if (!empty($mobile_cta['show_contact'])): ?>
         <a class="mobile-sticky-cta-item" href="<?php echo Uri::create('pagina/contacto'); ?>"><i class="bi bi-chat-dots"></i><span><?php echo e(\Arr::get($mobile_cta, 'contact_label', 'Contacto')); ?></span></a>
         <?php endif; ?>
@@ -801,7 +809,7 @@
                             return;
                         }
                         updateCartCount(data.cart_count);
-                        showToast(data.message || 'Producto agregado al carrito.', 'success', '<?php echo Uri::create('carrito'); ?>', 'Ver carrito');
+                        showToast(data.message || 'Producto agregado. Puedes seguir comprando, ver carrito o enviar por WhatsApp.', 'success', '<?php echo Uri::create('carrito'); ?>', 'Ver carrito');
                         if (button) {
                             button.classList.add('is-added');
                             setTimeout(function() { button.classList.remove('is-added'); }, 400);

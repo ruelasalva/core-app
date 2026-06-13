@@ -273,6 +273,18 @@ class Helper_Core_Cart
             throw new \InvalidArgumentException('El carrito esta vacio.');
         }
 
+        $user_id = self::current_user_id();
+        $seller_id = self::resolve_frontend_seller_id($party, $user_id);
+        if ($seller_id < 1) {
+            \Log::warning('Carrito frontend sin vendedor configurado '.json_encode([
+                'party_id' => (int) $party->id,
+                'user_id' => (int) $user_id,
+                'event' => 'frontend_cart_quote_missing_seller',
+                'timestamp' => time(),
+            ]));
+            throw new \RuntimeException('No hay vendedor configurado para recibir cotizaciones. Contacta al administrador.');
+        }
+
         # SE CREA ENCABEZADO DE COTIZACION
         $quote = Model_Core_Sales_Quote::forge([
             'folio' => self::next_quote_folio(),
@@ -281,8 +293,9 @@ class Helper_Core_Cart
             'synced_from_offline' => 0,
             'offline_synced_at' => 0,
             'cart_id' => (int) $cart->id,
-            'user_id' => self::current_user_id(),
+            'user_id' => $user_id,
             'party_id' => (int) $party->id,
+            'seller_id' => $seller_id,
             'status' => 'requested',
             'currency_code' => (string) $cart->currency_code,
             'subtotal' => (float) $cart->subtotal,
@@ -530,6 +543,228 @@ class Helper_Core_Cart
 
         $user_id_data = \Auth::get_user_id();
         return isset($user_id_data[1]) ? (int) $user_id_data[1] : 0;
+    }
+
+    /**
+     * RESOLVE FRONTEND SELLER ID
+     *
+     * RESUELVE EL VENDEDOR RESPONSABLE PARA COTIZACIONES DEL FRONTEND.
+     *
+     * @access  protected
+     * @return  Int
+     */
+    protected static function resolve_frontend_seller_id(Model_Core_Party $party = null, $user_id = 0)
+    {
+        if (!\DBUtil::table_exists('core_sales_sellers')) {
+            return 0;
+        }
+
+        $party_id = $party ? (int) $party->id : 0;
+
+        # 1. USUARIO LOGUEADO ASOCIADO A VENDEDOR
+        $seller_id = self::seller_id_by_user((int) $user_id);
+        if ($seller_id > 0) {
+            return $seller_id;
+        }
+
+        # 2. VENDEDOR ASIGNADO AL CLIENTE/PARTY
+        if ($party_id > 0) {
+            $party_seller = self::seller_id_by_party($party_id);
+            if ($party_seller > 0) {
+                return $party_seller;
+            }
+        }
+
+        # 3. VENDEDOR DEFAULT CONFIGURADO PARA FRONTEND/COMERCIO
+        $configured_seller = self::configured_frontend_seller_id();
+        if ($configured_seller > 0) {
+            \Log::warning('Carrito frontend usa vendedor default configurado '.json_encode([
+                'party_id' => $party_id,
+                'user_id' => (int) $user_id,
+                'seller_id' => $configured_seller,
+                'event' => 'frontend_cart_quote_configured_seller_fallback',
+                'timestamp' => time(),
+            ]));
+            return $configured_seller;
+        }
+
+        # 4. PRIMER VENDEDOR ACTIVO DISPONIBLE PARA VENTAS
+        $active_seller = self::first_active_seller_id(true);
+        if ($active_seller < 1) {
+            $active_seller = self::first_active_seller_id(false);
+        }
+        if ($active_seller > 0) {
+            \Log::warning('Carrito frontend usa primer vendedor activo como fallback '.json_encode([
+                'party_id' => $party_id,
+                'user_id' => (int) $user_id,
+                'seller_id' => $active_seller,
+                'event' => 'frontend_cart_quote_first_active_seller_fallback',
+                'timestamp' => time(),
+            ]));
+            return $active_seller;
+        }
+
+        return 0;
+    }
+
+    /**
+     * SELLER ID BY USER
+     *
+     * OBTIENE VENDEDOR ACTIVO POR USUARIO.
+     *
+     * @access  protected
+     * @return  Int
+     */
+    protected static function seller_id_by_user($user_id)
+    {
+        $user_id = (int) $user_id;
+        if ($user_id < 1 || !\DBUtil::field_exists('core_sales_sellers', ['user_id'])) {
+            return 0;
+        }
+
+        $seller = \DB::select('id')
+            ->from('core_sales_sellers')
+            ->where('user_id', '=', $user_id)
+            ->where('active', '=', 1)
+            ->order_by('id', 'asc')
+            ->execute()
+            ->current();
+
+        return $seller ? (int) $seller['id'] : 0;
+    }
+
+    /**
+     * SELLER ID BY PARTY
+     *
+     * OBTIENE VENDEDOR ACTIVO ASIGNADO AL CLIENTE.
+     *
+     * @access  protected
+     * @return  Int
+     */
+    protected static function seller_id_by_party($party_id)
+    {
+        $party_id = (int) $party_id;
+        if ($party_id < 1 || !\DBUtil::table_exists('core_parties')) {
+            return 0;
+        }
+
+        $fields = [];
+        if (\DBUtil::field_exists('core_parties', ['default_seller_id'])) {
+            $fields[] = 'default_seller_id';
+        }
+        if (\DBUtil::field_exists('core_parties', ['sales_user_id'])) {
+            $fields[] = 'sales_user_id';
+        }
+        if (empty($fields)) {
+            return 0;
+        }
+
+        $party = \DB::select_array($fields)
+            ->from('core_parties')
+            ->where('id', '=', $party_id)
+            ->execute()
+            ->current();
+
+        if (!$party) {
+            return 0;
+        }
+
+        if (!empty($party['default_seller_id']) && self::active_seller_exists((int) $party['default_seller_id'])) {
+            return (int) $party['default_seller_id'];
+        }
+
+        if (!empty($party['sales_user_id'])) {
+            return self::seller_id_by_user((int) $party['sales_user_id']);
+        }
+
+        return 0;
+    }
+
+    /**
+     * CONFIGURED FRONTEND SELLER ID
+     *
+     * LEE CONFIGURACIONES EXISTENTES SIN CREAR NUEVO ESQUEMA.
+     *
+     * @access  protected
+     * @return  Int
+     */
+    protected static function configured_frontend_seller_id()
+    {
+        if (!\DBUtil::table_exists('core_settings')) {
+            return 0;
+        }
+
+        $candidates = [
+            ['frontend', 'default_seller_id'],
+            ['frontend', 'default_frontend_seller_id'],
+            ['frontend', 'frontend_default_seller_id'],
+            ['sales', 'default_frontend_seller_id'],
+            ['sales', 'frontend_default_seller_id'],
+            ['commerce', 'default_seller_id'],
+        ];
+
+        foreach ($candidates as $candidate) {
+            $setting = \DB::select('value')
+                ->from('core_settings')
+                ->where('setting_group', '=', $candidate[0])
+                ->where('setting_key', '=', $candidate[1])
+                ->execute()
+                ->current();
+
+            $seller_id = $setting ? (int) $setting['value'] : 0;
+            if ($seller_id > 0 && self::active_seller_exists($seller_id)) {
+                return $seller_id;
+            }
+        }
+
+        return 0;
+    }
+
+    /**
+     * FIRST ACTIVE SELLER ID
+     *
+     * OBTIENE EL PRIMER VENDEDOR ACTIVO DISPONIBLE.
+     *
+     * @access  protected
+     * @return  Int
+     */
+    protected static function first_active_seller_id($employee_only = false)
+    {
+        $query = \DB::select('id')
+            ->from('core_sales_sellers')
+            ->where('active', '=', 1);
+
+        if ($employee_only && \DBUtil::field_exists('core_sales_sellers', ['seller_type'])) {
+            $query->where('seller_type', '=', 'employee');
+        }
+
+        $seller = $query->order_by('id', 'asc')->execute()->current();
+        return $seller ? (int) $seller['id'] : 0;
+    }
+
+    /**
+     * ACTIVE SELLER EXISTS
+     *
+     * VALIDA QUE EL VENDEDOR EXISTA Y ESTE ACTIVO.
+     *
+     * @access  protected
+     * @return  Bool
+     */
+    protected static function active_seller_exists($seller_id)
+    {
+        $seller_id = (int) $seller_id;
+        if ($seller_id < 1) {
+            return false;
+        }
+
+        $seller = \DB::select('id')
+            ->from('core_sales_sellers')
+            ->where('id', '=', $seller_id)
+            ->where('active', '=', 1)
+            ->execute()
+            ->current();
+
+        return (bool) $seller;
     }
 
     /**

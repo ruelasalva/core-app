@@ -13,10 +13,24 @@
     # Make sure directory listing is disabled
 	Options -Indexes +FollowSymLinks
 
+	<IfModule mod_headers.c>
+		Header always set X-Content-Type-Options "nosniff"
+		Header always set X-Frame-Options "SAMEORIGIN"
+		Header always set Referrer-Policy "strict-origin-when-cross-origin"
+		Header always set Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=(), usb=(), fullscreen=(self)"
+		Header unset X-Powered-By
+		Header always unset X-Powered-By
+	</IfModule>
+
 	# Block private project files if they are accidentally copied into webroot.
-	RedirectMatch 403 ^/(fuel|docs|vendor|node_modules|\.git|\.agents|\.codex)(/|$)
-	RedirectMatch 403 ^/(AGENTS\.md|AGENTS_old\.md|composer\.json|composer\.lock|composer\.phar|oil|package\.json|package-lock\.json|README\.md|TESTING\.md)$
-	RedirectMatch 403 ^/fuel/app/(config|logs|migrations|tasks|storage)(/|$)
+	RedirectMatch 403 (^|/)(fuel|docs|vendor|node_modules|\.git|\.agents|\.codex)(/|$)
+	RedirectMatch 403 (^|/)(AGENTS\.md|AGENTS_old\.md|composer\.json|composer\.lock|composer\.phar|oil|package\.json|package-lock\.json|README\.md|TESTING\.md)$
+	RedirectMatch 403 (^|/)fuel/app/(config|logs|migrations|tasks|storage)(/|$)
+
+	# Force HTTPS in production/public hosts only. Local XAMPP stays on HTTP.
+	RewriteCond %{HTTPS} !=on
+	RewriteCond %{HTTP_HOST} !^(localhost|127\.0\.0\.1)(:[0-9]+)?$ [NC]
+	RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
 
 	# Restrict your site to only one domain
 	# !important USE ONLY ONE OPTION

@@ -63,6 +63,15 @@ $featured_brands = !empty($featured_brands) ? $featured_brands : array();
 $featured_products = !empty($featured_products) ? $featured_products : array();
 $conversion_settings = !empty($conversion_settings) && is_array($conversion_settings) ? $conversion_settings : array();
 $trust_badges = !empty($conversion_settings['trust_badges']) && is_array($conversion_settings['trust_badges']) ? $conversion_settings['trust_badges'] : array();
+if ($is_home_page && empty($trust_badges)) {
+    $trust_badges = array(
+        array('label' => 'Facturación CFDI', 'icon' => 'bi bi-receipt'),
+        array('label' => 'Atención empresarial', 'icon' => 'bi bi-briefcase'),
+        array('label' => 'Entrega disponible', 'icon' => 'bi bi-truck'),
+        array('label' => 'Portal de clientes', 'icon' => 'bi bi-person-check'),
+        array('label' => 'Seguimiento de pedidos', 'icon' => 'bi bi-clock-history'),
+    );
+}
 $whatsapp_url = !empty($whatsapp_url) ? (string) $whatsapp_url : '';
 $contact_product_name = !empty($contact_product_name) ? (string) $contact_product_name : '';
 $contact_product_sku = !empty($contact_product_sku) ? (string) $contact_product_sku : '';
@@ -358,7 +367,7 @@ $product_contact_url = function ($product) {
                 <?php if (!empty($hero->button_text) && !empty($hero->button_url)): ?>
                 <a class="button" href="<?php echo e($hero->button_url); ?>"><?php echo e($hero->button_text); ?> <i class="bi bi-arrow-right"></i></a>
                 <?php else: ?>
-                <a class="button" href="<?php echo Uri::create('pagina/contacto'); ?>">Solicitar información <i class="bi bi-arrow-right"></i></a>
+                <a class="button" href="<?php echo Uri::create('pagina/contacto'); ?>">Cotizar con asesor <i class="bi bi-arrow-right"></i></a>
                 <?php endif; ?>
                 <a class="button secondary" href="<?php echo Uri::create('productos'); ?>">Ver catálogo</a>
             </div>
@@ -377,7 +386,7 @@ $product_contact_url = function ($product) {
             <?php endif; ?>
             <?php if ($is_home_page): ?>
             <div class="hero-actions">
-                <a class="button" href="<?php echo Uri::create('pagina/contacto'); ?>">Solicitar información <i class="bi bi-arrow-right"></i></a>
+                <a class="button" href="<?php echo Uri::create('pagina/contacto'); ?>">Cotizar con asesor <i class="bi bi-arrow-right"></i></a>
                 <a class="button secondary" href="<?php echo Uri::create('productos'); ?>">Ver catálogo</a>
             </div>
             <?php endif; ?>
@@ -509,9 +518,9 @@ $product_contact_url = function ($product) {
                                 <?php echo Form::hidden('quantity', 1); ?>
                                 <button class="product-inquiry-link product-inquiry-link--primary" type="submit">Agregar al carrito</button>
                             <?php echo Form::close(); ?>
-                            <a class="product-inquiry-link" href="<?php echo e(!empty($product['inquiry_enabled']) ? \Arr::get($product, 'inquiry_url', $product_contact_url($product)) : $product_contact_url($product)); ?>" target="<?php echo e(!empty($product['inquiry_enabled']) ? \Arr::get($product, 'inquiry_target', '_self') : '_self'); ?>" rel="noopener noreferrer" data-track-event="<?php echo !empty($product['inquiry_enabled']) ? 'quote_click whatsapp_catalog' : 'quote_click'; ?>">Cotizar</a>
+                            <a class="product-inquiry-link" href="<?php echo e(!empty($product['inquiry_enabled']) ? \Arr::get($product, 'inquiry_url', $product_contact_url($product)) : $product_contact_url($product)); ?>" target="<?php echo e(!empty($product['inquiry_enabled']) ? \Arr::get($product, 'inquiry_target', '_self') : '_self'); ?>" rel="noopener noreferrer" data-track-event="<?php echo !empty($product['inquiry_enabled']) ? 'quote_click whatsapp_catalog' : 'quote_click'; ?>"><?php echo !empty($product['inquiry_enabled']) ? 'Cotizar por WhatsApp' : 'Cotizar'; ?></a>
                             <?php else: ?>
-                            <?php if (!empty($product['inquiry_enabled'])): ?><a class="product-inquiry-link product-inquiry-link--primary" data-track-event="quote_click whatsapp_catalog" href="<?php echo e(\Arr::get($product, 'inquiry_url', Uri::create('pagina/contacto'))); ?>" target="<?php echo e(\Arr::get($product, 'inquiry_target', '_self')); ?>" rel="noopener noreferrer">Cotizar</a><?php endif; ?>
+                            <?php if (!empty($product['inquiry_enabled'])): ?><a class="product-inquiry-link product-inquiry-link--primary" data-track-event="quote_click whatsapp_catalog" href="<?php echo e(\Arr::get($product, 'inquiry_url', Uri::create('pagina/contacto'))); ?>" target="<?php echo e(\Arr::get($product, 'inquiry_target', '_self')); ?>" rel="noopener noreferrer">Cotizar por WhatsApp</a><?php endif; ?>
                             <?php endif; ?>
                             <a class="card-action secondary" href="<?php echo e(Uri::create('producto/'.$product['slug'])); ?>">Ver producto</a>
                         </div>
@@ -767,9 +776,9 @@ $product_contact_url = function ($product) {
                             <?php echo Form::hidden('quantity', 1); ?>
                             <button class="product-inquiry-link product-inquiry-link--primary" type="submit">Agregar al carrito</button>
                         <?php echo Form::close(); ?>
-                        <a class="product-inquiry-link" href="<?php echo e(!empty($product['inquiry_enabled']) ? \Arr::get($product, 'inquiry_url', $product_contact_url($product)) : $product_contact_url($product)); ?>" target="<?php echo e(!empty($product['inquiry_enabled']) ? \Arr::get($product, 'inquiry_target', '_self') : '_self'); ?>" rel="noopener noreferrer" data-track-event="<?php echo !empty($product['inquiry_enabled']) ? 'quote_click whatsapp_catalog' : 'quote_click'; ?>">Cotizar</a>
+                        <a class="product-inquiry-link" href="<?php echo e(!empty($product['inquiry_enabled']) ? \Arr::get($product, 'inquiry_url', $product_contact_url($product)) : $product_contact_url($product)); ?>" target="<?php echo e(!empty($product['inquiry_enabled']) ? \Arr::get($product, 'inquiry_target', '_self') : '_self'); ?>" rel="noopener noreferrer" data-track-event="<?php echo !empty($product['inquiry_enabled']) ? 'quote_click whatsapp_catalog' : 'quote_click'; ?>"><?php echo !empty($product['inquiry_enabled']) ? 'Cotizar por WhatsApp' : 'Cotizar'; ?></a>
                         <?php else: ?>
-                        <?php if (!empty($product['inquiry_enabled'])): ?><a class="product-inquiry-link product-inquiry-link--primary" data-track-event="quote_click whatsapp_catalog" href="<?php echo e(\Arr::get($product, 'inquiry_url', Uri::create('pagina/contacto'))); ?>" target="<?php echo e(\Arr::get($product, 'inquiry_target', '_self')); ?>" rel="noopener noreferrer">Cotizar</a><?php endif; ?>
+                        <?php if (!empty($product['inquiry_enabled'])): ?><a class="product-inquiry-link product-inquiry-link--primary" data-track-event="quote_click whatsapp_catalog" href="<?php echo e(\Arr::get($product, 'inquiry_url', Uri::create('pagina/contacto'))); ?>" target="<?php echo e(\Arr::get($product, 'inquiry_target', '_self')); ?>" rel="noopener noreferrer">Cotizar por WhatsApp</a><?php endif; ?>
                         <?php endif; ?>
                         <a class="card-action secondary" href="<?php echo e(Uri::create('producto/'.$product['slug'])); ?>">Ver producto</a>
                     </div>

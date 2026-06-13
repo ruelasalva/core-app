@@ -310,6 +310,93 @@ before returning a file.
 
 ---
 
+# Mandatory Production Security Requirements
+
+## Session and Cookies
+
+- Session cookie must be HttpOnly.
+- Session cookie must use SameSite=Lax or stricter.
+- Session cookie must be Secure in production.
+- Do not weaken fuel/app/config/session.php.
+- Do not introduce persistent login cookies without explicit approval.
+
+## HTTPS and Headers
+
+- Production must redirect HTTP to HTTPS.
+- Keep security headers in public/.htaccess:
+  - X-Content-Type-Options
+  - X-Frame-Options
+  - Referrer-Policy
+  - Permissions-Policy
+- Do not add CSP enforcement without report-only testing first.
+- Do not add HSTS until HTTPS is validated in production.
+
+## Document Security
+
+- Never expose file_path, storage_path or physical paths in portal/admin JSON.
+- Use download_url for user-facing downloads.
+- All downloads must validate:
+  - logged-in user
+  - permission or portal session
+  - ownership
+  - active document
+  - active relation/link
+- Direct access to uploaded private documents must remain blocked.
+
+## Portal Ownership
+
+- Never trust party_id from request in portals.
+- Always derive portal ownership from portal_link->party_id.
+- Customer A must never access Customer B data.
+- Supplier A must never access Supplier B data.
+
+## Admin Permissions
+
+- Every admin controller action must have permission validation.
+- Menu visibility must match backend permissions.
+- Group 100 may have bypass, but non-super roles must work through Auth::has_access().
+- users_permissions.actions must remain associative maps:
+  - Correct: ['view' => 'view']
+  - Incorrect: ['view']
+- Any permission seed/task must preserve ORMAuth-compatible action format.
+
+## Public Frontend Security
+
+- Do not expose costs, margins or internal pricing.
+- Do not expose internal IDs unless already public and safe.
+- Public price/customer price rules must be explicit and reviewed.
+
+## CORS
+
+- Do not add Access-Control-Allow-Origin: * to authenticated routes.
+- Any CORS change requires explicit review.
+
+## Validation Required After Security-Affecting Changes
+
+- php -l modified PHP files.
+- curl -I for headers.
+- Check Set-Cookie flags.
+- Check /docs and /AGENTS.md blocked.
+- Check /assets/uploads/documents direct access blocked.
+- Check portal cross-access where applicable.
+
+## Production Deployment
+
+- public/ is the only webroot.
+- fuel/, docs/, AGENTS.md, migrations, tasks and config must not be publicly accessible.
+- If using cPanel public_html, copy contents of public/ into public_html and keep fuel/ outside webroot.
+
+## Reporting
+
+Every implementation summary must state:
+
+- whether security-sensitive files were modified
+- whether file_path/storage_path exposure was checked
+- whether permissions were changed
+- whether new endpoints were protected
+
+---
+
 # ERP Workflow Rules
 
 ## Sales
