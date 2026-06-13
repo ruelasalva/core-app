@@ -12,40 +12,56 @@
     .account-btn { border: 0; border-radius: 6px; background: var(--core-brand); color: #fff; padding: 11px 18px; font-weight: 800; cursor: pointer; }
     .account-link { color: var(--core-brand); font-weight: 800; }
     .account-alert { border-radius: 6px; padding: 11px 12px; margin-bottom: 16px; background: #fee2e2; color: #991b1b; }
+    .account-benefits { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; margin: 18px 0 22px; }
+    .account-benefit { border: 1px solid #dde3ea; border-radius: 8px; background: #f8fafc; padding: 10px 12px; color: #172033; font-size: .92rem; font-weight: 800; }
+    .account-benefit i { color: var(--core-brand); margin-right: 6px; }
     @media (max-width: 640px) { .account-grid { grid-template-columns: 1fr; } }
+    @media (max-width: 640px) { .account-benefits { grid-template-columns: 1fr; } .account-actions { align-items: stretch; flex-direction: column; } .account-btn, .account-link { width: 100%; text-align: center; } }
 </style>
 
 <section class="account-band">
     <div class="account-shell">
         <div class="account-panel">
             <h1>Crear cuenta</h1>
-            <p>Tu cuenta se crea como cliente web con acceso basico al portal de clientes.</p>
+            <p>Regístrate para obtener beneficios empresariales y consultar los precios asignados a tu empresa.</p>
+            <div class="account-benefits" data-track-impression="register_start">
+                <div class="account-benefit"><i class="bi bi-tags"></i> Consulta precios asignados</div>
+                <div class="account-benefit"><i class="bi bi-file-earmark-arrow-down"></i> Descarga CFDI</div>
+                <div class="account-benefit"><i class="bi bi-wallet2"></i> Estado de cuenta</div>
+                <div class="account-benefit"><i class="bi bi-clock-history"></i> Historial de cotizaciones</div>
+                <div class="account-benefit"><i class="bi bi-truck"></i> Seguimiento de pedidos</div>
+                <div class="account-benefit"><i class="bi bi-headset"></i> Atención empresarial</div>
+            </div>
 
             <?php if (!empty($error)): ?>
             <div class="account-alert"><?php echo e($error); ?></div>
             <?php endif; ?>
 
-            <?php echo Form::open(['action' => 'registro', 'method' => 'post']); ?>
+            <?php echo Form::open(['action' => 'registro', 'method' => 'post', 'data-track-form' => 'register_submit']); ?>
                 <?php echo Form::csrf(); ?>
                 <div class="account-grid">
-                    <div class="account-field full">
+                    <div class="account-field">
                         <label>Nombre</label>
                         <?php echo Form::input('name', Input::post('name', ''), ['autocomplete' => 'name']); ?>
+                    </div>
+                    <div class="account-field">
+                        <label>Empresa</label>
+                        <?php echo Form::input('company', Input::post('company', ''), ['autocomplete' => 'organization']); ?>
                     </div>
                     <div class="account-field">
                         <label>Correo</label>
                         <?php echo Form::input('email', Input::post('email', ''), ['type' => 'email', 'autocomplete' => 'email']); ?>
                     </div>
                     <div class="account-field">
-                        <label>Telefono</label>
+                        <label>Teléfono</label>
                         <?php echo Form::input('phone', Input::post('phone', ''), ['autocomplete' => 'tel']); ?>
                     </div>
                     <div class="account-field">
-                        <label>Contrasena</label>
+                        <label>Contraseña</label>
                         <?php echo Form::password('password', '', ['autocomplete' => 'new-password']); ?>
                     </div>
                     <div class="account-field">
-                        <label>Confirmar contrasena</label>
+                        <label>Confirmar contraseña</label>
                         <?php echo Form::password('password_confirm', '', ['autocomplete' => 'new-password']); ?>
                     </div>
                     <?php if (!empty($captcha_html)): ?>

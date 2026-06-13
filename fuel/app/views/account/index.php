@@ -17,19 +17,19 @@
 <section class="account-band">
     <div class="account-shell">
         <h1>Mi cuenta</h1>
-        <p>Consulta tu informacion comercial y accesos disponibles.</p>
+        <p>Consulta tu información comercial y accesos disponibles.</p>
 
         <div class="account-grid">
             <div class="account-card">
                 <h2>Datos del cliente</h2>
                 <p><strong>Nombre:</strong> <?php echo e($party ? $party->name : ''); ?></p>
                 <p><strong>Correo:</strong> <?php echo e($party ? $party->email : ''); ?></p>
-                <p><strong>Telefono:</strong> <?php echo e($party ? $party->phone : ''); ?></p>
+                <p><strong>Teléfono:</strong> <?php echo e($party ? $party->phone : ''); ?></p>
                 <p><strong>Lista de precios:</strong> <?php echo e($price_list); ?></p>
             </div>
             <div class="account-card">
                 <h2>Accesos</h2>
-                <p>Los precios del catalogo se muestran mientras esta sesion permanezca activa.</p>
+                <p>Los precios del catálogo se muestran mientras esta sesión permanezca activa.</p>
                 <p>El portal de clientes queda disponible para futuras compras, documentos y soporte.</p>
                 <a class="account-action" href="<?php echo Uri::create('productos'); ?>">Ver productos</a>
             </div>
@@ -57,7 +57,7 @@
                     </tbody>
                 </table>
                 <?php else: ?>
-                <p>Todavia no tienes cotizaciones solicitadas.</p>
+                <p>Todavía no tienes cotizaciones solicitadas.</p>
                 <?php endif; ?>
             </div>
         </div>

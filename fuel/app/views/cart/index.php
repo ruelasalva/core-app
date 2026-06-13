@@ -4,6 +4,10 @@
     .cart-title h1 { margin: 0; font-size: clamp(2rem, 4vw, 3.4rem); line-height: 1; }
     .cart-title p { margin: 12px 0 0; color: #657084; }
     .cart-panel { margin-top: 28px; border: 1px solid #dde3ea; border-radius: 8px; background: #fff; overflow: hidden; }
+    .cart-flow-note { margin: 12px 20px 0; border: 1px solid #fed7aa; border-radius: 8px; background: #fff7ed; color: #9a3412; padding: 12px 14px; font-weight: 700; }
+    .cart-section-heading { padding: 18px 20px 8px; border-bottom: 1px solid #edf2f7; }
+    .cart-section-heading h2 { margin: 0; font-size: 1.05rem; color: #172033; }
+    .cart-section-heading p { margin: 6px 0 0; color: #657084; }
     .cart-alert { margin-top: 18px; border-radius: 6px; padding: 11px 12px; }
     .cart-alert.success { background: #dcfce7; color: #166534; }
     .cart-alert.error { background: #fee2e2; color: #991b1b; }
@@ -23,23 +27,44 @@
     .cart-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; padding: 18px 20px; background: #f8fafc; }
     .cart-btn { display: inline-flex; align-items: center; justify-content: center; min-height: 40px; border: 1px solid #0f766e; border-radius: 6px; padding: 9px 14px; color: #0f766e; font-weight: 800; background: #fff; cursor: pointer; }
     .cart-btn.primary { background: #0f766e; color: #fff; }
+    .cart-btn.whatsapp { border-color: #25d366; background: #25d366; color: #102014; }
     .cart-btn.danger { border-color: #b91c1c; color: #b91c1c; }
     .cart-empty { padding: 34px; color: #657084; }
     @media (max-width: 760px) {
         .cart-table, .cart-table tbody, .cart-table tr, .cart-table td { display: block; width: 100%; }
         .cart-table thead { display: none; }
-        .cart-table td { border-bottom: 0; padding: 10px 14px; }
-        .cart-table tr { border-bottom: 1px solid #e5ebf1; padding: 8px 0; }
+        .cart-table td { border-bottom: 0; padding: 10px 14px; display: flex; justify-content: space-between; gap: 14px; }
+        .cart-table td::before { content: attr(data-label); color: #657084; font-weight: 800; }
+        .cart-table td.cart-product { display: block; }
+        .cart-table td.cart-product::before { display: block; margin-bottom: 6px; }
+        .cart-table tr { border: 1px solid #e5ebf1; border-radius: 8px; margin: 10px; padding: 8px 0; background: #fff; }
         .cart-total { justify-content: stretch; }
         .cart-total-box { width: 100%; }
+        .cart-actions { display: grid; grid-template-columns: 1fr; }
+        .cart-actions > div { display: grid; grid-template-columns: 1fr; gap: 10px; }
+        .cart-btn { width: 100%; }
     }
 </style>
+
+<?php
+$whatsapp_items = array();
+foreach (!empty($items) ? $items : array() as $item) {
+    $whatsapp_items[] = array(
+        'name' => $item->name,
+        'sku' => $item->sku,
+        'quantity' => $item->quantity,
+    );
+}
+$cart_whatsapp_url = class_exists('Helper_Core_Web') && !empty($whatsapp_items)
+    ? Helper_Core_Web::whatsapp_url('cart', array('items' => $whatsapp_items, 'url' => Uri::current()))
+    : '';
+?>
 
 <section class="cart-band">
     <div class="cart-shell">
         <div class="cart-title">
             <h1>Carrito</h1>
-            <p>Revisa productos y cantidades antes de convertirlo en cotizacion o pedido.</p>
+            <p>Revisa tus productos. Puedes solicitar cotización, enviar por WhatsApp o continuar con las formas de pago disponibles.</p>
         </div>
 
         <?php if (!empty($success)): ?>
@@ -53,6 +78,10 @@
             <?php if (!empty($items)): ?>
             <?php echo Form::open(['action' => 'carrito/actualizar', 'method' => 'post']); ?>
                 <?php echo Form::csrf(); ?>
+                <div class="cart-section-heading">
+                    <h2>Productos en carrito</h2>
+                    <p>Actualiza cantidades o continúa explorando el catálogo.</p>
+                </div>
                 <table class="cart-table">
                     <thead>
                         <tr>
@@ -66,16 +95,16 @@
                     <tbody>
                         <?php foreach ($items as $item): ?>
                         <tr>
-                            <td class="cart-product">
+                            <td class="cart-product" data-label="Producto">
                                 <strong><?php echo e($item->name); ?></strong>
                                 <span><?php echo e($item->sku); ?></span>
                             </td>
-                            <td><?php echo e($item->currency_code); ?> <?php echo number_format((float) $item->unit_price, 2); ?></td>
-                            <td>
+                            <td data-label="Precio"><?php echo e($item->currency_code); ?> <?php echo number_format((float) $item->unit_price, 2); ?></td>
+                            <td data-label="Cantidad">
                                 <?php echo Form::input('quantity['.(int) $item->id.']', (float) $item->quantity, ['type' => 'number', 'step' => '1', 'min' => '0']); ?>
                             </td>
-                            <td><?php echo e($item->currency_code); ?> <?php echo number_format((float) $item->line_total, 2); ?></td>
-                            <td><a class="cart-btn danger" href="<?php echo e(Uri::create('carrito/quitar/'.$item->id)); ?>">Quitar</a></td>
+                            <td data-label="Total"><?php echo e($item->currency_code); ?> <?php echo number_format((float) $item->line_total, 2); ?></td>
+                            <td data-label="Acción"><a class="cart-btn danger" href="<?php echo e(Uri::create('carrito/quitar/'.$item->id)); ?>">Quitar</a></td>
                         </tr>
                         <?php endforeach; ?>
                     </tbody>
@@ -90,26 +119,36 @@
 
                 <div class="cart-actions">
                     <div>
-                        <button class="cart-btn" type="submit">Actualizar</button>
+                        <button class="cart-btn" type="submit">Actualizar carrito</button>
                         <a class="cart-btn danger" href="<?php echo e(Uri::create('carrito/vaciar')); ?>">Vaciar</a>
                     </div>
                 </div>
             <?php echo Form::close(); ?>
 
-            <?php echo Form::open(['action' => 'carrito/checkout', 'method' => 'post']); ?>
+            <?php echo Form::open(['action' => 'carrito/checkout', 'method' => 'post', 'data-track-form' => 'quote_request']); ?>
                 <?php echo Form::csrf(); ?>
+                <div class="cart-section-heading">
+                    <h2>Opciones para continuar</h2>
+                    <p>Envía tus productos a un asesor para confirmar precio, disponibilidad o condiciones especiales.</p>
+                </div>
+                <div class="cart-flow-note">
+                    Por el momento finalizaremos tu carrito como solicitud de cotización. Un asesor confirmará precio, disponibilidad y forma de pago.
+                </div>
                 <div class="cart-notes">
-                    <label>Notas para cotizacion</label>
+                    <label>Notas para cotización</label>
                     <?php echo Form::textarea('customer_notes', '', ['placeholder' => 'Comentarios, requerimientos de entrega o datos adicionales.']); ?>
                 </div>
                 <div class="cart-actions">
                     <a class="cart-btn" href="<?php echo e(Uri::create('productos')); ?>">Seguir comprando</a>
-                    <button class="cart-btn primary" type="submit">Solicitar cotizacion</button>
+                    <?php if ($cart_whatsapp_url !== ''): ?>
+                    <a class="cart-btn whatsapp" data-track-event="whatsapp_cart" href="<?php echo e($cart_whatsapp_url); ?>" target="_blank" rel="noopener noreferrer">Enviar por WhatsApp</a>
+                    <?php endif; ?>
+                    <button class="cart-btn primary" type="submit">Solicitar cotización</button>
                 </div>
             <?php echo Form::close(); ?>
             <?php else: ?>
             <div class="cart-empty">
-                Tu carrito esta vacio. <a href="<?php echo e(Uri::create('productos')); ?>">Explorar productos</a>.
+                Tu carrito está vacío. <a href="<?php echo e(Uri::create('productos')); ?>">Explorar productos</a>.
             </div>
             <?php endif; ?>
         </div>

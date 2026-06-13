@@ -1291,8 +1291,23 @@ class Controller_Frontend extends Controller_Template
      */
     protected function apply_customer_prices(array $products)
     {
-        # SIN CLIENTE NO SE MUESTRA PRECIO
+        # SIEMPRE SE CONSERVA EL PRECIO LISTA PUBLICO COMO DATO BASE DE PRESENTACION.
         $party = $this->get_customer_party();
+        foreach ($products as &$product) {
+            $list_price = isset($product['price']) ? (float) $product['price'] : 0.0;
+            $list_currency = !empty($product['currency_code']) ? (string) $product['currency_code'] : 'MXN';
+            $product['list_price'] = $list_price;
+            $product['list_currency_code'] = $list_currency;
+            $product['customer_price'] = null;
+            $product['customer_currency_code'] = $list_currency;
+            $product['has_customer_price'] = false;
+            $product['has_preferential_price'] = false;
+            $product['price_savings'] = 0;
+            $product['price_mode'] = 'visitor';
+        }
+        unset($product);
+
+        # SIN CLIENTE NO SE MUESTRA PRECIO; SOLO SE PERMITE COTIZAR.
         if (!$party) {
             foreach ($products as &$product) {
                 $product['can_view_price'] = false;
@@ -1304,11 +1319,23 @@ class Controller_Frontend extends Controller_Template
         $price_list_id = $this->customer_price_list_id($party);
         foreach ($products as &$product) {
             $product['can_view_price'] = true;
+            $product['price_mode'] = 'registered';
+            $product['price'] = $product['list_price'];
+            $product['currency_code'] = $product['list_currency_code'];
             if ($price_list_id > 0) {
                 $price = $this->product_price_for_list((int) $product['id'], $price_list_id);
                 if ($price) {
                     $product['price'] = $price['price'];
                     $product['currency_code'] = $price['currency_code'];
+                    $product['customer_price'] = (float) $price['price'];
+                    $product['customer_currency_code'] = (string) $price['currency_code'];
+                    $product['has_customer_price'] = true;
+                    $product['price_mode'] = 'preferred';
+                    $savings = (float) $product['list_price'] - (float) $product['customer_price'];
+                    if ($savings > 0.009) {
+                        $product['has_preferential_price'] = true;
+                        $product['price_savings'] = $savings;
+                    }
                 }
             }
         }

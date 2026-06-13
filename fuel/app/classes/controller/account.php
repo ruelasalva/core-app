@@ -121,7 +121,7 @@ class Controller_Account extends Controller_Template
                     ]);
                 }
 
-                \Session::set_flash('success', 'Tu cuenta fue creada. Ingresa para ver precios y continuar.');
+                \Session::set_flash('success', 'Tu cuenta fue creada. Ingresa para consultar precios asignados y beneficios empresariales.');
                 \Response::redirect('acceso');
             } catch (\InvalidArgumentException $e) {
                 $data['error'] = $e->getMessage();
@@ -190,14 +190,15 @@ class Controller_Account extends Controller_Template
     {
         # SE NORMALIZAN ENTRADAS
         $name = trim((string) \Input::post('name', ''));
+        $company = trim((string) \Input::post('company', ''));
         $email = strtolower(trim((string) \Input::post('email', '')));
         $phone = trim((string) \Input::post('phone', ''));
         $password = (string) \Input::post('password', '');
         $confirm = (string) \Input::post('password_confirm', '');
 
         # VALIDACIONES BASICAS
-        if ($name === '' || $email === '' || $password === '') {
-            throw new \InvalidArgumentException('Nombre, correo y contrasena son obligatorios.');
+        if ($name === '' || $company === '' || $email === '' || $password === '') {
+            throw new \InvalidArgumentException('Nombre, empresa, correo y contrasena son obligatorios.');
         }
 
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
@@ -218,6 +219,7 @@ class Controller_Account extends Controller_Template
 
         return [
             'name' => $name,
+            'company' => $company,
             'email' => $email,
             'phone' => $phone,
             'password' => $password,
@@ -280,8 +282,8 @@ class Controller_Account extends Controller_Template
         $party = Model_Core_Party::forge([
             'party_type' => 'customer',
             'code' => $this->unique_party_code($payload['email']),
-            'name' => $payload['name'],
-            'legal_name' => '',
+            'name' => $payload['company'],
+            'legal_name' => $payload['company'],
             'rfc' => '',
             'email' => $payload['email'],
             'phone' => $payload['phone'],
@@ -293,7 +295,7 @@ class Controller_Account extends Controller_Template
             'shipping_method_id' => 0,
             'credit_limit' => 0,
             'credit_days' => 0,
-            'notes' => 'Cliente registrado desde frontend.',
+            'notes' => 'Cliente registrado desde frontend. Contacto inicial: '.$payload['name'].'. RFC y datos fiscales pendientes de completar en portal.',
             'active' => 1,
         ]);
         $party->save();
@@ -409,6 +411,8 @@ class Controller_Account extends Controller_Template
             'name' => \Auth::check() ? \Auth::get_screen_name() : '',
         ];
         $this->template->cart_count = class_exists('Helper_Core_Cart') ? Helper_Core_Cart::count() : 0;
+        $this->template->whatsapp_url = class_exists('Helper_Core_Web') ? Helper_Core_Web::whatsapp_url() : '';
+        $this->template->conversion_settings = class_exists('Helper_Core_Web') ? Helper_Core_Web::conversion_settings() : array();
         $this->template->set('cookie_banner', class_exists('Helper_Core_Legal') ? Helper_Core_Legal::render_cookie_banner() : '', false);
     }
 

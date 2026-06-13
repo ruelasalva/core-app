@@ -35,7 +35,7 @@
                     <?php echo Form::input('email', Input::post('email', ''), ['type' => 'email', 'autocomplete' => 'email']); ?>
                 </div>
                 <div class="account-field">
-                    <label>Contrasena</label>
+                    <label>Contraseña</label>
                     <?php echo Form::password('password', '', ['autocomplete' => 'current-password']); ?>
                 </div>
                 <div class="account-actions">

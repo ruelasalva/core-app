@@ -174,6 +174,13 @@
             background: #fff7f7;
             color: #991b1b;
         }
+        .core-toast-action {
+            display: inline-flex;
+            margin-left: 10px;
+            color: var(--core-brand);
+            font-weight: 800;
+            text-decoration: underline;
+        }
         @keyframes cartBump {
             0% { transform: scale(1); }
             45% { transform: scale(1.08); }
@@ -505,9 +512,21 @@
 </head>
 <body class="frontend-layout layout-<?php echo e($layout_key); ?>">
     <?php echo class_exists('Helper_Core_Web') ? Helper_Core_Web::frontend_body_end() : ''; ?>
+    <?php
+    $cart_count = isset($cart_count) ? (int) $cart_count : 0;
+    $frontend_user = !empty($frontend_user) ? $frontend_user : ['logged_in' => false, 'name' => ''];
+    $header_search = function($extra_class, $input_id) use ($global_search_q) {
+        ?>
+        <form class="header-product-search <?php echo e($extra_class); ?>" method="get" action="<?php echo Uri::create('productos'); ?>" role="search" data-track-form="catalog_search">
+            <input id="<?php echo e($input_id); ?>" type="search" name="q" value="<?php echo e($global_search_q); ?>" placeholder="Buscar producto, SKU, modelo o marca" maxlength="80" aria-label="Buscar producto, SKU, modelo o marca">
+            <button type="submit"><i class="bi bi-search"></i><span>Buscar</span></button>
+        </form>
+        <?php
+    };
+    ?>
     <header class="site-header">
-        <div class="site-shell">
-            <nav class="site-nav" aria-label="Menu principal">
+        <div class="site-shell ecommerce-header">
+            <div class="ecommerce-header-main">
                 <a class="brand" href="<?php echo Uri::base(false); ?>">
                     <?php if ($theme && !empty($theme->logo_path)): ?>
                     <img src="<?php echo e($theme_asset($theme->logo_path)); ?>" alt="<?php echo e($site_name); ?>">
@@ -515,6 +534,28 @@
                     <span><?php echo e($site_name); ?></span>
                     <?php endif; ?>
                 </a>
+                <?php $header_search('header-product-search--desktop', 'header-product-search-q'); ?>
+                <div class="account-menu ecommerce-actions">
+                    <a class="site-cta primary" href="<?php echo Uri::create('pagina/contacto'); ?>"><i class="bi bi-chat-dots"></i> Solicitar información</a>
+                    <?php if (!empty($frontend_user['logged_in'])): ?>
+                    <a class="account-link" href="<?php echo Uri::create('mi-cuenta'); ?>"><i class="fas fa-user-circle"></i><span>Mi cuenta</span></a>
+                    <?php else: ?>
+                    <a class="account-link" href="<?php echo Uri::create('acceso'); ?>"><i class="fas fa-sign-in-alt"></i><span>Entrar</span></a>
+                    <?php endif; ?>
+                    <a class="cart-link ecommerce-cart-link" data-cart-link href="<?php echo Uri::create('carrito'); ?>" aria-label="Ver carrito">
+                        <span class="cart-icon-wrap">
+                            <i class="fas fa-shopping-cart"></i>
+                            <span class="cart-count-badge" data-cart-count <?php echo $cart_count > 0 ? '' : 'hidden'; ?>><?php echo $cart_count; ?></span>
+                        </span>
+                        <span class="cart-link-copy"><strong>Carrito</strong><small>Cotización</small></span>
+                    </a>
+                    <button class="mobile-menu-toggle" type="button" data-public-menu-toggle aria-expanded="false" aria-controls="public-menu-row"><i class="fas fa-bars"></i><span>Menú</span></button>
+                </div>
+            </div>
+            <div class="header-search-row header-search-row--mobile">
+                <?php $header_search('header-product-search--mobile', 'header-product-search-mobile-q'); ?>
+            </div>
+            <nav id="public-menu-row" class="site-nav ecommerce-menu-row" data-public-menu aria-label="Menu principal">
                 <?php if (!empty($menu_items)): ?>
                 <div class="menu">
                     <?php foreach ($menu_items as $item): ?>
@@ -522,26 +563,7 @@
                     <?php endforeach; ?>
                 </div>
                 <?php endif; ?>
-                <div class="account-menu">
-                    <a class="site-cta primary" href="<?php echo Uri::create('pagina/contacto'); ?>"><i class="bi bi-chat-dots"></i> Solicitar información</a>
-                    <?php $cart_count = isset($cart_count) ? (int) $cart_count : 0; ?>
-                    <a class="cart-link" data-cart-link href="<?php echo Uri::create('carrito'); ?>"><i class="fas fa-shopping-cart"></i> Carrito<?php echo $cart_count > 0 ? ' ('.$cart_count.')' : ''; ?></a>
-                    <?php $frontend_user = !empty($frontend_user) ? $frontend_user : ['logged_in' => false, 'name' => '']; ?>
-                    <?php if (!empty($frontend_user['logged_in'])): ?>
-                    <a href="<?php echo Uri::create('mi-cuenta'); ?>"><i class="fas fa-user-circle"></i> Mi cuenta</a>
-                    <a href="<?php echo Uri::create('salir-cuenta'); ?>"><i class="fas fa-sign-out-alt"></i> Salir</a>
-                    <?php else: ?>
-                    <a href="<?php echo Uri::create('acceso'); ?>"><i class="fas fa-sign-in-alt"></i> Entrar</a>
-                    <a class="primary" href="<?php echo Uri::create('registro'); ?>"><i class="fas fa-user-plus"></i> Registrarse</a>
-                    <?php endif; ?>
-                </div>
             </nav>
-            <div class="header-search-row">
-                <form class="header-product-search" method="get" action="<?php echo Uri::create('productos'); ?>" role="search">
-                    <input id="header-product-search-q" type="search" name="q" value="<?php echo e($global_search_q); ?>" placeholder="Buscar producto, SKU, modelo o marca" maxlength="80" aria-label="Buscar producto, SKU, modelo o marca">
-                    <button type="submit"><i class="bi bi-search"></i><span>Buscar</span></button>
-                </form>
-            </div>
         </div>
     </header>
 
@@ -620,14 +642,16 @@
 
     <div class="core-toast" data-core-toast></div>
     <?php echo !empty($cookie_banner) ? $cookie_banner : ''; ?>
-    <?php if (!empty($conversion_settings['mobile_cta_enabled'])): ?>
+    <?php $show_mobile_cta_bar = true; ?>
+    <?php if ($show_mobile_cta_bar): ?>
     <nav class="mobile-sticky-cta" aria-label="Acciones rápidas">
         <?php if ($whatsapp_url !== '' && !empty($mobile_cta['show_whatsapp'])): ?>
-        <a class="mobile-sticky-cta-item whatsapp" href="<?php echo e($whatsapp_url); ?>" target="_blank" rel="noopener noreferrer"><i class="bi bi-whatsapp"></i><span><?php echo e(\Arr::get($mobile_cta, 'whatsapp_label', 'WhatsApp')); ?></span></a>
+        <a class="mobile-sticky-cta-item whatsapp" data-track-event="whatsapp_catalog" href="<?php echo e($whatsapp_url); ?>" target="_blank" rel="noopener noreferrer"><i class="bi bi-whatsapp"></i><span><?php echo e(\Arr::get($mobile_cta, 'whatsapp_label', 'WhatsApp')); ?></span></a>
         <?php endif; ?>
         <?php if (!empty($mobile_cta['show_catalog'])): ?>
         <a class="mobile-sticky-cta-item" href="<?php echo Uri::create('productos'); ?>"><i class="bi bi-grid"></i><span><?php echo e(\Arr::get($mobile_cta, 'catalog_label', 'Catálogo')); ?></span></a>
         <?php endif; ?>
+        <a class="mobile-sticky-cta-item cart" data-mobile-cart-link href="<?php echo Uri::create('carrito'); ?>"><i class="fas fa-shopping-cart"></i><span>Carrito<?php echo $cart_count > 0 ? ' ('.$cart_count.')' : ''; ?></span></a>
         <?php if (!empty($mobile_cta['show_contact'])): ?>
         <a class="mobile-sticky-cta-item" href="<?php echo Uri::create('pagina/contacto'); ?>"><i class="bi bi-chat-dots"></i><span><?php echo e(\Arr::get($mobile_cta, 'contact_label', 'Contacto')); ?></span></a>
         <?php endif; ?>
@@ -638,11 +662,22 @@
     (function() {
         var toast = document.querySelector('[data-core-toast]');
         var cartLink = document.querySelector('[data-cart-link]');
+        var mobileCartLink = document.querySelector('[data-mobile-cart-link]');
+        var publicMenu = document.querySelector('[data-public-menu]');
+        var publicMenuToggle = document.querySelector('[data-public-menu-toggle]');
         var toastTimer = null;
 
-        function showToast(message, type) {
+        function showToast(message, type, actionUrl, actionLabel) {
             if (!toast) return;
-            toast.textContent = message || '';
+            toast.textContent = '';
+            toast.appendChild(document.createTextNode(message || ''));
+            if (actionUrl && actionLabel) {
+                var action = document.createElement('a');
+                action.href = actionUrl;
+                action.textContent = actionLabel;
+                action.className = 'core-toast-action';
+                toast.appendChild(action);
+            }
             toast.classList.toggle('error', type === 'error');
             toast.classList.add('show');
             clearTimeout(toastTimer);
@@ -652,18 +687,88 @@
         }
 
         function updateCartCount(count) {
-            if (!cartLink) return;
             count = parseInt(count || 0, 10);
-            cartLink.innerHTML = '<i class="fas fa-shopping-cart"></i> ' + (count > 0 ? 'Carrito (' + count + ')' : 'Carrito');
-            cartLink.classList.remove('bump');
-            void cartLink.offsetWidth;
-            cartLink.classList.add('bump');
+            document.querySelectorAll('[data-cart-count]').forEach(function(badge) {
+                badge.textContent = count;
+                badge.hidden = count <= 0;
+            });
+            if (cartLink) {
+                cartLink.classList.remove('bump');
+                void cartLink.offsetWidth;
+                cartLink.classList.add('bump');
+            }
+            if (mobileCartLink) {
+                var mobileText = mobileCartLink.querySelector('span');
+                if (mobileText) {
+                    mobileText.textContent = count > 0 ? 'Carrito (' + count + ')' : 'Carrito';
+                }
+            }
         }
+
+        if (publicMenuToggle && publicMenu) {
+            publicMenuToggle.addEventListener('click', function() {
+                var isOpen = publicMenu.classList.toggle('is-open');
+                publicMenuToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+            });
+        }
+
+        function coreTrack(eventName, payload) {
+            if (!eventName) return;
+            payload = payload || {};
+            payload.page = window.location.pathname;
+            window.dataLayer = window.dataLayer || [];
+            window.dataLayer.push(Object.assign({ event: eventName }, payload));
+            if (typeof window.gtag === 'function') {
+                window.gtag('event', eventName, payload);
+            }
+            if (typeof window.fbq === 'function') {
+                window.fbq('trackCustom', eventName, payload);
+            }
+        }
+        window.CoreWebTrack = coreTrack;
+
+        document.querySelectorAll('[data-track-impression]').forEach(function(node) {
+            coreTrack(node.getAttribute('data-track-impression'), {});
+        });
+
+        document.querySelectorAll('[data-track-event]').forEach(function(node) {
+            node.addEventListener('click', function() {
+                var events = (node.getAttribute('data-track-event') || '').split(/\s+/);
+                events.forEach(function(eventName) {
+                    coreTrack(eventName, {});
+                });
+            });
+        });
+
+        document.querySelectorAll('[data-track-form]').forEach(function(form) {
+            form.addEventListener('submit', function() {
+                coreTrack(form.getAttribute('data-track-form'), {});
+            });
+        });
+
+        document.querySelectorAll('[data-whatsapp-product-link]').forEach(function(link) {
+            link.addEventListener('click', function() {
+                var quantityInput = document.querySelector('[data-whatsapp-quantity]');
+                var quantity = quantityInput ? Math.max(1, parseInt(quantityInput.value || '1', 10)) : 1;
+                try {
+                    var originalHref = link.getAttribute('data-original-href') || link.href;
+                    link.setAttribute('data-original-href', originalHref);
+                    var url = new URL(originalHref);
+                    var text = url.searchParams.get('text') || '';
+                    if (text) {
+                        text = text.replace(/\s*Cantidad:\s*\d+/i, '');
+                        url.searchParams.set('text', text + ' Cantidad: ' + quantity);
+                        link.href = url.toString();
+                    }
+                } catch (e) {}
+            });
+        });
 
         document.querySelectorAll('[data-cart-ajax]').forEach(function(form) {
             form.addEventListener('submit', function(event) {
                 if (!window.fetch || !window.FormData) return;
                 event.preventDefault();
+                coreTrack('add_to_cart', {});
 
                 var button = form.querySelector('button[type="submit"]');
                 var originalText = button ? button.textContent : '';
@@ -696,7 +801,7 @@
                             return;
                         }
                         updateCartCount(data.cart_count);
-                        showToast(data.message || 'Producto agregado al carrito.', 'success');
+                        showToast(data.message || 'Producto agregado al carrito.', 'success', '<?php echo Uri::create('carrito'); ?>', 'Ver carrito');
                         if (button) {
                             button.classList.add('is-added');
                             setTimeout(function() { button.classList.remove('is-added'); }, 400);

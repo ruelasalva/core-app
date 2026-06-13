@@ -254,7 +254,7 @@ $trust_badges = !empty($conversion_settings['trust_badges']) && is_array($conver
     }
 </style>
 
-<section class="product-shell product-detail front-hero--product">
+<section class="product-shell product-detail front-hero--product" data-track-impression="product_view">
     <div>
         <div class="product-media<?php echo empty($product['main_image_path']) ? ' product-media--empty' : ''; ?>">
             <img src="<?php echo e(!empty($product['main_image_path']) ? $media_url($product['main_image_path']) : $no_image_svg); ?>" alt="<?php echo e($product['name']); ?>">
@@ -280,6 +280,12 @@ $trust_badges = !empty($conversion_settings['trust_badges']) && is_array($conver
             <span><?php echo e($product['sku']); ?></span>
             <?php endif; ?>
         </div>
+        <div class="product-data-strip">
+            <?php if (!empty($product['sku'])): ?><span><strong>SKU</strong><?php echo e($product['sku']); ?></span><?php endif; ?>
+            <?php if (!empty($product['brand_name'])): ?><span><strong>Marca</strong><?php echo e($product['brand_name']); ?></span><?php endif; ?>
+            <?php if (!empty($product['category_name'])): ?><span><strong>Categoría</strong><?php echo e($product['category_name']); ?></span><?php endif; ?>
+            <?php if (!empty($product['subcategory_name'])): ?><span><strong>Compatibilidad</strong><?php echo e($product['subcategory_name']); ?></span><?php endif; ?>
+        </div>
 
         <h1><?php echo e($product['name']); ?></h1>
 
@@ -287,27 +293,51 @@ $trust_badges = !empty($conversion_settings['trust_badges']) && is_array($conver
         <p class="short"><?php echo e($product['short_description']); ?></p>
         <?php endif; ?>
 
-        <?php if (!empty($product['can_view_price'])): ?>
-        <div class="product-price">
-            <?php echo e($product['currency_code']); ?> <?php echo number_format((float) $product['price'], 2); ?>
+        <?php if (!empty($product['can_view_price']) && (float) \Arr::get($product, 'price', 0) > 0): ?>
+        <div class="product-price-stack">
+            <div class="product-price-line">
+                <span>Precio Lista</span>
+                <strong><?php echo e($product['list_currency_code']); ?> <?php echo number_format((float) $product['list_price'], 2); ?></strong>
+            </div>
+            <?php if (!empty($product['has_customer_price'])): ?>
+            <div class="product-price-line preferred">
+                <span>Tu Precio</span>
+                <strong><?php echo e($product['customer_currency_code']); ?> <?php echo number_format((float) $product['customer_price'], 2); ?></strong>
+            </div>
+            <?php endif; ?>
+            <?php if (!empty($product['has_preferential_price'])): ?>
+            <div class="product-savings">Ahorro: <?php echo e($product['list_currency_code']); ?> <?php echo number_format((float) $product['price_savings'], 2); ?></div>
+            <?php endif; ?>
         </div>
         <?php echo Form::open(['action' => 'carrito/agregar', 'method' => 'post', 'class' => 'product-cart-form', 'data-cart-ajax' => '1']); ?>
             <?php echo Form::hidden('product_id', (int) $product['id']); ?>
-            <?php echo Form::input('quantity', 1, ['type' => 'number', 'min' => '1', 'step' => '1']); ?>
+            <label class="product-quote-quantity">Cantidad
+                <?php echo Form::input('quantity', 1, ['type' => 'number', 'min' => '1', 'step' => '1', 'data-whatsapp-quantity' => '1']); ?>
+            </label>
             <button type="submit">Agregar al carrito</button>
         <?php echo Form::close(); ?>
         <?php else: ?>
         <div class="product-login-price">
-            <a href="<?php echo Uri::create('acceso'); ?>">Inicia sesión</a> o <a href="<?php echo Uri::create('registro'); ?>">crea tu cuenta</a> para consultar precio y comprar.
+            Solicita precio y disponibilidad con un asesor comercial.
         </div>
         <?php endif; ?>
 
         <?php if (!empty($product['inquiry_enabled'])): ?>
         <div class="product-commercial-actions product-commercial-actions--detail">
-            <a class="product-inquiry-link product-inquiry-link--primary product-inquiry-link--large" href="<?php echo e($primary_inquiry_url); ?>" target="<?php echo e($primary_inquiry_target); ?>" rel="noopener noreferrer"><i class="<?php echo $whatsapp_configured ? 'bi bi-whatsapp' : 'bi bi-chat-dots'; ?>"></i> <?php echo e($primary_inquiry_label); ?></a>
-            <a class="product-secondary-link" href="<?php echo Uri::create('productos'); ?>">Ver catálogo</a>
+            <?php if (empty($product['can_view_price']) || (float) \Arr::get($product, 'list_price', 0) <= 0): ?>
+            <label class="product-quote-quantity">Cantidad
+                <input type="number" min="1" step="1" value="1" data-whatsapp-quantity>
+            </label>
+            <?php endif; ?>
+            <a class="product-inquiry-link <?php echo (!empty($product['can_view_price']) && (float) \Arr::get($product, 'price', 0) > 0) ? '' : 'product-inquiry-link--primary'; ?> product-inquiry-link--large" data-track-event="quote_click whatsapp_product" data-whatsapp-product-link href="<?php echo e($primary_inquiry_url); ?>" target="<?php echo e($primary_inquiry_target); ?>" rel="noopener noreferrer"><i class="<?php echo $whatsapp_configured ? 'bi bi-whatsapp' : 'bi bi-chat-dots'; ?>"></i> <?php echo e($primary_inquiry_label); ?></a>
+            <?php if (empty($product['can_view_price'])): ?>
+            <a class="product-secondary-link" href="<?php echo Uri::create('registro'); ?>">Crear cuenta empresarial</a>
+            <?php endif; ?>
         </div>
         <?php endif; ?>
+        <div class="product-registration-benefits">
+            Los clientes registrados pueden acceder a precios preferenciales, historial de cotizaciones, pedidos y portal de clientes.
+        </div>
 
         <?php if (!empty($trust_badges)): ?>
         <div class="product-trust-badges" aria-label="Beneficios comerciales">
@@ -324,10 +354,10 @@ $trust_badges = !empty($conversion_settings['trust_badges']) && is_array($conver
 
         <div class="product-compatibility-help">
             <h2>¿No estás seguro si este producto es compatible?</h2>
-            <p>Te ayudamos a validar modelo, impresora o consumible correcto.</p>
+            <p>Te ayudamos a validar modelo, impresora, consumible correcto o alternativa compatible antes de cotizar.</p>
             <div class="product-compatibility-actions">
                 <?php if (!empty($product['inquiry_enabled'])): ?>
-                <a class="product-inquiry-link product-inquiry-link--primary" href="<?php echo e($primary_inquiry_url); ?>" target="<?php echo e($primary_inquiry_target); ?>" rel="noopener noreferrer"><i class="<?php echo $whatsapp_configured ? 'bi bi-whatsapp' : 'bi bi-chat-dots'; ?>"></i> <?php echo e($whatsapp_configured ? 'WhatsApp' : 'Contacto'); ?></a>
+                <a class="product-inquiry-link product-inquiry-link--primary" data-track-event="whatsapp_product" href="<?php echo e($primary_inquiry_url); ?>" target="<?php echo e($primary_inquiry_target); ?>" rel="noopener noreferrer"><i class="<?php echo $whatsapp_configured ? 'bi bi-whatsapp' : 'bi bi-chat-dots'; ?>"></i> <?php echo e($whatsapp_configured ? 'WhatsApp' : 'Contacto'); ?></a>
                 <?php endif; ?>
                 <a class="product-secondary-link" href="<?php echo Uri::create('productos'); ?>">Ver catálogo</a>
             </div>
@@ -354,6 +384,7 @@ $trust_badges = !empty($conversion_settings['trust_badges']) && is_array($conver
     <h2>Productos relacionados</h2>
     <div class="related-grid">
         <?php foreach ($related_products as $related): ?>
+        <?php $related_has_purchasable_price = !empty($related['can_view_price']) && (float) \Arr::get($related, 'price', 0) > 0; ?>
         <article class="related-card">
             <a href="<?php echo e(Uri::create('producto/'.$related['slug'])); ?>">
                 <img src="<?php echo e(!empty($related['main_image_path']) ? $media_url($related['main_image_path']) : $no_image_svg); ?>" alt="<?php echo e($related['name']); ?>">
@@ -368,15 +399,27 @@ $trust_badges = !empty($conversion_settings['trust_badges']) && is_array($conver
                 <p><?php echo e($related['short_description']); ?></p>
                 <?php endif; ?>
                 <?php if (!empty($related['can_view_price']) && (float) \Arr::get($related, 'price', 0) > 0): ?>
-                <div class="product-price" style="font-size: 1.05rem; margin: 12px 0 0;">
-                    <?php echo e($related['currency_code']); ?> <?php echo number_format((float) $related['price'], 2); ?>
+                <div class="catalog-price-stack compact">
+                    <div class="catalog-price-line"><span>Precio Lista</span><strong><?php echo e($related['list_currency_code']); ?> <?php echo number_format((float) $related['list_price'], 2); ?></strong></div>
+                    <?php if (!empty($related['has_customer_price'])): ?>
+                    <div class="catalog-price-line preferred"><span>Tu Precio</span><strong><?php echo e($related['customer_currency_code']); ?> <?php echo number_format((float) $related['customer_price'], 2); ?></strong></div>
+                    <?php endif; ?>
                 </div>
                 <?php else: ?>
-                <div class="product-quote-state">Precio a consultar</div>
+                <div class="product-quote-state">Solicita precio y disponibilidad con un asesor comercial.</div>
                 <?php endif; ?>
                 <div class="product-card-actions">
-                    <a class="card-action" href="<?php echo e(Uri::create('producto/'.$related['slug'])); ?>">Ver producto <i class="bi bi-arrow-right"></i></a>
-                    <a class="product-inquiry-link" href="<?php echo e(\Arr::get($related, 'inquiry_url', Uri::create('pagina/contacto', array(), array('producto' => \Arr::get($related, 'name', ''), 'sku' => \Arr::get($related, 'sku', ''))))); ?>" target="<?php echo e(\Arr::get($related, 'inquiry_target', '_self')); ?>" rel="noopener noreferrer">Consultar producto</a>
+                    <?php if ($related_has_purchasable_price): ?>
+                    <?php echo Form::open(['action' => 'carrito/agregar', 'method' => 'post', 'class' => 'product-card-cart-form', 'data-cart-ajax' => '1']); ?>
+                        <?php echo Form::hidden('product_id', (int) $related['id']); ?>
+                        <?php echo Form::hidden('quantity', 1); ?>
+                        <button class="product-inquiry-link product-inquiry-link--primary" type="submit">Agregar al carrito</button>
+                    <?php echo Form::close(); ?>
+                    <a class="product-inquiry-link" data-track-event="quote_click whatsapp_product" href="<?php echo e(\Arr::get($related, 'inquiry_url', Uri::create('pagina/contacto', array(), array('producto' => \Arr::get($related, 'name', ''), 'sku' => \Arr::get($related, 'sku', ''))))); ?>" target="<?php echo e(\Arr::get($related, 'inquiry_target', '_self')); ?>" rel="noopener noreferrer">Cotizar</a>
+                    <?php else: ?>
+                    <a class="product-inquiry-link product-inquiry-link--primary" data-track-event="quote_click whatsapp_product" href="<?php echo e(\Arr::get($related, 'inquiry_url', Uri::create('pagina/contacto', array(), array('producto' => \Arr::get($related, 'name', ''), 'sku' => \Arr::get($related, 'sku', ''))))); ?>" target="<?php echo e(\Arr::get($related, 'inquiry_target', '_self')); ?>" rel="noopener noreferrer">Cotizar</a>
+                    <?php endif; ?>
+                    <a class="card-action secondary" href="<?php echo e(Uri::create('producto/'.$related['slug'])); ?>">Ver producto</a>
                 </div>
             </div>
         </article>

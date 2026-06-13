@@ -170,6 +170,27 @@ class Helper_Core_Web
                 '{sku}' => trim((string) \Arr::get($data, 'sku', '')),
                 '{url}' => trim((string) \Arr::get($data, 'url', '')),
             ));
+            $quantity = max(1, (int) \Arr::get($data, 'quantity', 1));
+            if ($quantity > 1 || strpos($message, '{quantity}') !== false) {
+                $message = str_replace('{quantity}', (string) $quantity, $message);
+                if (strpos($message, 'Cantidad') === false) {
+                    $message .= ' Cantidad: '.$quantity;
+                }
+            }
+        } elseif ($context === 'cart') {
+            $items = \Arr::get($data, 'items', array());
+            $lines = array('Hola, quiero cotizar esta solicitud:');
+            foreach ($items as $item) {
+                $name = trim((string) \Arr::get($item, 'name', 'Producto'));
+                $sku = trim((string) \Arr::get($item, 'sku', ''));
+                $quantity = max(1, (int) \Arr::get($item, 'quantity', 1));
+                $lines[] = '- '.$name.($sku !== '' ? ' | SKU: '.$sku : '').' | Cantidad: '.$quantity;
+            }
+            $url = trim((string) \Arr::get($data, 'url', ''));
+            if ($url !== '') {
+                $lines[] = 'URL: '.$url;
+            }
+            $message = implode("\n", $lines);
         }
 
         $url = 'https://wa.me/'.$phone;

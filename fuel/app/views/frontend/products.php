@@ -21,6 +21,14 @@ $category_url = function ($slug) {
     return Uri::create('categoria/'.$slug);
 };
 
+$product_contact_url = function ($product) {
+    return Uri::create('pagina/contacto', array(), array(
+        'producto' => \Arr::get($product, 'name', ''),
+        'sku' => \Arr::get($product, 'sku', ''),
+        'url' => Uri::create('producto/'.\Arr::get($product, 'slug', '')),
+    ));
+};
+
 $filters = !empty($filters) ? $filters : array(
     'q' => '',
     'category_id' => 0,
@@ -44,6 +52,25 @@ $empty_help_target = '_blank';
 if ($empty_help_url === '') {
     $empty_help_url = Uri::create('pagina/contacto');
     $empty_help_target = '_self';
+}
+$active_filter_chips = array();
+if (!empty($filters['q'])) {
+    $active_filter_chips[] = 'Búsqueda: '.$filters['q'];
+}
+if (!empty($filters['featured'])) {
+    $active_filter_chips[] = 'Solo destacados';
+}
+foreach (array('category_id' => 'Categoría', 'subcategory_id' => 'Subcategoría', 'brand_id' => 'Marca') as $filter_key => $filter_label) {
+    if (empty($filters[$filter_key])) {
+        continue;
+    }
+    $option_key = $filter_key === 'brand_id' ? 'brands' : ($filter_key === 'subcategory_id' ? 'subcategories' : 'categories');
+    foreach ($options[$option_key] as $option) {
+        if ((int) $option['value'] === (int) $filters[$filter_key]) {
+            $active_filter_chips[] = $filter_label.': '.$option['label'];
+            break;
+        }
+    }
 }
 ?>
 
@@ -263,8 +290,9 @@ if ($empty_help_url === '') {
     <div class="catalog-shell">
         <div class="catalog-layout">
             <aside class="catalog-filters">
-                <h2>Filtrar catálogo</h2>
-                <form method="get" action="<?php echo e($catalog_action); ?>">
+                <details class="catalog-filter-panel" open>
+                <summary><i class="bi bi-sliders"></i> Filtrar catálogo</summary>
+                <form method="get" action="<?php echo e($catalog_action); ?>" data-track-form="catalog_search">
                     <div class="filter-field catalog-search-field">
                         <label for="catalog-q">Buscar</label>
                         <input id="catalog-q" type="search" name="q" value="<?php echo e($filters['q']); ?>" placeholder="Busca por producto, SKU, modelo o marca">
@@ -329,6 +357,7 @@ if ($empty_help_url === '') {
                         <a href="<?php echo e($catalog_action); ?>">Limpiar</a>
                     </div>
                 </form>
+                </details>
             </aside>
 
             <div class="catalog-results">
@@ -343,10 +372,18 @@ if ($empty_help_url === '') {
                     Mostrando resultados para <strong><?php echo e($filters['q']); ?></strong>
                 </div>
                 <?php endif; ?>
+                <?php if (!empty($active_filter_chips)): ?>
+                <div class="catalog-filter-chips" aria-label="Filtros activos">
+                    <?php foreach ($active_filter_chips as $chip): ?>
+                    <span><?php echo e($chip); ?></span>
+                    <?php endforeach; ?>
+                </div>
+                <?php endif; ?>
 
         <?php if (!empty($products)): ?>
         <div class="catalog-grid">
             <?php foreach ($products as $product): ?>
+            <?php $has_purchasable_price = !empty($product['can_view_price']) && (float) \Arr::get($product, 'price', 0) > 0; ?>
             <article class="catalog-card">
                 <a href="<?php echo e($product_url($product['slug'])); ?>">
                     <img src="<?php echo e(!empty($product['main_image_path']) ? $media_url($product['main_image_path']) : $no_image_svg); ?>" alt="<?php echo e($product['name']); ?>">
@@ -367,17 +404,37 @@ if ($empty_help_url === '') {
                     <p><?php echo e($product['short_description']); ?></p>
                     <?php endif; ?>
                     <?php if (!empty($product['can_view_price']) && (float) $product['price'] > 0): ?>
-                    <div class="catalog-price">
-                        <?php echo e($product['currency_code']); ?> <?php echo number_format((float) $product['price'], 2); ?>
+                    <div class="catalog-price-stack">
+                        <div class="catalog-price-line"><span>Precio Lista</span><strong><?php echo e($product['list_currency_code']); ?> <?php echo number_format((float) $product['list_price'], 2); ?></strong></div>
+                        <?php if (!empty($product['has_customer_price'])): ?>
+                        <div class="catalog-price-line preferred"><span>Tu Precio</span><strong><?php echo e($product['customer_currency_code']); ?> <?php echo number_format((float) $product['customer_price'], 2); ?></strong></div>
+                        <?php endif; ?>
+                        <?php if (!empty($product['has_preferential_price'])): ?>
+                        <div class="catalog-savings">Ahorro: <?php echo e($product['list_currency_code']); ?> <?php echo number_format((float) $product['price_savings'], 2); ?></div>
+                        <?php endif; ?>
                     </div>
                     <?php else: ?>
                     <div class="product-quote-state">
-                        Precio a consultar
+                        Solicita precio y disponibilidad con un asesor comercial.
                     </div>
                     <?php endif; ?>
+                    <div class="product-commerce-badges">
+                        <span><i class="bi bi-receipt"></i> Facturación disponible</span>
+                        <span><i class="bi bi-briefcase"></i> Atención empresarial</span>
+                        <span><i class="bi bi-truck"></i> Entrega disponible</span>
+                    </div>
                     <div class="product-card-actions">
-                        <a class="card-action" href="<?php echo e($product_url($product['slug'])); ?>">Ver producto <i class="bi bi-arrow-right"></i></a>
-                        <?php if (!empty($product['inquiry_enabled'])): ?><a class="product-inquiry-link" href="<?php echo e(\Arr::get($product, 'inquiry_url', Uri::create('pagina/contacto'))); ?>" target="<?php echo e(\Arr::get($product, 'inquiry_target', '_self')); ?>" rel="noopener noreferrer"><?php echo e(\Arr::get($product, 'inquiry_label', 'Consultar producto')); ?></a><?php endif; ?>
+                        <?php if ($has_purchasable_price): ?>
+                        <?php echo Form::open(['action' => 'carrito/agregar', 'method' => 'post', 'class' => 'product-card-cart-form', 'data-cart-ajax' => '1']); ?>
+                            <?php echo Form::hidden('product_id', (int) $product['id']); ?>
+                            <?php echo Form::hidden('quantity', 1); ?>
+                            <button class="product-inquiry-link product-inquiry-link--primary" type="submit">Agregar al carrito</button>
+                        <?php echo Form::close(); ?>
+                        <a class="product-inquiry-link" href="<?php echo e(!empty($product['inquiry_enabled']) ? \Arr::get($product, 'inquiry_url', $product_contact_url($product)) : $product_contact_url($product)); ?>" target="<?php echo e(!empty($product['inquiry_enabled']) ? \Arr::get($product, 'inquiry_target', '_self') : '_self'); ?>" rel="noopener noreferrer" data-track-event="<?php echo !empty($product['inquiry_enabled']) ? 'quote_click whatsapp_catalog' : 'quote_click'; ?>">Cotizar</a>
+                        <?php else: ?>
+                        <?php if (!empty($product['inquiry_enabled'])): ?><a class="product-inquiry-link product-inquiry-link--primary" data-track-event="quote_click whatsapp_catalog" href="<?php echo e(\Arr::get($product, 'inquiry_url', Uri::create('pagina/contacto'))); ?>" target="<?php echo e(\Arr::get($product, 'inquiry_target', '_self')); ?>" rel="noopener noreferrer">Cotizar</a><?php endif; ?>
+                        <?php endif; ?>
+                        <a class="card-action secondary" href="<?php echo e($product_url($product['slug'])); ?>">Ver producto <i class="bi bi-arrow-right"></i></a>
                     </div>
                 </div>
             </article>
@@ -387,7 +444,7 @@ if ($empty_help_url === '') {
         <div class="empty-state">
             <h2>No encontramos productos con esos filtros.</h2>
             <p>Podemos ayudarte a ubicar una alternativa compatible o confirmar disponibilidad con un asesor.</p>
-            <a class="empty-state-action" href="<?php echo e($empty_help_url); ?>" target="<?php echo e($empty_help_target); ?>" rel="noopener noreferrer">Solicitar ayuda para encontrarlo</a>
+            <a class="empty-state-action" data-track-event="<?php echo !empty($filters['q']) ? 'whatsapp_search' : 'whatsapp_catalog'; ?>" href="<?php echo e($empty_help_url); ?>" target="<?php echo e($empty_help_target); ?>" rel="noopener noreferrer">Solicitar ayuda para encontrarlo</a>
         </div>
         <?php endif; ?>
             </div>

@@ -30,7 +30,7 @@ class Controller_Cart extends Controller_Template
         parent::before();
 
         # SE PREPARA PLANTILLA PUBLICA
-        $this->prepare_template('Carrito', 'Carrito de compra.');
+        $this->prepare_template('Carrito / Solicitud', 'Carrito y solicitud de cotizaci髇.');
     }
 
     /**
@@ -47,7 +47,7 @@ class Controller_Cart extends Controller_Template
         $cart = Helper_Core_Cart::current_cart(false);
 
         # SE CARGA VISTA DEL CARRITO
-        $this->template->title = 'Carrito';
+        $this->template->title = 'Carrito / Solicitud';
         $this->template->content = View::forge('cart/index', [
             'cart' => $cart,
             'items' => $cart ? Helper_Core_Cart::items($cart) : [],
@@ -69,9 +69,9 @@ class Controller_Cart extends Controller_Template
         # SE REQUIERE CLIENTE PARA NO EXPONER PRECIOS A VISITANTES ANONIMOS
         if (!$this->customer_link()) {
             if ($this->is_ajax_request()) {
-                return $this->json_response(['error' => 'Inicia sesion para agregar productos al carrito.', 'redirect' => \Uri::create('acceso')], 401);
+                return $this->json_response(['error' => 'Inicia sesi贸n para guardar una solicitud formal.', 'redirect' => \Uri::create('acceso')], 401);
             }
-            \Session::set_flash('error', 'Inicia sesion para agregar productos al carrito.');
+            \Session::set_flash('error', 'Inicia sesi贸n para guardar una solicitud formal.');
             \Response::redirect('acceso');
         }
 
@@ -83,13 +83,13 @@ class Controller_Cart extends Controller_Template
             if ($this->is_ajax_request()) {
                 return $this->json_response([
                     'status' => 'ok',
-                    'message' => 'Producto agregado al carrito.',
+                    'message' => 'Producto agregado a la solicitud.',
                     'cart_count' => Helper_Core_Cart::count(),
                 ]);
             }
-            \Session::set_flash('success', 'Producto agregado al carrito.');
+            \Session::set_flash('success', 'Producto agregado a la solicitud.');
         } catch (\Exception $e) {
-            \Log::warning('No se pudo agregar producto al carrito: '.$e->getMessage());
+            \Log::warning('No se pudo agregar producto a la solicitud: '.$e->getMessage());
             if ($this->is_ajax_request()) {
                 return $this->json_response(['error' => $e->getMessage()], 422);
             }
@@ -158,7 +158,7 @@ class Controller_Cart extends Controller_Template
             Helper_Core_Cart::update_item((int) $item_id, (float) $quantity);
         }
 
-        \Session::set_flash('success', 'Carrito actualizado.');
+        \Session::set_flash('success', 'Solicitud actualizada.');
         \Response::redirect('carrito');
     }
 
@@ -189,7 +189,7 @@ class Controller_Cart extends Controller_Template
     {
         # SE ELIMINA ITEM SI PERTENECE AL CARRITO
         Helper_Core_Cart::remove_item((int) $item_id);
-        \Session::set_flash('success', 'Producto eliminado del carrito.');
+        \Session::set_flash('success', 'Producto eliminado de la solicitud.');
         \Response::redirect('carrito');
     }
 
@@ -205,7 +205,7 @@ class Controller_Cart extends Controller_Template
     {
         # SE VACIA CARRITO
         Helper_Core_Cart::clear();
-        \Session::set_flash('success', 'Carrito vacio.');
+        \Session::set_flash('success', 'Solicitud vac铆a.');
         \Response::redirect('carrito');
     }
 
@@ -221,14 +221,14 @@ class Controller_Cart extends Controller_Template
     {
         # SI NO HAY CLIENTE, SE ENVIA A LOGIN
         if (!$this->customer_link()) {
-            \Session::set_flash('error', 'Inicia sesion para continuar con tu carrito.');
+            \Session::set_flash('error', 'Inicia sesi贸n para generar tu solicitud de cotizaci贸n formal.');
             \Response::redirect('acceso');
         }
 
         # SE CONVIERTE CARRITO EN SOLICITUD DE COTIZACION
         try {
             $quote = Helper_Core_Cart::checkout_quote((string) \Input::post('customer_notes', ''));
-            \Session::set_flash('success', 'Solicitud de cotizacion generada: '.$quote->folio.'.');
+            \Session::set_flash('success', 'Solicitud de cotizaci贸n generada: '.$quote->folio.'.');
         } catch (\Exception $e) {
             \Session::set_flash('error', $e->getMessage());
         }
@@ -277,6 +277,8 @@ class Controller_Cart extends Controller_Template
             'name' => \Auth::check() ? \Auth::get_screen_name() : '',
         ];
         $this->template->cart_count = class_exists('Helper_Core_Cart') ? Helper_Core_Cart::count() : 0;
+        $this->template->whatsapp_url = class_exists('Helper_Core_Web') ? Helper_Core_Web::whatsapp_url() : '';
+        $this->template->conversion_settings = class_exists('Helper_Core_Web') ? Helper_Core_Web::conversion_settings() : array();
         $this->template->set('cookie_banner', class_exists('Helper_Core_Legal') ? Helper_Core_Legal::render_cookie_banner() : '', false);
     }
 
