@@ -4,7 +4,7 @@
             <div class="d-flex justify-content-between align-items-start flex-wrap">
                 <div>
                     <h1 class="h4 mb-1">{{ labels.profile || 'Mi cuenta' }}</h1>
-                    <p class="text-muted mb-0">Administra informacion operativa del portal sin depender del administrador para cada ajuste.</p>
+                    <p class="text-muted mb-0">Administra información operativa del portal sin depender del administrador para cada ajuste.</p>
                 </div>
                 <div class="portal-page-actions mt-3 mt-md-0">
                     <a class="btn btn-outline-secondary btn-sm" v-bind:href="baseUrl + portal">
@@ -87,7 +87,7 @@
                     </dl>
 
                     <div class="alert alert-light border small">
-                        Cambia solo tu contrasena de acceso. Debe tener minimo 12 caracteres. Esto no modifica permisos, grupo, correo ni datos fiscales.
+                        Cambia solo tu contraseña de acceso. Debe tener mínimo 12 caracteres. Esto no modifica permisos, grupo, correo ni datos fiscales.
                     </div>
 
                     <div class="form-group">
@@ -95,17 +95,17 @@
                         <input type="password" class="form-control" v-model="password_form.current_password" autocomplete="current-password">
                     </div>
                     <div class="form-group">
-                        <label>Nueva contrasena</label>
+                        <label>Nueva contraseña</label>
                         <input type="password" class="form-control" v-model="password_form.password" autocomplete="new-password">
                         <small class="text-muted">Minimo 12 caracteres.</small>
                     </div>
                     <div class="form-group">
-                        <label>Confirmar nueva contrasena</label>
+                        <label>Confirmar nueva contraseña</label>
                         <input type="password" class="form-control" v-model="password_form.password_confirm" autocomplete="new-password">
                     </div>
                     <button class="btn btn-primary btn-sm" v-on:click="changePassword" v-bind:disabled="password_saving">
                         <span v-if="password_saving" class="spinner-border spinner-border-sm mr-1"></span>
-                        Cambiar contrasena
+                        Cambiar contraseña
                     </button>
                 </div>
             </div>
@@ -307,7 +307,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         return response.json().then(function(json) { if (!response.ok) { throw json; } return json; });
                     })
                     .then(function(json) { self.apply(json); })
-                    .catch(function(err) { self.error = err && err.error ? err.error : 'No se pudo cargar la informacion. Revisa sesion, permisos o conexion.'; });
+                    .catch(function(err) { self.error = err && err.error ? err.error : 'No se pudo cargar la información. Revisa sesión, permisos o conexión.'; });
             },
             apply: function(json) {
                 this.user = json.user || {};

@@ -75,6 +75,7 @@ return array (
         69 => '071_create_core_contract_tables',
         70 => '072_make_contract_approval_fields_nullable',
         71 => '073_create_user_password_policy_phase2a',
+        72 => '074_create_core_workspace_foundation',
       ),
     ),
     'module' => array(    

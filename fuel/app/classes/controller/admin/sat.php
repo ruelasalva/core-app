@@ -141,7 +141,7 @@ class Controller_Admin_Sat extends Controller_Adminbase
             ]);
         } catch (\Exception $e) {
             \Log::error('Error cargando catalogos SAT: '.$e->getMessage());
-            return $this->json_response(['error' => 'No se pudieron cargar los catalogos SAT.'], 500);
+            return $this->json_response(['error' => 'No se pudieron cargar los catálogos SAT.'], 500);
         }
     }
 
@@ -294,7 +294,7 @@ class Controller_Admin_Sat extends Controller_Adminbase
 
             $source = \DB::select()->from('core_sat_catalog_sync_sources')->where('catalog_key', '=', $catalog)->where('active', '=', 1)->execute()->current();
             if (!$source) {
-                return $this->json_response(['error' => 'No hay fuente activa para este catalogo. Captura la URL oficial del SAT primero.'], 422);
+                return $this->json_response(['error' => 'No hay fuente activa para este catálogo. Captura la URL oficial del SAT primero.'], 422);
             }
 
             try {
@@ -354,12 +354,16 @@ class Controller_Admin_Sat extends Controller_Adminbase
 
             # SE BUSCA O CREA CONFIGURACION
             $config = Model_Core_Sat_Config::get_current();
+            $storage_path = trim((string) \Arr::get($val, 'storage_path', $config->storage_path));
+            if ($storage_path === '') {
+                $storage_path = 'fuel/app/storage/sat';
+            }
 
             # SE ASIGNAN DATOS
             $config->set([
                 'mode' => trim((string) \Arr::get($val, 'mode', 'test')) === 'production' ? 'production' : 'test',
                 'enabled' => (int) (bool) \Arr::get($val, 'enabled', false),
-                'storage_path' => trim((string) \Arr::get($val, 'storage_path', 'fuel/app/storage/sat')),
+                'storage_path' => $storage_path,
             ]);
             $config->save();
 
@@ -668,7 +672,8 @@ class Controller_Admin_Sat extends Controller_Adminbase
             'id' => (int) $config->id,
             'mode' => (string) $config->mode,
             'enabled' => (int) $config->enabled,
-            'storage_path' => (string) $config->storage_path,
+            'storage_label' => 'Almacenamiento SAT configurado',
+            'storage_note' => 'Ubicación protegida del sistema',
             'last_sync_at' => $config->last_sync_at ? date('d/m/Y H:i', $config->last_sync_at) : 'Nunca',
         ];
     }
@@ -951,7 +956,7 @@ class Controller_Admin_Sat extends Controller_Adminbase
                 'package_type' => (string) $package->package_type,
                 'xml_count' => (int) $package->xml_count,
                 'status' => (string) $package->status,
-                'path' => (string) $package->path,
+                'storage_label' => $package->path ? 'Ubicación protegida' : 'Sin archivo',
                 'sha256_hash' => (string) $package->sha256_hash,
                 'created_at' => $package->created_at ? date('d/m/Y H:i', $package->created_at) : '',
             ];
@@ -1207,7 +1212,7 @@ class Controller_Admin_Sat extends Controller_Adminbase
         # SE VERIFICA CADA TABLA REQUERIDA
         foreach ($this->get_catalog_definitions() as $definition) {
             if (!\DBUtil::table_exists($definition['table'])) {
-                throw new \RuntimeException('Falta ejecutar migraciones de catalogos SAT.');
+                throw new \RuntimeException('Falta ejecutar migraciones de catálogos SAT.');
             }
         }
     }

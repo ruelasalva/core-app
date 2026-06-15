@@ -118,7 +118,7 @@ class Controller_Proveedores extends Controller_Proveedores_Compras
             return \Response::forge(View::forge('portal/supplier_register', [
                 'action' => Uri::create('proveedores/registro_submit'),
                 'error' => '',
-                'success' => 'Solicitud recibida. Nuestro equipo revisara tu informacion y activara el portal cuando sea aprobada.',
+                'success' => 'Solicitud recibida. Nuestro equipo revisará tu información y activará el portal cuando sea aprobada.',
                 'values' => [],
                 'sat_tax_regimes' => Helper_Core_Sat_Catalog::options('core_sat_tax_regimes'),
             ]));
@@ -446,6 +446,7 @@ class Controller_Proveedores extends Controller_Proveedores_Compras
             ->where('l.entity_type', '=', 'contract')
             ->where('l.active', '=', 1)
             ->where('d.active', '=', 1)
+            ->where('d.visibility', 'in', ['portal', 'public'])
             ->order_by('l.id', 'desc')
             ->limit(500)
             ->execute();
@@ -557,6 +558,7 @@ class Controller_Proveedores extends Controller_Proveedores_Compras
             ->where('l.entity_type', '=', 'contract')
             ->where('l.active', '=', 1)
             ->where('d.active', '=', 1)
+            ->where('d.visibility', 'in', ['portal', 'public'])
             ->execute()
             ->current();
     }

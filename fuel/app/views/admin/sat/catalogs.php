@@ -44,7 +44,7 @@
         <div class="card-body">
             <div v-if="loading" class="text-center p-5">
                 <div class="spinner-border text-primary" role="status"></div>
-                <p class="mt-2">Cargando catalogos SAT...</p>
+                <p class="mt-2">Cargando catálogos SAT...</p>
             </div>
 
             <div v-show="!loading" class="card bg-light border mb-3">
@@ -52,7 +52,7 @@
                     <div class="d-flex justify-content-between align-items-center mb-2">
                         <div>
                             <h5 class="mb-1">Sincronizacion oficial SAT</h5>
-                            <small class="text-muted">Descarga un archivo CSV, XLSX o Excel-HTML del SAT y actualiza el catalogo seleccionado por codigo.</small>
+                            <small class="text-muted">Descarga un archivo CSV, XLSX o Excel-HTML del SAT y actualiza el catálogo seleccionado por código.</small>
                         </div>
                         <button class="btn btn-success btn-sm" @click="syncCatalog" :disabled="syncing || !currentSyncSource.source_url">
                             <i class="bi bi-arrow-repeat"></i> {{ syncing ? 'Sincronizando...' : 'Sincronizar' }}
@@ -228,7 +228,7 @@ window.onload = function() {
                     .then(window.coreAppParseJsonResponse)
                     .then(data => {
                         this.loading = false;
-                        if (data.error) { alert(data.error); return; }
+                        if (data.error) { this.syncError = true; this.syncMessage = data.error; return; }
                         this.definitions = data.definitions || {};
                         this.items = data.items || {};
                         this.stats = data.stats || {};
@@ -264,7 +264,7 @@ window.onload = function() {
                 })
                 .then(window.coreAppParseJsonResponse)
                 .then(data => {
-                    if (data.error) { alert(data.error); return; }
+                    if (data.error) { this.syncError = true; this.syncMessage = data.error; return; }
                     this.items = data.items || {};
                     this.stats = data.stats || {};
                     this.hideModal('modal-sat-catalog');
@@ -286,7 +286,7 @@ window.onload = function() {
             syncCatalog() {
                 this.syncing = true;
                 this.syncError = false;
-                this.syncMessage = 'Descargando y procesando catalogo...';
+                this.syncMessage = 'Descargando y procesando catálogo...';
                 fetch('<?php echo Uri::create('admin/sat/sync_catalog'); ?>', {
                     ...window.coreAppFetchOptions({ catalog_key: this.currentCatalog })
                 })

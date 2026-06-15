@@ -318,7 +318,7 @@
                                 <td colspan="5">
                                     <div class="portal-empty m-3">
                                         Sin aplicaciones de pago para los filtros seleccionados.
-                                        <div class="small mt-1">Los pagos pueden aparecer despues de validacion administrativa.</div>
+                                        <div class="small mt-1">Los pagos pueden aparecer después de validación administrativa.</div>
                                     </div>
                                 </td>
                             </tr>

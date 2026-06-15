@@ -68,6 +68,12 @@ class Controller_Portalbase extends Controller_Template
             \Response::redirect($this->portal_code.'/login');
         }
 
+        # BLOQUEA PORTALES SI EL USUARIO DEBE CAMBIAR CONTRASENA
+        if ((int) \Session::get('password_change_required', 0) === 1 || $this->password_policy()->must_change($this->user_id)) {
+            $this->set_password_change_context();
+            \Response::redirect('auth/force_password_change');
+        }
+
         $this->branding = Model_Core_Party_Branding::query()
             ->where('party_id', (int) $this->portal_link->party_id)
             ->where('portal_code', $this->portal_code)
@@ -1240,6 +1246,7 @@ class Controller_Portalbase extends Controller_Template
             ->where('l.entity_id', '=', (int) $party_id)
             ->where('l.active', '=', 1)
             ->where('d.active', '=', 1)
+            ->where('d.visibility', 'in', ['portal', 'public'])
             ->order_by('d.id', 'desc')
             ->limit(100)
             ->execute();
@@ -1408,6 +1415,23 @@ class Controller_Portalbase extends Controller_Template
     }
 
     /**
+     * SET PASSWORD CHANGE CONTEXT
+     *
+     * GUARDA EL CONTEXTO DEL PORTAL PARA VOLVER AL AREA CORRECTA.
+     *
+     * @access  protected
+     * @return  Void
+     */
+    protected function set_password_change_context()
+    {
+        \Session::set('password_change_required', 1);
+        \Session::set('password_change_context', 'portal');
+        \Session::set('password_change_redirect', $this->portal_code);
+        \Session::set('password_change_logout', $this->portal_code.'/logout');
+        \Session::set('password_change_portal_code', $this->portal_code);
+    }
+
+    /**
      * ADMIN USER IDS
      *
      * OBTIENE USUARIOS ADMINISTRATIVOS PARA NOTIFICACION INICIAL
@@ -1480,6 +1504,7 @@ class Controller_Portalbase extends Controller_Template
             ->where('l.entity_id', '=', (int) $this->portal_link->party_id)
             ->where('l.active', '=', 1)
             ->where('d.active', '=', 1)
+            ->where('d.visibility', 'in', ['portal', 'public'])
             ->execute()
             ->current();
     }

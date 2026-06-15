@@ -1,6 +1,6 @@
                 <div class="modal-body">
                     <div class="alert alert-light border py-2">
-                        <span :class="offline.online ? 'text-success' : 'text-warning'">{{ offline.online ? 'Con conexion' : 'Sin conexion' }}</span>
+                        <span :class="offline.online ? 'text-success' : 'text-warning'">{{ offline.online ? 'Con conexión' : 'Sin conexión' }}</span>
                         <span v-if="offline.lastSaved" class="text-muted ml-2">Borrador local guardado {{ offline.lastSaved }}</span>
                     </div>
                     <h6 class="quote-section-title quote-section-partner">Datos del socio</h6>
@@ -26,7 +26,7 @@
                                 <label>Modo</label>
                                 <select class="form-control" v-model="quoteForm.quote_mode">
                                     <option value="quote">Cotizacion con precios</option>
-                                    <option value="prequote">Precotizacion / catalogo sin precios</option>
+                                    <option value="prequote">Precotización / catálogo sin precios</option>
                                 </select>
                             </div>
                             <div class="col-md-5">

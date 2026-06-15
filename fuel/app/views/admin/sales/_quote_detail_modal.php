@@ -67,7 +67,7 @@
                     <div class="form-group">
                         <label>Estado</label>
                         <select class="form-control" v-model="selected.status">
-                            <option value="prequote">Precotizacion</option>
+                            <option value="prequote">Precotización</option>
                             <option value="requested">Solicitada</option>
                             <option value="approved">Aprobada</option>
                             <option value="rejected">Rechazada</option>
@@ -110,7 +110,7 @@
                                 </select>
                             </div>
                             <div class="col-md-4">
-                                <button class="btn btn-primary btn-block" @click="closePrequote">Cerrar cotizacion</button>
+                                <button class="btn btn-primary btn-block" @click="closePrequote">Cerrar cotización</button>
                             </div>
                         </div>
                     </div>

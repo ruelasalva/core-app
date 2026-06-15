@@ -64,7 +64,7 @@
                 <div class="col-lg-4">
                     <div class="form-group">
                         <label>Buscar manual</label>
-                        <input class="form-control" v-model="search" placeholder="Pagina, frontend, catalogos...">
+                        <input class="form-control" v-model="search" placeholder="Página, frontend, catálogos...">
                     </div>
 
                     <div class="form-group">

@@ -380,15 +380,15 @@ class Controller_Admin_Users extends Controller_Adminbase
         }
 
         if ($password === '' || $confirm === '') {
-            return $this->json_response(['error' => 'Captura y confirma la nueva contrasena.'], 422);
+            return $this->json_response(['error' => 'Captura y confirma la nueva contraseña.'], 422);
         }
 
         if (strlen($password) < 12) {
-            return $this->json_response(['error' => 'La nueva contrasena debe tener al menos 12 caracteres.'], 422);
+            return $this->json_response(['error' => 'La nueva contraseña debe tener al menos 12 caracteres.'], 422);
         }
 
         if ($password !== $confirm) {
-            return $this->json_response(['error' => 'La confirmacion no coincide con la nueva contrasena.'], 422);
+            return $this->json_response(['error' => 'La confirmación no coincide con la nueva contraseña.'], 422);
         }
 
         try {
@@ -400,7 +400,7 @@ class Controller_Admin_Users extends Controller_Adminbase
             $target_group = (int) $user->group_id;
             if ($target_group === 100 && !$this->is_super_admin) {
                 \Log::warning('Reset password denegado para super admin. actor_user_id='.$this->user_id.' target_user_id='.$user_id.' timestamp='.time());
-                return $this->json_response(['error' => 'Solo un super administrador puede resetear la contrasena de otro super administrador.'], 403);
+                return $this->json_response(['error' => 'Solo un super administrador puede resetear la contraseña de otro super administrador.'], 403);
             }
 
             $this->password_policy()->reset_password($user_id, $password, $force_change, $this->user_id);
@@ -410,7 +410,7 @@ class Controller_Admin_Users extends Controller_Adminbase
             return $this->json_response(['status' => 'ok']);
         } catch (\Exception $e) {
             \Log::error('Error reseteando password de usuario '.$user_id.': '.$e->getMessage());
-            return $this->json_response(['error' => 'No se pudo resetear la contrasena.'], 400);
+            return $this->json_response(['error' => 'No se pudo resetear la contraseña.'], 400);
         }
     }
 
@@ -441,7 +441,7 @@ class Controller_Admin_Users extends Controller_Adminbase
 
         # VALIDAR PASSWORD EN ALTA
         if ($require_password && (empty($val['password']) || strlen((string) $val['password']) < 10)) {
-            throw new \InvalidArgumentException('La contrasena debe tener al menos 10 caracteres.');
+            throw new \InvalidArgumentException('La contraseña debe tener al menos 10 caracteres.');
         }
     }
 

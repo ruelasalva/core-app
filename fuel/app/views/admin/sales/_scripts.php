@@ -97,7 +97,7 @@ window.onload = function() {
                     .catch(() => {
                         this.loading = false;
                         this.offline.online = false;
-                        this.error = 'No se pudo cargar ventas. Si estas sin conexion se intentara usar catalogos locales.';
+                        this.error = 'No se pudo cargar ventas. Si estás sin conexión se intentará usar catálogos locales.';
                         this.hydrateOptionsFromCache();
                     });
             },
@@ -124,7 +124,7 @@ window.onload = function() {
             },
             statusLabel(status) {
                 const labels = {
-                    prequote: 'Precotizacion',
+                    prequote: 'Precotización',
                     requested: 'Solicitada',
                     approved: 'Aprobada',
                     rejected: 'Rechazada',
@@ -184,7 +184,7 @@ window.onload = function() {
             closePrequote() {
                 if (!this.selected) return;
                 if (!this.closeForm.party_id) {
-                    alert('Selecciona cliente para cerrar con precios.');
+                    this.error = 'Selecciona cliente para cerrar con precios.';
                     return;
                 }
                 fetch('<?php echo Uri::create('admin/sales/close_prequote'); ?>', window.coreAppFetchOptions({
@@ -195,7 +195,7 @@ window.onload = function() {
                     .then(res => window.coreAppJson ? window.coreAppJson(res) : res.json())
                     .then(data => {
                         if (data.error) {
-                            alert(data.error);
+                            this.error = data.error;
                             return;
                         }
                         this.quotes = data.quotes || [];
@@ -278,7 +278,8 @@ window.onload = function() {
                             this.error = data.error;
                             return;
                         }
-                        alert('Factura creada: ' + data.folio);
+                        this.error = '';
+                        this.offline.lastSaved = 'Factura creada: ' + data.folio;
                         this.loadData();
                         this.hideModal('modal-quote');
                     });
@@ -310,7 +311,7 @@ window.onload = function() {
                     quote_mode: mode,
                     items: [],
                     customer_notes: '',
-                    internal_notes: mode === 'prequote' ? 'Precotizacion sin precios para mostrar catalogo al cliente.' : '',
+                    internal_notes: mode === 'prequote' ? 'Precotización sin precios para mostrar catálogo al cliente.' : '',
                     offline_uuid: this.newOfflineUuid()
                 };
                 this.lineForm = { product_id: '', product_query: '', product_type: 'product', quantity: 1, search_open: false, search_results: [] };
@@ -357,7 +358,7 @@ window.onload = function() {
                     .then(res => window.coreAppJson ? window.coreAppJson(res) : res.json())
                     .then(data => {
                         if (data.error) {
-                            alert(data.error);
+                            this.error = data.error;
                             return;
                         }
                         this.options.products = data.products || [];
@@ -481,9 +482,9 @@ window.onload = function() {
                                     message = payload.error || message;
                                 } catch (e) {
                                     if (res.status === 400) {
-                                        message = 'La sesion de seguridad expiro o no se envio correctamente. Recarga la pantalla e intenta de nuevo.';
+                                        message = 'La sesión de seguridad expiró o no se envió correctamente. Recarga la pantalla e intenta de nuevo.';
                                     } else if (res.status === 404) {
-                                        message = 'No se encontro la ruta para guardar la cotizacion. Recarga la pantalla e intenta de nuevo.';
+                                        message = 'No se encontró la ruta para guardar la cotización. Recarga la pantalla e intenta de nuevo.';
                                     }
                                 }
                                 throw new Error(message);
@@ -493,7 +494,7 @@ window.onload = function() {
                     })
                     .then(data => {
                         if (data.error) {
-                            alert(data.error);
+                            this.error = data.error;
                             return;
                         }
                         this.quotes = data.quotes || [];
@@ -509,11 +510,11 @@ window.onload = function() {
                     })
                     .catch(error => {
                         if (error && error.name !== 'TypeError') {
-                            alert('No se pudo guardar la cotizacion: ' + (error.message || 'respuesta invalida del servidor'));
+                            this.error = 'No se pudo guardar la cotización: ' + (error.message || 'respuesta inválida del servidor');
                             return;
                         }
                         this.saveDraftNow();
-                        alert('Sin conexion. La cotizacion quedo guardada como borrador en este equipo.');
+                        this.error = 'Sin conexión. La cotización quedó guardada como borrador en este equipo.';
                     });
             },
             newOfflineUuid() {
@@ -597,7 +598,7 @@ window.onload = function() {
                             this.error = data.error;
                         })
                         .catch(error => {
-                            this.error = 'No se pudo sincronizar una cotizacion local. Revisa sesion, permisos o recarga la pantalla.';
+                            this.error = 'No se pudo sincronizar una cotización local. Revisa sesión, permisos o recarga la pantalla.';
                         })
                         .then(() => syncOne(index + 1));
                 };

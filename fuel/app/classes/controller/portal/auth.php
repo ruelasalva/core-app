@@ -30,6 +30,10 @@ class Controller_Portal_Auth extends Controller
         # SI YA HAY SESION ACTIVA, SE VALIDA ACCESO AL PORTAL
         if (\Auth::check()) {
             if ($this->has_portal_access($portal_code)) {
+                if ($this->password_policy()->must_change($this->current_user_id())) {
+                    $this->set_password_change_context($portal_code, $profile->dashboard_route ?: $portal_code);
+                    \Response::redirect('auth/force_password_change');
+                }
                 \Response::redirect($profile->dashboard_route ?: $portal_code);
             }
 
@@ -56,6 +60,11 @@ class Controller_Portal_Auth extends Controller
 
                 # SE REGISTRA LOGIN EXITOSO
                 \Log::info('LOGIN PORTAL: Usuario '.$username.' portal '.$portal_code.' desde '.\Input::ip());
+                if ($this->password_policy()->must_change($user_id)) {
+                    \Log::warning('Password change requerido en login portal. user_id='.$user_id.' portal='.$portal_code.' timestamp='.time());
+                    $this->set_password_change_context($portal_code, $profile->dashboard_route ?: $portal_code);
+                    \Response::redirect('auth/force_password_change');
+                }
                 \Response::redirect($profile->dashboard_route ?: $portal_code);
             }
 
@@ -81,6 +90,7 @@ class Controller_Portal_Auth extends Controller
     {
         # SE CIERRA SESION
         $portal_code = $this->codeify($portal_code);
+        $this->clear_password_change_context();
         \Auth::logout();
 
         # SE REDIRECCIONA AL LOGIN DEL PORTAL O AL LOGIN GENERAL
@@ -193,5 +203,45 @@ class Controller_Portal_Auth extends Controller
         }
         $value = preg_replace('/[^a-z0-9]+/', '_', $value);
         return trim($value, '_');
+    }
+
+    protected function current_user_id()
+    {
+        $user_id_data = \Auth::get_user_id();
+        return isset($user_id_data[1]) ? (int) $user_id_data[1] : 0;
+    }
+
+    protected function password_policy()
+    {
+        return new \Service_Core_Auth_PasswordPolicy();
+    }
+
+    protected function set_password_change_context($portal_code, $redirect_route)
+    {
+        $portal_code = $this->codeify($portal_code);
+        \Session::set('password_change_required', 1);
+        \Session::set('password_change_context', 'portal');
+        \Session::set('password_change_redirect', $this->safe_internal_route($redirect_route, $portal_code));
+        \Session::set('password_change_logout', $portal_code.'/logout');
+        \Session::set('password_change_portal_code', $portal_code);
+    }
+
+    protected function clear_password_change_context()
+    {
+        \Session::delete('password_change_required');
+        \Session::delete('password_change_context');
+        \Session::delete('password_change_redirect');
+        \Session::delete('password_change_logout');
+        \Session::delete('password_change_portal_code');
+    }
+
+    protected function safe_internal_route($route, $fallback)
+    {
+        $route = trim((string) $route);
+        if ($route === '' || preg_match('#^(https?:)?//#i', $route) || strpos($route, '\\') !== false) {
+            return $fallback;
+        }
+
+        return ltrim($route, '/');
     }
 }

@@ -108,6 +108,7 @@ class Controller_Adminbase extends Controller_Template
             'calendar' => $this->is_super_admin || \Auth::has_access('calendar.access[view]'),
             'frontend' => $this->is_super_admin || \Auth::has_access('frontend.access[view]'),
             'help' => $this->is_super_admin || \Auth::has_access('help.access[view]'),
+            'workspace' => $this->is_super_admin || \Auth::has_access('workspace.access[view]'),
         ];
     }
 

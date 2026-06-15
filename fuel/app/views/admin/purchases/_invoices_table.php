@@ -6,7 +6,12 @@
                         <tr v-for="invoice in invoices" :key="invoice.id">
                             <td><strong>{{ invoice.folio }}</strong></td>
                             <td>{{ invoice.party_name || '-' }}</td>
-                            <td><div class="small" v-html="flowLabel(invoice)"></div></td>
+                            <td>
+                                <div class="small">
+                                    <div v-for="label in flowLabels(invoice)" :key="label">{{ label }}</div>
+                                    <span v-if="flowLabels(invoice).length === 0">-</span>
+                                </div>
+                            </td>
                             <td class="small">{{ invoice.uuid || '-' }}</td>
                             <td><span class="badge" :class="statusClass(invoice.validation_status)">{{ statusLabel(invoice.validation_status) }}</span></td>
                             <td>{{ invoice.currency_code }} {{ money(invoice.total) }}</td>

@@ -58,7 +58,7 @@
         <div class="card-body">
             <div v-if="loading" class="text-center p-5">
                 <div class="spinner-border text-primary" role="status"></div>
-                <p class="mt-2">Cargando catalogos...</p>
+                <p class="mt-2">Cargando catálogos...</p>
             </div>
 
             <div v-show="!loading">

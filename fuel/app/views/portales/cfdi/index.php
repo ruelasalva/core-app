@@ -74,7 +74,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         this.items = data.items || [];
                     })
                     .catch(function(err) {
-                        self.error = err && err.error ? err.error : 'No se pudo cargar CFDI. Revisa sesion, permisos o conexion.';
+                        self.error = err && err.error ? err.error : 'No se pudo cargar CFDI. Revisa sesión, permisos o conexión.';
                     });
             },
             voucherLabel: function(type) {

@@ -7,7 +7,7 @@
             <div class="modal-content">
     <?php endif; ?>
                 <div class="modal-header bg-primary text-white">
-                    <h5 class="modal-title">{{ quoteForm.quote_mode === 'prequote' ? 'Nueva precotizacion' : 'Nueva cotizacion' }}</h5>
+                    <h5 class="modal-title">{{ quoteForm.quote_mode === 'prequote' ? 'Nueva precotización' : 'Nueva cotización' }}</h5>
                     <?php if ($capture_page): ?>
                     <a class="close text-white" href="<?php echo Uri::create('admin/sales'); ?>">
                         <span>&times;</span>
@@ -41,7 +41,7 @@
                     <?php else: ?>
                     <button class="btn btn-secondary" @click="hideModal('modal-new-quote')">Cerrar</button>
                     <?php endif; ?>
-                    <button class="btn btn-primary" @click="saveQuote">{{ quoteForm.quote_mode === 'prequote' ? 'Guardar precotizacion' : 'Guardar cotizacion' }}</button>
+                    <button class="btn btn-primary" @click="saveQuote">{{ quoteForm.quote_mode === 'prequote' ? 'Guardar precotización' : 'Guardar cotización' }}</button>
                 </div>
     <?php if ($capture_page): ?>
             </div>

@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Cambio de contrasena requerido</title>
+    <title>Cambio de contraseña requerido</title>
     <?php echo Asset::css('css/bootstrap.min.css'); ?>
     <?php echo Asset::css('css/adminlte.min.css'); ?>
     <style>
@@ -41,9 +41,9 @@
     </div>
     <div class="password-policy-body">
         <div class="mb-3">
-            <h1 class="h5 mb-2">Cambio de contrasena requerido</h1>
+            <h1 class="h5 mb-2">Cambio de contraseña requerido</h1>
             <p class="text-muted mb-0">
-                Por seguridad debes crear una nueva contrasena antes de continuar al sistema.
+                Por seguridad debes crear una nueva contraseña antes de continuar al sistema.
             </p>
         </div>
 
@@ -56,10 +56,10 @@
         <?php endif; ?>
 
         <div class="alert alert-light border small">
-            <strong>Reglas de contrasena</strong>
+            <strong>Reglas de contraseña</strong>
             <ul class="password-rule-list mt-2">
                 <li>Minimo 12 caracteres.</li>
-                <li>No compartas esta contrasena con otros usuarios.</li>
+                <li>No compartas esta contraseña con otros usuarios.</li>
                 <li>Evita usar datos obvios como nombre, empresa o telefono.</li>
             </ul>
         </div>
@@ -68,20 +68,20 @@
             <?php echo \Form::csrf(); ?>
 
             <div class="form-group">
-                <label>Nueva contrasena</label>
+                <label>Nueva contraseña</label>
                 <input type="password" name="password" class="form-control" autocomplete="new-password" required autofocus>
             </div>
 
             <div class="form-group">
-                <label>Confirmar contrasena</label>
+                <label>Confirmar contraseña</label>
                 <input type="password" name="password_confirm" class="form-control" autocomplete="new-password" required>
             </div>
 
-            <button type="submit" class="btn btn-primary btn-block">Guardar nueva contrasena</button>
+            <button type="submit" class="btn btn-primary btn-block">Guardar nueva contraseña</button>
         </form>
 
         <div class="text-center mt-3">
-            <a class="text-muted" href="<?php echo Uri::create('logout'); ?>">Cancelar y cerrar sesion</a>
+            <a class="text-muted" href="<?php echo !empty($logout_url) ? e($logout_url) : Uri::create('logout'); ?>">Cancelar y cerrar sesion</a>
         </div>
     </div>
 </div>

@@ -18,7 +18,7 @@
                             <tr v-for="item in deliveryForm.items" :key="item.order_item_id">
                                 <td><img class="quote-thumb" :src="item.image_url || noImage" :alt="item.name"></td>
                                 <td>{{ item.sku }}</td>
-                                <td>{{ item.name }}<div class="text-muted small">Disponible catalogo: {{ money(item.available_stock) }}</div></td>
+                                <td>{{ item.name }}<div class="text-muted small">Disponible catálogo: {{ money(item.available_stock) }}</div></td>
                                 <td>{{ money(item.ordered_quantity) }}</td>
                                 <td>{{ money(item.delivered_quantity) }}</td>
                                 <td><strong>{{ money(item.pending_quantity) }}</strong></td>

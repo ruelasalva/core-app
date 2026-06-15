@@ -23,6 +23,7 @@ class Controller_Auth extends Controller
         # SI YA HAY SESION ACTIVA, SE REDIRECCIONA AL ADMIN
         if (\Auth::check()) {
             if ($this->password_policy()->must_change($this->current_user_id())) {
+                $this->set_password_change_context('admin', 'admin', 'logout');
                 \Response::redirect('auth/force_password_change');
             }
             \Response::redirect('admin');
@@ -47,6 +48,7 @@ class Controller_Auth extends Controller
                 \Log::info("LOGIN EXITOSO: Usuario {$username} desde " . \Input::ip());
                 if ($this->password_policy()->must_change($user_id)) {
                     \Log::warning('Password change requerido al login. user_id='.$user_id.' timestamp='.time());
+                    $this->set_password_change_context('admin', 'admin', 'logout');
                     \Response::redirect('auth/force_password_change');
                 }
                 \Response::redirect('admin');
@@ -76,11 +78,18 @@ class Controller_Auth extends Controller
         }
 
         $user_id = $this->current_user_id();
+        $redirect_route = $this->password_change_redirect_route();
+        $logout_route = $this->password_change_logout_route();
+
         if (!$this->password_policy()->must_change($user_id)) {
-            \Response::redirect('admin');
+            $this->clear_password_change_context();
+            \Response::redirect($redirect_route);
         }
 
-        $data = ['error' => null];
+        $data = [
+            'error' => null,
+            'logout_url' => \Uri::create($logout_route),
+        ];
 
         if (\Input::method() === 'POST') {
             $password = (string) \Input::post('password', '');
@@ -92,7 +101,8 @@ class Controller_Auth extends Controller
                 try {
                     $this->password_policy()->change_forced_password($user_id, $password);
                     \Log::warning('Password change forzado completado. user_id='.$user_id.' timestamp='.time());
-                    \Response::redirect('admin');
+                    $this->clear_password_change_context();
+                    \Response::redirect($redirect_route);
                 } catch (\InvalidArgumentException $e) {
                     $data['error'] = $e->getMessage();
                 } catch (\Exception $e) {
@@ -116,6 +126,7 @@ class Controller_Auth extends Controller
     public function action_logout()
     {
         # SE CIERRA SESION Y SE REDIRECCIONA AL LOGIN
+        $this->clear_password_change_context();
         \Auth::logout();
         \Response::redirect('login');
     }
@@ -129,5 +140,43 @@ class Controller_Auth extends Controller
     protected function password_policy()
     {
         return new \Service_Core_Auth_PasswordPolicy();
+    }
+
+    protected function set_password_change_context($context, $redirect_route, $logout_route, $portal_code = '')
+    {
+        \Session::set('password_change_required', 1);
+        \Session::set('password_change_context', (string) $context);
+        \Session::set('password_change_redirect', $this->safe_internal_route($redirect_route, 'admin'));
+        \Session::set('password_change_logout', $this->safe_internal_route($logout_route, 'logout'));
+        \Session::set('password_change_portal_code', (string) $portal_code);
+    }
+
+    protected function clear_password_change_context()
+    {
+        \Session::delete('password_change_required');
+        \Session::delete('password_change_context');
+        \Session::delete('password_change_redirect');
+        \Session::delete('password_change_logout');
+        \Session::delete('password_change_portal_code');
+    }
+
+    protected function password_change_redirect_route()
+    {
+        return $this->safe_internal_route(\Session::get('password_change_redirect', 'admin'), 'admin');
+    }
+
+    protected function password_change_logout_route()
+    {
+        return $this->safe_internal_route(\Session::get('password_change_logout', 'logout'), 'logout');
+    }
+
+    protected function safe_internal_route($route, $fallback)
+    {
+        $route = trim((string) $route);
+        if ($route === '' || preg_match('#^(https?:)?//#i', $route) || strpos($route, '\\') !== false) {
+            return $fallback;
+        }
+
+        return ltrim($route, '/');
     }
 }

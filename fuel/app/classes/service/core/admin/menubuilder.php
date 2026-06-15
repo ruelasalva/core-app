@@ -46,6 +46,7 @@ class Service_Core_Admin_MenuBuilder
         return [
             $this->header('INICIO'),
             $this->item('Inicio', 'bi bi-speedometer2', \Uri::create('admin'), $segment === ''),
+            $this->item('Workspace', 'bi bi-grid-1x2', \Uri::create('admin/workspace'), $segment === 'workspace', $menu['workspace']),
 
             $this->header('COMERCIAL', $menu['commerce'] || $menu['supplierimport'] || $menu['sales'] || $menu['crm'] || $menu['commissions']),
             $this->item('Productos y precios', 'bi bi-box-seam', \Uri::create('admin/commerce'), $segment === 'commerce', $menu['commerce']),
@@ -144,6 +145,7 @@ class Service_Core_Admin_MenuBuilder
             'sat', 'sat_download', 'sat_catalog_sync', 'sat_credentials',
             'cfdi', 'cfdi_audit', 'catalogs', 'web', 'web_conversion', 'legal', 'communications', 'integrations', 'frontend',
             'audit', 'help', 'users', 'acl', 'config',
+            'workspace',
         ];
 
         foreach ($keys as $key) {

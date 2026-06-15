@@ -45,6 +45,10 @@ class Controller_Account extends Controller_Template
     {
         # SI YA HAY SESION DE CLIENTE, SE REDIRECCIONA A MI CUENTA
         if (\Auth::check() && $this->customer_link()) {
+            if ($this->password_policy()->must_change($this->current_user_id())) {
+                $this->set_password_change_context();
+                \Response::redirect('auth/force_password_change');
+            }
             \Response::redirect('mi-cuenta');
         }
 
@@ -64,6 +68,11 @@ class Controller_Account extends Controller_Template
                 }
 
                 \Log::info('LOGIN CLIENTE WEB: '.$email.' desde '.\Input::ip());
+                if ($this->password_policy()->must_change($user_id)) {
+                    \Log::warning('Password change requerido en login cliente web. user_id='.$user_id.' timestamp='.time());
+                    $this->set_password_change_context();
+                    \Response::redirect('auth/force_password_change');
+                }
                 \Response::redirect('mi-cuenta');
             }
 
@@ -174,6 +183,7 @@ class Controller_Account extends Controller_Template
     public function action_logout()
     {
         # SE CIERRA SESION Y REGRESA AL FRONTEND
+        $this->clear_password_change_context();
         \Auth::logout();
         \Response::redirect(\Uri::base(false));
     }
@@ -381,6 +391,11 @@ class Controller_Account extends Controller_Template
             \Response::redirect('acceso');
         }
 
+        if ($this->password_policy()->must_change($this->current_user_id())) {
+            $this->set_password_change_context();
+            \Response::redirect('auth/force_password_change');
+        }
+
         return $link;
     }
 
@@ -439,11 +454,28 @@ class Controller_Account extends Controller_Template
 
     protected function get_footer_columns()
     {
-        return Model_Core_Frontend_Footer_Column::query()
+        $columns = Model_Core_Frontend_Footer_Column::query()
             ->where('active', 1)
             ->order_by('sort_order', 'asc')
             ->order_by('id', 'asc')
             ->get();
+
+        foreach ($columns as $column) {
+            $column->settings = $this->decode_settings(isset($column->settings_json) ? (string) $column->settings_json : '');
+        }
+
+        return $columns;
+    }
+
+    protected function decode_settings($json)
+    {
+        $json = trim((string) $json);
+        if ($json === '') {
+            return [];
+        }
+
+        $decoded = json_decode($json, true);
+        return is_array($decoded) ? $decoded : [];
     }
 
     protected function get_active_theme()
@@ -459,6 +491,29 @@ class Controller_Account extends Controller_Template
     {
         $user_id_data = \Auth::get_user_id();
         return isset($user_id_data[1]) ? (int) $user_id_data[1] : 0;
+    }
+
+    protected function password_policy()
+    {
+        return new \Service_Core_Auth_PasswordPolicy();
+    }
+
+    protected function set_password_change_context()
+    {
+        \Session::set('password_change_required', 1);
+        \Session::set('password_change_context', 'account');
+        \Session::set('password_change_redirect', 'mi-cuenta');
+        \Session::set('password_change_logout', 'salir-cuenta');
+        \Session::set('password_change_portal_code', '');
+    }
+
+    protected function clear_password_change_context()
+    {
+        \Session::delete('password_change_required');
+        \Session::delete('password_change_context');
+        \Session::delete('password_change_redirect');
+        \Session::delete('password_change_logout');
+        \Session::delete('password_change_portal_code');
     }
 
     protected function email_exists($email)

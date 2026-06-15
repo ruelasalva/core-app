@@ -154,12 +154,12 @@
                         </div>
 
                         <div class="mb-3">
-                            <div class="font-weight-bold mb-1">Descripcion</div>
-                            <div class="contract-description text-muted" v-html="safeHtml(selected.description, 'Sin descripcion.')"></div>
+                            <div class="font-weight-bold mb-1">Descripción</div>
+                            <div class="contract-description text-muted">{{ displayText(selected.description, 'Sin descripción.') }}</div>
                         </div>
                         <div>
                             <div class="font-weight-bold mb-1">Notas</div>
-                            <div class="contract-description text-muted" v-html="safeHtml(selected.notes, 'Sin notas visibles.')"></div>
+                            <div class="contract-description text-muted">{{ displayText(selected.notes, 'Sin notas visibles.') }}</div>
                         </div>
                     </div>
 
@@ -298,41 +298,9 @@ window.addEventListener('load', function() {
             expirationClass: function(status) {
                 return 'badge-expiration-' + (status || 'active');
             },
-            safeHtml: function(value, fallback) {
+            displayText: function(value, fallback) {
                 value = String(value || '').trim();
-                if (!value) {
-                    return this.escapeHtml(fallback || '');
-                }
-
-                var container = document.createElement('div');
-                container.innerHTML = value;
-                var blocked = container.querySelectorAll('script, iframe, object, embed, style');
-                Array.prototype.forEach.call(blocked, function(node) {
-                    node.parentNode.removeChild(node);
-                });
-
-                Array.prototype.forEach.call(container.querySelectorAll('*'), function(node) {
-                    Array.prototype.slice.call(node.attributes).forEach(function(attr) {
-                        var name = attr.name.toLowerCase();
-                        var attrValue = String(attr.value || '');
-                        if (name.indexOf('on') === 0 || /javascript\s*:/i.test(attrValue)) {
-                            node.removeAttribute(attr.name);
-                        }
-                    });
-                });
-
-                return container.innerHTML;
-            },
-            escapeHtml: function(value) {
-                return String(value || '').replace(/[&<>"']/g, function(character) {
-                    return {
-                        '&': '&amp;',
-                        '<': '&lt;',
-                        '>': '&gt;',
-                        '"': '&quot;',
-                        "'": '&#039;'
-                    }[character];
-                });
+                return value || (fallback || '');
             }
         }
     });

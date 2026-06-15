@@ -32,6 +32,12 @@ return array(
 
 	// Ruta para el panel administrativo
     'admin' => 'admin/dashboard/index',
+    'admin/workspace' => 'admin/workspace/index',
+    'admin/workspace/data' => 'admin/workspace/data',
+    'admin/workspace/widget/(:any)' => 'admin/workspace/widget/$1',
+    'admin/workspace/quick_actions' => 'admin/workspace/quick_actions',
+    'admin/workspace/save_layout' => 'admin/workspace/save_layout',
+    'admin/workspace/save_preferences' => 'admin/workspace/save_preferences',
     'admin/sales/create' => 'admin/sales/create',
     'admin/sales/create_quote' => 'admin/sales/create_quote',
     'admin/sales/update_status' => 'admin/sales/update_status',

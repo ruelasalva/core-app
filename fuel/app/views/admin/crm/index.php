@@ -52,7 +52,7 @@
                         <div class="card card-secondary card-outline">
                             <div class="card-header"><h3 class="card-title h6 mb-0">Buscar en DENUE</h3></div>
                             <div class="card-body">
-                                <div v-if="!options.denue_connection_ready" class="alert alert-warning py-2">Activa la conexion INEGI DENUE API en Integraciones y captura el Token DENUE INEGI.</div>
+                                <div v-if="!options.denue_connection_ready" class="alert alert-warning py-2">Activa la conexión INEGI DENUE API en Integraciones y captura el Token DENUE INEGI.</div>
                                 <label>Palabra / giro</label>
                                 <input class="form-control" v-model="denueForm.keyword" placeholder="Ej. papeleria, ferreteria, toner">
                                 <div class="row">
@@ -405,7 +405,7 @@ window.onload = function() {
                     if (data.options) this.options = data.options;
                     if (data.stats) this.stats = data.stats;
                     if (modal) this.hideModal(modal);
-                }).catch(err => { this.error = err && err.error ? err.error : 'No se pudo guardar la informacion.'; });
+                }).catch(err => { this.error = err && err.error ? err.error : 'No se pudo guardar la información.'; });
             },
             prospectStatusLabel: function(v) { return ({new:'Nuevo', assigned:'Asignado', contacted:'Contactado', interested:'Interesado', not_interested:'No interesado', converted:'Convertido', discarded:'Descartado'})[v] || v; },
             prospectStatusClass: function(v) { return ({new:'badge-secondary', assigned:'badge-info', contacted:'badge-primary', interested:'badge-success', not_interested:'badge-warning', converted:'badge-success', discarded:'badge-dark'})[v] || 'badge-secondary'; },

@@ -41,7 +41,7 @@
     <div class="card card-primary card-outline">
         <div class="card-header">
             <div class="d-flex justify-content-between align-items-center">
-                <h3 class="card-title mb-0">Configuracion y operacion SAT</h3>
+                <h3 class="card-title mb-0">Configuración y operación SAT</h3>
                 <a class="btn btn-outline-primary btn-sm" href="<?php echo Uri::create('admin/sat/catalogs'); ?>">
                     <i class="bi bi-list-check"></i> Catalogos SAT
                 </a>
@@ -80,6 +80,9 @@
         </div>
 
         <div class="card-body">
+            <div v-if="noticeMessage" class="alert mb-3" :class="noticeError ? 'alert-warning' : 'alert-info'">
+                {{ noticeMessage }}
+            </div>
             <div v-if="loading" class="text-center p-5">
                 <div class="spinner-border text-primary" role="status"></div>
                 <p class="mt-2">Cargando SAT...</p>
@@ -98,13 +101,13 @@
                         <div class="col-md-12 mb-3">
                             <div class="alert" :class="integrations.sat_download && integrations.sat_download.enabled ? 'alert-success' : 'alert-warning'">
                                 <strong>Descarga SAT:</strong>
-                                {{ integrations.sat_download && integrations.sat_download.enabled ? 'habilitada desde Integraciones' : 'sin conexion habilitada en Integraciones' }}.
+                                {{ integrations.sat_download && integrations.sat_download.enabled ? 'habilitada desde Integraciones' : 'sin conexión habilitada en Integraciones' }}.
                                 La descarga directa usa FIEL: .cer, .key y password; no requiere secret key.
                                 <a href="<?php echo Uri::create('admin/integrations'); ?>" class="alert-link">Configurar integracion</a>
                             </div>
                             <div class="alert" :class="integrations.pac_billing && integrations.pac_billing.enabled ? 'alert-success' : 'alert-info'">
-                                <strong>PAC facturacion:</strong>
-                                {{ integrations.pac_billing && integrations.pac_billing.enabled ? 'Factura.com habilitado' : 'pendiente de conexion PAC en Integraciones' }}.
+                                <strong>PAC facturación:</strong>
+                                {{ integrations.pac_billing && integrations.pac_billing.enabled ? 'Factura.com habilitado' : 'pendiente de conexión PAC en Integraciones' }}.
                                 <a href="<?php echo Uri::create('admin/integrations'); ?>" class="alert-link">Configurar PAC</a>
                             </div>
                         </div>
@@ -119,8 +122,13 @@
                         </div>
                         <div class="col-md-8">
                             <div class="form-group">
-                                <label>Ruta de almacenamiento</label>
-                                <input class="form-control" v-model="config.storage_path">
+                                <label>Almacenamiento SAT</label>
+                                <div class="form-control-plaintext border rounded bg-light px-3 py-2">
+                                    <strong>{{ config.storage_label || 'Almacenamiento SAT configurado' }}</strong>
+                                    <div class="text-muted small">
+                                        La ubicación física de almacenamiento es administrada por configuración del sistema.
+                                    </div>
+                                </div>
                             </div>
                         </div>
                         <div class="col-md-4">
@@ -163,8 +171,8 @@
                             <tr v-for="credential in credentials" :key="credential.id">
                                 <td>{{ credential.credential_type }}</td>
                                 <td>{{ credential.rfc }}</td>
-                                <td>{{ credential.cer_original_name || credential.cer_path || '-' }}</td>
-                                <td>{{ credential.key_original_name || credential.key_path || '-' }}</td>
+                                <td>{{ credential.cer_original_name || (credential.cer_path ? 'Archivo .CER cargado' : '-') }}</td>
+                                <td>{{ credential.key_original_name || (credential.key_path ? 'Archivo .KEY cargado' : '-') }}</td>
                                 <td>{{ credential.valid_from || '-' }} / {{ credential.valid_until || '-' }}</td>
                                 <td>
                                     <span class="badge" :class="validityBadge(credential.validity_status)">
@@ -263,7 +271,7 @@
                                 <th>Tipo</th>
                                 <th>Estado</th>
                                 <th>Registros</th>
-                                <th>Archivo</th>
+                                <th>Almacenamiento</th>
                                 <th>Creado</th>
                             </tr>
                         </thead>
@@ -278,7 +286,11 @@
                                 <td>{{ packageItem.package_type }}</td>
                                 <td>{{ packageItem.status }}</td>
                                 <td>{{ packageItem.xml_count }}</td>
-                                <td><small>{{ packageItem.path || '-' }}</small></td>
+                                <td>
+                                    <span class="badge badge-light border">
+                                        {{ packageItem.storage_label || 'Ubicación protegida' }}
+                                    </span>
+                                </td>
                                 <td>{{ packageItem.created_at }}</td>
                             </tr>
                             <tr v-if="packages.length === 0">
@@ -289,7 +301,7 @@
                 </div>
 
                 <div class="tab-pane fade" id="tab-sat-alerts" role="tabpanel">
-                    <h5>CFDI para revision</h5>
+                    <h5>CFDI para revisión</h5>
                     <table class="table table-bordered table-hover">
                         <thead>
                             <tr>
@@ -375,7 +387,7 @@
                             <div class="form-group">
                                 <label>Archivo .CER</label>
                                 <div class="input-group">
-                                    <input class="form-control" :value="credentialForm.cer_original_name || credentialForm.cer_path" readonly>
+                                    <input class="form-control" :value="credentialForm.cer_original_name || (credentialForm.cer_path ? 'Archivo .CER cargado' : '')" readonly>
                                     <div class="input-group-append">
                                         <label class="btn btn-outline-primary mb-0" :class="{ disabled: !credentialForm.id }">
                                             <i class="bi bi-upload"></i>
@@ -383,14 +395,14 @@
                                         </label>
                                     </div>
                                 </div>
-                                <small class="text-muted">La vigencia se toma del certificado despues de cargarlo.</small>
+                                <small class="text-muted">La vigencia se toma del certificado después de cargarlo.</small>
                             </div>
                         </div>
                         <div class="col-md-6">
                             <div class="form-group">
                                 <label>Archivo .KEY</label>
                                 <div class="input-group">
-                                    <input class="form-control" :value="credentialForm.key_original_name || credentialForm.key_path" readonly>
+                                    <input class="form-control" :value="credentialForm.key_original_name || (credentialForm.key_path ? 'Archivo .KEY cargado' : '')" readonly>
                                     <div class="input-group-append">
                                         <label class="btn btn-outline-primary mb-0" :class="{ disabled: !credentialForm.id }">
                                             <i class="bi bi-upload"></i>
@@ -502,7 +514,7 @@ window.onload = function() {
         el: '#app-sat',
         data: {
             loading: true,
-            config: { id: null, mode: 'test', enabled: false, storage_path: 'fuel/app/storage/sat', last_sync_at: 'Nunca' },
+            config: { id: null, mode: 'test', enabled: false, storage_label: 'Almacenamiento SAT configurado', last_sync_at: 'Nunca' },
             credentials: [],
             requests: [],
             packages: [],
@@ -515,6 +527,8 @@ window.onload = function() {
             operating: false,
             operationMessage: '',
             operationError: false,
+            noticeMessage: '',
+            noticeError: false,
             selectedRequests: [],
             selectedPackages: []
         },
@@ -534,10 +548,14 @@ window.onload = function() {
                         window.coreAppCsrfToken = data.csrf_token;
                     }
                     if (!response.ok && !data.error) {
-                        data.error = 'No se pudo completar la operacion.';
+                        data.error = 'No se pudo completar la operación.';
                     }
                     return data;
                 });
+            },
+            showNotice(message, isError) {
+                this.noticeMessage = message || '';
+                this.noticeError = !!isError;
             },
             emptyCredential() {
                 return {
@@ -566,7 +584,7 @@ window.onload = function() {
                     .then(data => {
                         this.loading = false;
                         if (data.error) {
-                            alert(data.error);
+                            this.showNotice(data.error, true);
                             return;
                         }
                         this.config = data.config || this.config;
@@ -587,7 +605,7 @@ window.onload = function() {
                 .then(this.parseJsonResponse)
                 .then(data => {
                     if (data.error) {
-                        alert(data.error);
+                        this.showNotice(data.error, true);
                         return;
                     }
                     this.config = data.config || this.config;
@@ -613,7 +631,7 @@ window.onload = function() {
                 .then(this.parseJsonResponse)
                 .then(data => {
                     if (data.error) {
-                        alert(data.error);
+                        this.showNotice(data.error, true);
                         return;
                     }
                     this.credentials = data.credentials || [];
@@ -630,7 +648,7 @@ window.onload = function() {
                 event.target.value = '';
                 if (!file) return;
                 if (!this.credentialForm.id) {
-                    alert('Guarda primero la credencial con RFC, tipo y password. Despues se habilita la carga del archivo.');
+                    this.showNotice('Guarda primero la credencial con RFC, tipo y password. Después se habilita la carga del archivo.', true);
                     return;
                 }
                 const form = new FormData();
@@ -647,7 +665,7 @@ window.onload = function() {
                     .then(this.parseJsonResponse)
                     .then(data => {
                         if (data.error) {
-                            alert(data.error);
+                            this.showNotice(data.error, true);
                             return;
                         }
                         this.credentials = data.credentials || [];
@@ -685,7 +703,7 @@ window.onload = function() {
                 .then(this.parseJsonResponse)
                 .then(data => {
                     if (data.error) {
-                        alert(data.error);
+                        this.showNotice(data.error, true);
                         return;
                     }
                     this.requests = data.requests || [];
@@ -696,15 +714,15 @@ window.onload = function() {
             },
             runSatOperation(action) {
                 if ((action === 'submit_requests' || action === 'verify_requests') && this.selectedRequests.length === 0) {
-                    alert('Selecciona al menos una solicitud SAT.');
+                    this.showNotice('Selecciona al menos una solicitud SAT.', true);
                     return;
                 }
                 if (action === 'download_packages' && this.selectedRequests.length === 0 && this.selectedPackages.length === 0) {
-                    alert('Selecciona al menos una solicitud o paquete SAT.');
+                    this.showNotice('Selecciona al menos una solicitud o paquete SAT.', true);
                     return;
                 }
                 this.operating = true;
-                this.operationMessage = 'Procesando operacion SAT...';
+                this.operationMessage = 'Procesando operación SAT...';
                 this.operationError = false;
                 const payload = {
                     request_ids: this.selectedRequests,
@@ -733,7 +751,7 @@ window.onload = function() {
                 .catch(error => {
                     this.operating = false;
                     this.operationError = true;
-                    this.operationMessage = error.message || 'No se pudo completar la operacion SAT.';
+                    this.operationMessage = error.message || 'No se pudo completar la operación SAT.';
                 });
             },
             showModal(id) {

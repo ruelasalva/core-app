@@ -809,7 +809,7 @@ class Controller_Admin_Fiscal extends Controller_Adminbase
 
         $data['latest'] = count($data['items']) > 0 ? $data['items'][0] : null;
         if (count($data['items']) === 0) {
-            $data['warnings'][] = 'No hay validaciones fiscales persistidas para el RFC y periodo seleccionado. Ejecuta validatefiscalledger despues de aplicar la migracion 066.';
+            $data['warnings'][] = 'No hay validaciones fiscales persistidas para el RFC y periodo seleccionado. Ejecuta validatefiscalledger después de aplicar la migración 066.';
         }
 
         \Log::info('Validaciones fiscales consultadas RFC='.$rfc.' periodo='.$period.' usuario='.(int) $this->user_id.' registros='.count($data['items']));
@@ -1217,7 +1217,7 @@ class Controller_Admin_Fiscal extends Controller_Adminbase
         }
 
         $diot_items = (array) \Arr::get($diot, 'items', []);
-        $diot_note = empty($diot_items) ? 'Sin informacion DIOT para preparar.' : 'La preparacion DIOT tiene datos, pero aun no existe generacion oficial de archivo.';
+        $diot_note = empty($diot_items) ? 'Sin información DIOT para preparar.' : 'La preparación DIOT tiene datos, pero aún no existe generación oficial de archivo.';
         $steps[] = $this->closing_step(7, 'DIOT generada', 'pendiente', $period, $rfc, 0, 0, $diot_note);
 
         return $steps;
@@ -1245,7 +1245,7 @@ class Controller_Admin_Fiscal extends Controller_Adminbase
 
         $steps = [];
         foreach ($titles as $number => $title) {
-            $steps[] = $this->closing_step($number, $title, 'pendiente', $period, $rfc, 0, 0, 'Pendiente de informacion fiscal.');
+            $steps[] = $this->closing_step($number, $title, 'pendiente', $period, $rfc, 0, 0, 'Pendiente de información fiscal.');
         }
 
         return $steps;

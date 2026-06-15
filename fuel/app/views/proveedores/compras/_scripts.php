@@ -68,7 +68,7 @@ window.addEventListener('load', function() {
                         self.loading = false;
                     })
                     .catch(function(err) {
-                        self.error = err && err.error ? err.error : 'No se pudo cargar compras. Revisa sesion, permisos o conexion.';
+                        self.error = err && err.error ? err.error : 'No se pudo cargar compras. Revisa sesión, permisos o conexión.';
                         self.loading = false;
                     });
             },

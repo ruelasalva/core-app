@@ -220,7 +220,7 @@
                                         <td colspan="3">
                                             <div class="customer-dashboard-empty">
                                                 <span>Sin cotizaciones recientes.</span>
-                                                <a href="<?php echo Uri::create('clientes/quotes'); ?>" class="btn btn-xs btn-outline-info">Solicitar cotizacion</a>
+                                                <a href="<?php echo Uri::create('clientes/quotes'); ?>" class="btn btn-xs btn-outline-info">Solicitar cotización</a>
                                             </div>
                                         </td>
                                     </tr>

@@ -39,7 +39,7 @@
             <div class="d-flex justify-content-between align-items-center">
                 <div>
                     <h3 class="h6 mb-0">Soporte y seguimiento</h3>
-                    <p class="text-muted small mb-0">Crea solicitudes y revisa respuestas del equipo de atencion.</p>
+                    <p class="text-muted small mb-0">Crea solicitudes y revisa respuestas del equipo de atención.</p>
                 </div>
                 <button class="btn btn-primary btn-sm" @click="openCreate">
                     <i class="bi bi-plus-lg"></i> Nuevo ticket
@@ -258,7 +258,7 @@ new Vue({
                 })
                 .catch(err => {
                     this.loading = false;
-                    this.error = err && err.error ? err.error : 'No se pudo cargar helpdesk. Revisa sesion, permisos o conexion.';
+                    this.error = err && err.error ? err.error : 'No se pudo cargar helpdesk. Revisa sesión, permisos o conexión.';
                 });
         },
         resetTicket() {

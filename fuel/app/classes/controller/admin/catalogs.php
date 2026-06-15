@@ -3,7 +3,7 @@
 /**
  * CONTROLADOR ADMIN_CATALOGS
  *
- * Administra los catalogos base del ERP.
+ * Administra los catálogos base del ERP.
  *
  * @package  app
  * @extends  Controller_Adminbase
@@ -73,7 +73,7 @@ class Controller_Admin_Catalogs extends Controller_Adminbase
             ]);
         } catch (\Exception $e) {
             \Log::error('Error cargando catalogos: '.$e->getMessage());
-            return $this->json_response(['error' => 'No se pudieron cargar los catalogos.'], 500);
+            return $this->json_response(['error' => 'No se pudieron cargar los catálogos.'], 500);
         }
     }
 
@@ -331,7 +331,7 @@ class Controller_Admin_Catalogs extends Controller_Adminbase
                 ],
             ],
             'shipping_zones' => [
-                'title' => 'Zonas de envio',
+                'title' => 'Zonas de envío',
                 'model' => 'Model_Core_Catalog_Shipping_Zone',
                 'table' => 'core_catalog_shipping_zones',
                 'required' => ['code', 'name'],
@@ -345,7 +345,7 @@ class Controller_Admin_Catalogs extends Controller_Adminbase
                 ],
             ],
             'shipping_methods' => [
-                'title' => 'Tipos de envio',
+                'title' => 'Tipos de envío',
                 'model' => 'Model_Core_Catalog_Shipping_Method',
                 'table' => 'core_catalog_shipping_methods',
                 'required' => ['code', 'name'],
@@ -369,7 +369,7 @@ class Controller_Admin_Catalogs extends Controller_Adminbase
                 'required' => ['carrier_id', 'code', 'name'],
                 'fields' => [
                     ['name' => 'carrier_id', 'label' => 'Paqueteria', 'type' => 'select', 'options' => 'shipping_carriers', 'default' => 0],
-                    ['name' => 'shipping_method_id', 'label' => 'Tipo envio', 'type' => 'select', 'options' => 'shipping_methods', 'default' => 0],
+                    ['name' => 'shipping_method_id', 'label' => 'Tipo envío', 'type' => 'select', 'options' => 'shipping_methods', 'default' => 0],
                     ['name' => 'code', 'label' => 'Codigo', 'type' => 'text', 'default' => ''],
                     ['name' => 'name', 'label' => 'Nombre', 'type' => 'text', 'default' => ''],
                     ['name' => 'estimated_days', 'label' => 'Dias estimados', 'type' => 'integer', 'default' => 0],
@@ -377,7 +377,7 @@ class Controller_Admin_Catalogs extends Controller_Adminbase
                 ],
             ],
             'shipment_statuses' => [
-                'title' => 'Estatus de guia/envio',
+                'title' => 'Estatus de guía/envío',
                 'model' => 'Model_Core_Catalog_Shipment_Status',
                 'table' => 'core_catalog_shipment_statuses',
                 'required' => ['code', 'name'],
@@ -396,7 +396,7 @@ class Controller_Admin_Catalogs extends Controller_Adminbase
                 ],
             ],
             'fiscal_operation_types' => [
-                'title' => 'Tipos de operacion fiscal',
+                'title' => 'Tipos de operación fiscal',
                 'model' => 'Model_Core_Catalog_Fiscal_Operation_Type',
                 'table' => 'core_catalog_fiscal_operation_types',
                 'required' => ['code', 'name'],
@@ -491,7 +491,7 @@ class Controller_Admin_Catalogs extends Controller_Adminbase
             ],
             'logistics' => [
                 'title' => 'Logisticos',
-                'description' => 'Paqueterias, zonas, tipos de envio, servicios y estatus de guia.',
+                'description' => 'Paqueterías, zonas, tipos de envío, servicios y estatus de guía.',
                 'catalogs' => ['shipping_carriers', 'shipping_zones', 'shipping_methods', 'carrier_services', 'shipment_statuses'],
             ],
         ];
@@ -631,14 +631,14 @@ class Controller_Admin_Catalogs extends Controller_Adminbase
         # SE VERIFICA CADA TABLA REQUERIDA
         foreach ($this->get_catalog_definitions() as $definition) {
             if (!\DBUtil::table_exists($definition['table'])) {
-                throw new \RuntimeException('Falta ejecutar migraciones de catalogos.');
+                throw new \RuntimeException('Falta ejecutar migraciones de catálogos.');
             }
         }
 
         # SE VERIFICA LA BASE SAT OFICIAL PARA CATALOGOS RELACIONADOS
         foreach (['core_sat_taxes', 'core_sat_unit_keys', 'core_sat_cfdi_uses', 'core_sat_payment_forms', 'core_sat_payment_methods', 'core_sat_tax_regimes'] as $table) {
             if (!\DBUtil::table_exists($table)) {
-                throw new \RuntimeException('Falta ejecutar migraciones de catalogos SAT.');
+                throw new \RuntimeException('Falta ejecutar migraciones de catálogos SAT.');
             }
         }
     }

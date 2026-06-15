@@ -31,7 +31,7 @@
                         </td>
                     </tr>
                     <tr v-if="quotes.length === 0">
-                        <td colspan="7" class="text-center text-muted">Todavia no hay cotizaciones.</td>
+                        <td colspan="7" class="text-center text-muted">Todavía no hay cotizaciones.</td>
                     </tr>
                 </tbody>
             </table>

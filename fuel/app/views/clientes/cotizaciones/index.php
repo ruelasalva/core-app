@@ -28,7 +28,7 @@ $no_image_svg = 'data:image/svg+xml;charset=UTF-8,'.rawurlencode('<svg xmlns="ht
             <div class="portal-page-actions mt-3 mt-md-0">
                 <a class="btn btn-outline-secondary btn-sm" href="<?php echo Uri::create('clientes'); ?>">Inicio</a>
                 <button class="btn btn-primary btn-sm" @click="tab = 'new_quote'">
-                    <i class="bi bi-plus-lg mr-1"></i> Nueva cotizacion
+                    <i class="bi bi-plus-lg mr-1"></i> Nueva cotización
                 </button>
             </div>
         </div>
@@ -50,7 +50,7 @@ $no_image_svg = 'data:image/svg+xml;charset=UTF-8,'.rawurlencode('<svg xmlns="ht
                 <li class="nav-item"><a class="nav-link" :class="{active: tab === 'cfdi'}" href="#" @click.prevent="tab = 'cfdi'">CFDI</a></li>
                 <li class="nav-item"><a class="nav-link" :class="{active: tab === 'quotes'}" href="#" @click.prevent="tab = 'quotes'">Cotizaciones</a></li>
                 <li class="nav-item"><a class="nav-link" :class="{active: tab === 'orders'}" href="#" @click.prevent="tab = 'orders'">Pedidos</a></li>
-                <li class="nav-item"><a class="nav-link" :class="{active: tab === 'new_quote'}" href="#" @click.prevent="tab = 'new_quote'">Nueva cotizacion</a></li>
+                <li class="nav-item"><a class="nav-link" :class="{active: tab === 'new_quote'}" href="#" @click.prevent="tab = 'new_quote'">Nueva cotización</a></li>
             </ul>
         </div>
         <div class="portal-panel-body">
@@ -133,7 +133,7 @@ $no_image_svg = 'data:image/svg+xml;charset=UTF-8,'.rawurlencode('<svg xmlns="ht
 
             <div v-show="!loading && tab === 'quotes'">
                 <div class="d-flex justify-content-between align-items-center flex-wrap mb-2">
-                    <button class="btn btn-primary btn-sm" @click="tab = 'new_quote'">Nueva cotizacion</button>
+                    <button class="btn btn-primary btn-sm" @click="tab = 'new_quote'">Nueva cotización</button>
                     <div class="export-tools mb-0">
                         <button class="btn btn-xs btn-outline-secondary" @click="exportQuotes('csv')">CSV</button>
                         <button class="btn btn-xs btn-outline-success" @click="exportQuotes('xls')">Excel</button>
@@ -187,7 +187,7 @@ $no_image_svg = 'data:image/svg+xml;charset=UTF-8,'.rawurlencode('<svg xmlns="ht
 
             <div v-show="!loading && tab === 'new_quote'">
                 <div class="alert alert-light border d-flex justify-content-between align-items-center flex-wrap">
-                    <div><strong>Nueva cotizacion</strong><div class="text-muted small">Selecciona productos del catalogo, ajusta cantidades y envia tu solicitud a ventas.</div></div>
+                    <div><strong>Nueva cotización</strong><div class="text-muted small">Selecciona productos del catálogo, ajusta cantidades y envía tu solicitud a ventas.</div></div>
                     <button class="btn btn-outline-secondary btn-sm mt-2 mt-md-0" @click="tab = 'quotes'">Ver seguimiento</button>
                 </div>
                 <div class="border rounded p-3 mb-3">
@@ -221,7 +221,7 @@ $no_image_svg = 'data:image/svg+xml;charset=UTF-8,'.rawurlencode('<svg xmlns="ht
                 </table>
                 <label>Comentarios</label>
                 <textarea class="form-control" rows="3" v-model="form.customer_notes"></textarea>
-                <button class="btn btn-primary mt-3" @click="sendQuote">Enviar cotizacion</button>
+                <button class="btn btn-primary mt-3" @click="sendQuote">Enviar cotización</button>
             </div>
         </div>
     </div>

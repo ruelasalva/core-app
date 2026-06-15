@@ -1,18 +1,18 @@
     <div class="card card-primary card-outline">
         <div class="card-header">
-            <h3 class="card-title">Solicitudes de cotizacion</h3>
+            <h3 class="card-title">Solicitudes de cotización</h3>
             <div class="card-tools">
                 <span class="badge mr-2" :class="offline.online ? 'badge-success' : 'badge-warning'">
-                    {{ offline.online ? 'En linea' : 'Sin conexion' }}
+                    {{ offline.online ? 'En línea' : 'Sin conexión' }}
                 </span>
                 <button class="btn btn-outline-info btn-sm mr-2" @click="syncDrafts" :disabled="offline.syncing || offline.drafts.length === 0">
                     <i class="bi bi-arrow-repeat"></i> Sincronizar {{ offline.drafts.length || '' }}
                 </button>
                 <a class="btn btn-outline-secondary btn-sm mr-1" href="<?php echo Uri::create('admin/sales/create?mode=prequote'); ?>">
-                    <i class="bi bi-bag-plus"></i> Vista cliente / catalogo
+                    <i class="bi bi-bag-plus"></i> Vista cliente / catálogo
                 </a>
                 <a class="btn btn-primary btn-sm" href="<?php echo Uri::create('admin/sales/create'); ?>">
-                    <i class="bi bi-plus-lg"></i> Nueva cotizacion
+                    <i class="bi bi-plus-lg"></i> Nueva cotización
                 </a>
             </div>
         </div>

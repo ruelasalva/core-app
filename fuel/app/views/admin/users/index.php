@@ -40,7 +40,7 @@
                                 <button class="btn btn-xs btn-warning" title="Editar" @click="editUser(user)">
                                     <i class="fas fa-edit"></i>
                                 </button>
-                                <button class="btn btn-xs btn-danger" title="Resetear contrasena" @click="openPasswordReset(user)">
+                                <button class="btn btn-xs btn-danger" title="Resetear contraseña" @click="openPasswordReset(user)">
                                     <i class="fas fa-lock"></i>
                                 </button>
                                 <button class="btn btn-xs btn-info" @click="openSpecialPermissions(user)" title="Permisos Especiales">
@@ -148,21 +148,21 @@
         <div class="modal-dialog">
             <div class="modal-content border-0 shadow-lg">
                 <div class="modal-header bg-danger text-white">
-                    <h5 class="modal-title"><i class="fas fa-lock mr-2"></i> Resetear contrasena: {{ selectedUser.username }}</h5>
+                    <h5 class="modal-title"><i class="fas fa-lock mr-2"></i> Resetear contraseña: {{ selectedUser.username }}</h5>
                     <button type="button" class="close text-white" @click="closePasswordResetModal"><span>&times;</span></button>
                 </div>
                 <div class="modal-body">
                     <div class="alert alert-warning">
-                        La contrasena no se mostrara ni se registrara en logs. Comparte la nueva contrasena por un canal seguro.
+                        La contraseña no se mostrará ni se registrará en logs. Comparte la nueva contraseña por un canal seguro.
                     </div>
                     <div v-if="passwordReset.error" class="alert alert-danger">{{ passwordReset.error }}</div>
                     <div class="form-group">
-                        <label>Nueva contrasena</label>
+                        <label>Nueva contraseña</label>
                         <input type="password" class="form-control" v-model="passwordReset.password" autocomplete="new-password">
                         <small class="form-text text-muted">Minimo 12 caracteres.</small>
                     </div>
                     <div class="form-group">
-                        <label>Confirmar contrasena</label>
+                        <label>Confirmar contraseña</label>
                         <input type="password" class="form-control" v-model="passwordReset.password_confirm" autocomplete="new-password">
                     </div>
                     <div class="custom-control custom-checkbox">
@@ -173,7 +173,7 @@
                 <div class="modal-footer bg-light">
                     <button type="button" class="btn btn-secondary" @click="closePasswordResetModal">Cancelar</button>
                     <button type="button" class="btn btn-danger" @click="resetPassword" :disabled="passwordReset.loading">
-                        {{ passwordReset.loading ? 'Guardando...' : 'Resetear contrasena' }}
+                        {{ passwordReset.loading ? 'Guardando...' : 'Resetear contraseña' }}
                     </button>
                 </div>
             </div>

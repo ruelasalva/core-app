@@ -8,7 +8,7 @@
                                     <div class="col-md-2"><select class="form-control form-control-sm" v-model="filters.stock"><option value="">Existencia</option><option value="available">Disponible</option><option value="zero">Sin existencia</option></select></div>
                                 </div>
                                 <div class="mt-2">
-                                    <button class="btn btn-xs btn-outline-primary mr-1" @click="refreshCatalog">Buscar catalogo</button>
+                                    <button class="btn btn-xs btn-outline-primary mr-1" @click="refreshCatalog">Buscar catálogo</button>
                                     <button class="btn btn-xs btn-outline-secondary mr-1" @click="addFilteredProducts">Agregar filtrados</button>
                                     <button class="btn btn-xs btn-outline-secondary mr-1" @click="addBrandProducts" :disabled="!filters.brand_id">Agregar marca</button>
                                     <button class="btn btn-xs btn-outline-secondary mr-1" @click="addCategoryProducts" :disabled="!filters.category_id">Agregar categoria</button>
@@ -53,13 +53,13 @@
                                             </tr>
                                         </tbody>
                                     </table>
-                                    <div v-else class="text-center text-muted p-3">Selecciona productos del catalogo.</div>
+                                    <div v-else class="text-center text-muted p-3">Selecciona productos del catálogo.</div>
                                     <div class="d-flex justify-content-between border-top pt-2 money-cell">
                                         <strong>Total estimado</strong>
                                         <strong>{{ quoteCurrency }} {{ money(quoteTotal) }}</strong>
                                     </div>
                                     <div v-if="quoteForm.quote_mode === 'prequote'" class="alert alert-secondary mt-2 mb-0 py-2 small">
-                                        Modo catalogo: no se muestran ni guardan precios. Podras cerrar la cotizacion despues.
+                                        Modo catálogo: no se muestran ni guardan precios. Podrás cerrar la cotización después.
                                     </div>
                                 </div>
                             </div>

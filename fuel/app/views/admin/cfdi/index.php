@@ -536,6 +536,28 @@
         </div>
     </div>
 
+    <div class="modal fade" id="cfdi-confirm-modal" tabindex="-1" role="dialog" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-warning">
+                    <h5 class="modal-title">{{ confirmDialog.title }}</h5>
+                    <button type="button" class="close" data-dismiss="modal" @click="confirmDialog.onConfirm = null">
+                        <span>&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-0">{{ confirmDialog.message }}</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-dismiss="modal" @click="confirmDialog.onConfirm = null">Cancelar</button>
+                    <button type="button" class="btn btn-warning" @click="runConfirmedAction">
+                        {{ confirmDialog.confirmText || 'Confirmar' }}
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
 </div>
 
 <script>
@@ -559,6 +581,7 @@ window.onload = function() {
             batchSummary: { errors: [] },
             message: '',
             error: '',
+            confirmDialog: { title: '', message: '', confirmText: 'Confirmar', onConfirm: null },
             tabs: [
                 { key: 'received', label: 'Recibidos', icon: 'bi bi-inbox' },
                 { key: 'issued', label: 'Emitidos', icon: 'bi bi-send' },
@@ -873,6 +896,21 @@ window.onload = function() {
                 if (!this.catalogForm.item) return;
                 this.materializeCatalogs(this.catalogForm.item, this.catalogForm.mode, this.catalogForm.party);
             },
+            requestConfirmation: function(title, message, confirmText, callback) {
+                this.confirmDialog = {
+                    title: title || 'Confirmar acción',
+                    message: message || '',
+                    confirmText: confirmText || 'Confirmar',
+                    onConfirm: callback || null
+                };
+                $('#cfdi-confirm-modal').modal('show');
+            },
+            runConfirmedAction: function() {
+                var callback = this.confirmDialog.onConfirm;
+                this.confirmDialog.onConfirm = null;
+                $('#cfdi-confirm-modal').modal('hide');
+                if (typeof callback === 'function') callback();
+            },
             materializeCatalogs: function(item, mode, party) {
                 if (!item) return;
                 this.error = '';
@@ -889,13 +927,21 @@ window.onload = function() {
                     })
                     .catch(() => {
                         this.catalogForm.saving = false;
-                        this.error = 'No se pudieron crear catalogos desde CFDI.';
+                        this.error = 'No se pudieron crear catálogos desde CFDI.';
                     });
             },
             materializeBatch: function(mode) {
                 if (!this.selectedIds.length) return;
                 var label = mode === 'party' ? 'terceros' : (mode === 'products' ? 'productos' : 'terceros y productos');
-                if (!confirm('Procesar ' + this.selectedIds.length + ' CFDI para crear/actualizar ' + label + '?')) return;
+                var self = this;
+                this.requestConfirmation(
+                    'Procesar CFDI seleccionados',
+                    'Se procesarán ' + this.selectedIds.length + ' CFDI para crear o actualizar ' + label + '.',
+                    'Procesar',
+                    function() { self.executeMaterializeBatch(mode); }
+                );
+            },
+            executeMaterializeBatch: function(mode) {
                 this.error = '';
                 this.message = '';
                 this.batchSaving = true;
@@ -920,7 +966,15 @@ window.onload = function() {
             },
             importSelectedDocuments: function() {
                 if (!this.selectedIds.length) return;
-                if (!confirm('Importar ' + this.selectedIds.length + ' CFDI seleccionados a Compras/Facturacion usando solo el concepto fiscal? No se crearan productos ni entradas de almacen.')) return;
+                var self = this;
+                this.requestConfirmation(
+                    'Importar CFDI seleccionados',
+                    'Se importarán ' + this.selectedIds.length + ' CFDI a Compras/Facturación usando sólo el concepto fiscal. No se crearán productos ni entradas de almacén.',
+                    'Importar',
+                    function() { self.executeImportSelectedDocuments(); }
+                );
+            },
+            executeImportSelectedDocuments: function() {
                 this.error = '';
                 this.message = '';
                 this.batchSaving = true;

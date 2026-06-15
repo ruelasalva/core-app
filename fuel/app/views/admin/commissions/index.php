@@ -344,7 +344,7 @@ window.onload = function() {
                     if (data.options) this.options = data.options;
                     if (data.stats) this.stats = data.stats;
                     if (modal) this.hideModal(modal);
-                }).catch(err => { this.error = err && err.error ? err.error : 'No se pudo guardar la informacion.'; });
+                }).catch(err => { this.error = err && err.error ? err.error : 'No se pudo guardar la información.'; });
             },
             ruleFilter: function(rule) { return rule.seller_name || rule.party_name || rule.product_name || rule.brand_name || rule.category_name || rule.subcategory_name || 'General'; },
             money: function(v) { return '$' + Number(v || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); },

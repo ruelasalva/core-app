@@ -381,7 +381,7 @@ window.addEventListener('load', function () {
                 return {
                     internal: 'Interno: visible solo para administracion autorizada.',
                     portal: 'Visible en portal: podra mostrarse al cliente/proveedor cuando se habilite portal.',
-                    private: 'Privado: solo usuarios con permiso para informacion sensible.'
+                    private: 'Privado: solo usuarios con permiso para información sensible.'
                 }[value] || 'Selecciona la visibilidad del contrato.';
             },
             money: function (value) {

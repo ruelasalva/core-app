@@ -442,6 +442,7 @@ class Controller_Clientes extends Controller_Clientes_Cotizaciones
             ->where('l.entity_type', '=', 'contract')
             ->where('l.active', '=', 1)
             ->where('d.active', '=', 1)
+            ->where('d.visibility', 'in', ['portal', 'public'])
             ->order_by('l.id', 'desc')
             ->limit(500)
             ->execute();
@@ -543,6 +544,7 @@ class Controller_Clientes extends Controller_Clientes_Cotizaciones
             ->where('l.entity_type', '=', 'contract')
             ->where('l.active', '=', 1)
             ->where('d.active', '=', 1)
+            ->where('d.visibility', 'in', ['portal', 'public'])
             ->execute()
             ->current();
     }

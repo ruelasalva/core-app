@@ -316,9 +316,10 @@ new Vue({
         },
         addMovementLine: function() {
             if (!this.movementLine.product_id || Number(this.movementLine.quantity || 0) <= 0) {
-                alert('Selecciona producto y cantidad.');
+                this.error = 'Selecciona producto y cantidad.';
                 return;
             }
+            this.error = '';
             this.movementForm.items.push({
                 product_id: Number(this.movementLine.product_id),
                 quantity: Number(this.movementLine.quantity)
@@ -335,7 +336,7 @@ new Vue({
         saveMovement: function() {
             this.error = '';
             if (!this.movementForm.items || this.movementForm.items.length === 0) {
-                alert('Agrega al menos un producto.');
+                this.error = 'Agrega al menos un producto.';
                 return;
             }
             fetch('<?php echo Uri::create('admin/inventory/save_movement'); ?>', window.coreAppFetchOptions(this.movementForm))
