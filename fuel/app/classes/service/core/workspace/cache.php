@@ -7,6 +7,25 @@
  */
 class Service_Core_Workspace_Cache
 {
+    const LEVEL_NONE = 'none';
+    const LEVEL_REQUEST = 'request';
+    const LEVEL_USER = 'user';
+    const LEVEL_COMPANY = 'company';
+    const LEVEL_GLOBAL = 'global';
+    const LEVEL_STATIC = 'static';
+
+    public static function levels()
+    {
+        return [
+            static::LEVEL_NONE,
+            static::LEVEL_REQUEST,
+            static::LEVEL_USER,
+            static::LEVEL_COMPANY,
+            static::LEVEL_GLOBAL,
+            static::LEVEL_STATIC,
+        ];
+    }
+
     public function get($key)
     {
         try {
@@ -36,4 +55,3 @@ class Service_Core_Workspace_Cache
         }
     }
 }
-

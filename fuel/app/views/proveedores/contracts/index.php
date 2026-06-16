@@ -12,6 +12,8 @@
     .contract-meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
     .contract-meta-item { border: 1px solid #e5e9f0; border-radius: 8px; padding: 10px; background: #fff; }
     .contract-meta-label { color: #6c757d; font-size: .78rem; text-transform: uppercase; letter-spacing: .03em; margin-bottom: 4px; }
+    .contract-document-card { border: 1px solid #e5e9f0; border-radius: 8px; padding: 10px; margin-bottom: 10px; background: #fff; }
+    .contract-event-card { border-left: 3px solid var(--portal-primary); padding-left: 12px; margin-bottom: 14px; }
     .contract-description { line-height: 1.6; }
     .contract-description p:last-child { margin-bottom: 0; }
     .badge-expiration-active { background: #28a745; color: #fff; }
@@ -31,8 +33,8 @@
     <div class="portal-page-hero">
         <div class="d-flex justify-content-between align-items-center flex-wrap">
             <div>
-                <h1 class="h4 mb-1">Contratos de proveedor</h1>
-                <div class="text-muted">Consulta contratos autorizados, documentos relacionados y eventos visibles.</div>
+                <h1 class="h4 mb-1">Contratos del proveedor</h1>
+                <div class="text-muted">Consulta contratos autorizados, documentos relacionados y eventos visibles para tu portal.</div>
             </div>
             <div class="portal-page-actions mt-3 mt-md-0">
                 <a class="btn btn-outline-secondary btn-sm" href="<?php echo Uri::create('proveedores'); ?>">
@@ -64,9 +66,9 @@
                     <table class="table table-sm table-hover portal-table mb-0">
                         <thead>
                             <tr>
-                                <th>Numero</th>
+                                <th>Número</th>
                                 <th>Tipo</th>
-                                <th>Titulo</th>
+                                <th>Título</th>
                                 <th>Estado</th>
                                 <th>Inicio</th>
                                 <th>Fin</th>
@@ -164,24 +166,25 @@
                     </div>
 
                     <div v-show="tab === 'documents'">
-                        <div v-if="selectedDocuments.length === 0" class="portal-empty">Sin documentos disponibles.</div>
-                        <div v-for="document in selectedDocuments" :key="document.link_id" class="border rounded p-2 mb-2">
+                        <div v-if="selectedDocuments.length === 0" class="portal-empty">Sin documentos disponibles para este contrato.</div>
+                        <div v-for="document in selectedDocuments" :key="document.link_id" class="contract-document-card">
                             <div class="d-flex justify-content-between align-items-start">
                                 <div>
                                     <strong>{{ document.title || document.original_name }}</strong>
                                     <div class="text-muted small">{{ document.relation_label }} · {{ document.original_name }}</div>
                                     <div class="text-muted small">{{ document.created_at || '-' }} · {{ fileSize(document.file_size) }}</div>
                                 </div>
-                                <a class="btn btn-outline-primary btn-sm" :href="document.download_url">
+                                <a v-if="document.download_url" class="btn btn-outline-primary btn-sm" :href="document.download_url" target="_blank" rel="noopener">
                                     Descargar
                                 </a>
+                                <span v-else class="text-muted small">Sin descarga</span>
                             </div>
                         </div>
                     </div>
 
                     <div v-show="tab === 'events'">
-                        <div v-if="selectedEvents.length === 0" class="portal-empty">Sin eventos visibles.</div>
-                        <div v-for="event in selectedEvents" :key="event.id" class="border-left pl-3 mb-3">
+                        <div v-if="selectedEvents.length === 0" class="portal-empty">Sin eventos visibles para este contrato.</div>
+                        <div v-for="event in selectedEvents" :key="event.id" class="contract-event-card">
                             <div class="font-weight-bold">{{ event.event_label }}</div>
                             <div class="text-muted small">{{ event.created_at || '-' }}</div>
                             <div>{{ event.message || 'Sin mensaje.' }}</div>
@@ -197,7 +200,7 @@
 </div>
 
 <script>
-window.addEventListener('load', function() {
+document.addEventListener('DOMContentLoaded', function() {
     new Vue({
         el: '#app-supplier-contracts',
         data: function() {

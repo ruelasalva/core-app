@@ -9,8 +9,17 @@ class Service_Core_Workspace_WidgetRegistry
 {
     protected $map = [
         'welcome' => 'Service_Core_Workspace_Widgets_System_Welcome',
+        'favorites' => 'Service_Core_Workspace_Widgets_System_Favorites',
+        'recent_activity' => 'Service_Core_Workspace_Widgets_System_Recentactivity',
+        'notifications' => 'Service_Core_Workspace_Widgets_System_Notifications',
+        'quick_actions' => 'Service_Core_Workspace_Widgets_System_Quickactions',
         'quick_links' => 'Service_Core_Workspace_Widgets_System_Quicklinks',
         'notifications_placeholder' => 'Service_Core_Workspace_Widgets_System_Notificationsplaceholder',
+        'pending_quotes' => 'Service_Core_Workspace_Widgets_Erp_Pendingquotes',
+        'orders_pending_delivery' => 'Service_Core_Workspace_Widgets_Erp_Orderspendingdelivery',
+        'low_stock' => 'Service_Core_Workspace_Widgets_Erp_Lowstock',
+        'open_tickets' => 'Service_Core_Workspace_Widgets_Erp_Opentickets',
+        'recent_documents' => 'Service_Core_Workspace_Widgets_Erp_Recentdocuments',
     ];
 
     public function all()
@@ -45,4 +54,3 @@ class Service_Core_Workspace_WidgetRegistry
         return $manifests;
     }
 }
-

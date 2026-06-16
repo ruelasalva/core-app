@@ -4,23 +4,31 @@
         grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
         gap: .65rem;
     }
-    .supplier-flow-steps span {
+    .supplier-flow-steps a {
         border: 1px solid #dbe7e4;
-        border-radius: 999px;
+        border-radius: 8px;
         background: #f8fffc;
         color: #334155;
-        padding: .55rem .75rem;
+        padding: .6rem .75rem;
         font-size: .86rem;
         font-weight: 600;
         display: flex;
         align-items: center;
         gap: .45rem;
-        min-height: 42px;
+        min-height: 48px;
+        text-decoration: none;
+        transition: border-color .15s ease, transform .15s ease;
+    }
+    .supplier-flow-steps a:hover {
+        border-color: var(--portal-primary);
+        color: #172033;
+        text-decoration: none;
+        transform: translateY(-1px);
     }
     .supplier-flow-steps strong {
         width: 24px;
         height: 24px;
-        border-radius: 999px;
+        border-radius: 50%;
         background: var(--portal-primary);
         color: #fff;
         display: inline-flex;
@@ -34,11 +42,68 @@
         flex-wrap: wrap;
         gap: .35rem;
     }
+    .supplier-row-title {
+        font-weight: 700;
+        color: #172033;
+    }
     .supplier-status-note {
         display: block;
         color: #64748b;
         font-size: .78rem;
         margin-top: .2rem;
+    }
+    .supplier-section-help {
+        border: 1px solid #e2ebe8;
+        border-radius: 8px;
+        background: #fbfefd;
+        color: #64748b;
+        padding: .75rem .9rem;
+    }
+    .supplier-mobile-card-label {
+        display: none;
+        color: #64748b;
+        font-size: .72rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .03em;
+    }
+    .supplier-empty-state {
+        border: 1px dashed #cbd5d1;
+        border-radius: 8px;
+        padding: 1rem;
+        color: #64748b;
+        background: #fbfefd;
+    }
+    @media (max-width: 767.98px) {
+        .supplier-responsive-table thead {
+            display: none;
+        }
+        .supplier-responsive-table,
+        .supplier-responsive-table tbody,
+        .supplier-responsive-table tr,
+        .supplier-responsive-table td {
+            display: block;
+            width: 100%;
+        }
+        .supplier-responsive-table tr {
+            border: 1px solid #e2ebe8;
+            border-radius: 8px;
+            margin-bottom: .75rem;
+            padding: .65rem;
+            background: #fff;
+        }
+        .supplier-responsive-table td {
+            border: 0 !important;
+            padding: .35rem 0 !important;
+        }
+        .supplier-mobile-card-label {
+            display: block;
+            margin-bottom: .1rem;
+        }
+        .supplier-row-actions .btn,
+        .portal-page-actions .btn {
+            width: 100%;
+        }
     }
 </style>
 
@@ -47,12 +112,18 @@
         <div class="d-flex justify-content-between align-items-center flex-wrap">
             <div>
                 <h1 class="h4 mb-1">Compras y evidencias</h1>
-                <p class="text-muted mb-0">Revisa tu orden de compra, registra tu factura y adjunta XML/PDF o evidencias. Compras validará la información y, si procede, emitirá contrarecibo y programación de pago.</p>
+                <p class="text-muted mb-0">Sigue el proceso de OC a pago: revisa órdenes de compra, registra facturas, adjunta evidencias y consulta contrarecibos.</p>
             </div>
             <div class="portal-page-actions mt-3 mt-md-0">
                 <button class="btn btn-primary btn-sm" @click="newInvoice">
-                    <i class="bi bi-plus-lg mr-1"></i> Subir factura
+                    <i class="bi bi-plus-lg mr-1"></i> Registrar factura
                 </button>
+                <button class="btn btn-outline-primary btn-sm" @click="startEvidence">
+                    <i class="bi bi-paperclip mr-1"></i> Adjuntar evidencia
+                </button>
+                <a href="<?php echo Uri::create('proveedores/helpdesk'); ?>" class="btn btn-outline-warning btn-sm">
+                    <i class="bi bi-life-preserver mr-1"></i> Abrir ticket
+                </a>
                 <button class="btn btn-outline-secondary btn-sm" @click="load" :disabled="loading">
                     <span v-if="loading" class="spinner-border spinner-border-sm mr-1"></span>
                     Actualizar
@@ -67,12 +138,12 @@
         </div>
         <div class="portal-panel-body">
             <div class="supplier-flow-steps">
-                <span><strong>1</strong> Orden de compra</span>
-                <span><strong>2</strong> Factura</span>
-                <span><strong>3</strong> Evidencia</span>
-                <span><strong>4</strong> Revisión</span>
-                <span><strong>5</strong> Contrarecibo</span>
-                <span><strong>6</strong> Pago</span>
+                <a href="#" @click.prevent="tab = 'orders'"><strong>1</strong> Orden de compra</a>
+                <a href="#" @click.prevent="tab = 'invoices'"><strong>2</strong> Factura</a>
+                <a href="#" @click.prevent="tab = 'documents'"><strong>3</strong> Evidencia</a>
+                <a href="#" @click.prevent="tab = 'invoices'"><strong>4</strong> Revisión</a>
+                <a href="#" @click.prevent="tab = 'receipts'"><strong>5</strong> Contrarecibo</a>
+                <a href="#" @click.prevent="tab = 'receipts'"><strong>6</strong> Pago</a>
             </div>
         </div>
     </div>

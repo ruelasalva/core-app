@@ -110,6 +110,22 @@ window.addEventListener('load', function() {
                 this.invoiceForm = JSON.parse(JSON.stringify(invoice));
                 this.showModal('modal-portal-invoice');
             },
+            startEvidence: function() {
+                if (this.orders.length > 0) {
+                    this.openEvidence('purchase_order', this.orders[0].id, this.orders[0].folio);
+                    return;
+                }
+                if (this.invoices.length > 0) {
+                    this.openEvidence('purchase_invoice', this.invoices[0].id, this.invoices[0].folio);
+                    return;
+                }
+                if (this.receipts.length > 0) {
+                    this.openEvidence('purchase_receipt', this.receipts[0].id, this.receipts[0].folio);
+                    return;
+                }
+                this.tab = 'documents';
+                this.error = 'Primero debe existir una OC, factura o contrarecibo para adjuntar evidencia.';
+            },
             saveInvoice: function() {
                 var self = this;
                 if (!this.invoiceForm.total) {
@@ -171,6 +187,7 @@ window.addEventListener('load', function() {
                         self.hideModal('modal-portal-order');
                         self.hideModal('modal-portal-invoice');
                         self.tab = 'documents';
+                        self.error = '';
                     });
             },
             money: function(v) {
@@ -199,11 +216,11 @@ window.addEventListener('load', function() {
             },
             validationHelp: function(s) {
                 return ({
-                    pending: 'Compras revisará XML/PDF y datos fiscales.',
+                    pending: 'Pendiente de revisión por compras.',
                     submitted: 'Factura recibida para revisión.',
                     in_review: 'Compras está validando la documentación.',
                     validated: 'Factura validada para contrarecibo si aplica.',
-                    rejected: 'Revisa el motivo y adjunta corrección.',
+                    rejected: 'Factura rechazada. Revisa el motivo y adjunta corrección.',
                     in_receipt: 'Factura relacionada a contrarecibo.',
                     paid: 'Factura pagada.'
                 })[s] || 'Estado recibido desde compras.';

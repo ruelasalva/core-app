@@ -152,3 +152,155 @@ Para crear widgets futuros:
 5. Sembrar catálogo con `seedworkspace`.
 6. Validar permisos y respuesta estándar.
 
+## RC2 Widget Engine Contract
+
+El motor de widgets usa un contrato uniforme para que los widgets futuros puedan agregarse sin romper Vue ni exponer errores PHP:
+
+```json
+{
+  "success": true,
+  "message": "",
+  "state": "ready",
+  "payload": {},
+  "meta": {},
+  "health": {
+    "generated_at": "2026-06-15T12:00:00+00:00",
+    "cache_until": null,
+    "execution_ms": 4.12,
+    "cache_hit": false,
+    "stale": false,
+    "warning": ""
+  },
+  "actions": [],
+  "errors": []
+}
+```
+
+`payload.html` existe para widgets simples y placeholders. Los widgets profesionales deben preferir datos estructurados y permitir que Vue renderice por `type`.
+
+## Standard Widget States
+
+Estados soportados:
+
+- `loading`: Vue esta cargando el endpoint del widget.
+- `ready`: el widget cargo contenido util.
+- `empty`: el widget cargo correctamente pero no tiene datos.
+- `error`: ocurrio un error controlado.
+- `forbidden`: el usuario no tiene permiso para ver el widget.
+- `disabled`: el manifest indica que el widget no esta activo.
+
+## Manifest Validation
+
+Cada widget debe declarar:
+
+- `code`
+- `title`
+- `description`
+- `category`
+- `type`
+- `icon`
+- `color`
+- `permission_key`
+- `refresh_time`
+- `dependencies`
+- `exportable`
+- `configurable`
+- `settings_schema`
+- `version`
+- `status`
+
+Si el manifest es invalido, `Service_Core_Workspace_WidgetRunner` no ejecuta el widget. Debe devolver JSON controlado, registrar `Log::warning()` y evitar paginas de excepcion.
+
+## Settings Validator
+
+`Service_Core_Workspace_WidgetSettingsValidator` valida settings contra `settings_schema`.
+
+Reglas:
+
+- aplica defaults definidos por el manifest
+- ignora settings desconocidos
+- rechaza llaves inseguras como `permission_key`, `user_id`, `group_id`, `file_path`, `storage_path`, `sql`, `class` o `callback`
+- no permite elevar permisos desde settings
+- devuelve un arreglo limpio para `load()`
+
+## Widget Health
+
+Cada respuesta incluye metadata de salud:
+
+- `generated_at`
+- `cache_until`
+- `execution_ms`
+- `cache_hit`
+- `stale`
+- `warning`
+
+El inspector visual solo debe mostrarse a super admin o usuarios con `workspace.access[admin]`. No debe mostrar SQL, stack traces, rutas fisicas ni secretos.
+
+## Widget Actions
+
+Las acciones de widget usan este contrato:
+
+```json
+{
+  "code": "open_module",
+  "title": "Abrir modulo",
+  "icon": "bi bi-box-arrow-up-right",
+  "type": "route",
+  "route": "admin/example",
+  "permission_key": "example.access[view]",
+  "requires_confirmation": false,
+  "color": "primary"
+}
+```
+
+Tipos soportados:
+
+- `route`
+- `refresh`
+- `modal`
+- `export`
+
+Los widgets no ejecutan acciones destructivas. Para operaciones criticas solo navegan al modulo propietario, donde se validan permisos y confirmaciones.
+
+## Cache Level Support
+
+Niveles definidos para fases futuras:
+
+- `none`
+- `request`
+- `user`
+- `company`
+- `global`
+- `static`
+
+La invalidacion avanzada queda diferida. No se deben cachear permisos, sesiones, secretos, documentos privados ni rutas fisicas.
+
+## Error Handling Rules
+
+`WidgetRunner` debe capturar:
+
+- codigo de widget invalido
+- widget no registrado
+- permisos insuficientes
+- manifest invalido
+- settings invalidos
+- excepciones del widget
+
+Los endpoints de widget devuelven JSON controlado con HTTP 200 para que Vue no reciba HTML de excepcion. Nunca debe generarse una respuesta FuelPHP con status `0`.
+
+## RC2 Personal/System Widgets
+
+Sprint 2D agrega los primeros widgets reales sin consultar datos ERP sensibles:
+
+- `welcome`: saludo por horario local, usuario, rol, fecha, estado del Workspace y siguiente accion sugerida.
+- `favorites`: acciones favoritas del usuario desde `core_workspace_user_preferences.favorite_actions_json`; si no existen, muestra acciones recomendadas por permisos.
+- `recent_activity`: timeline preparado. Solo lee `core_workspace_activity` si existe con columnas seguras; si no existe, devuelve empty state.
+- `notifications`: estructura futura con `unread_count`, `critical_count` e `items`, sin crear tablas nuevas.
+- `quick_actions`: acciones rapidas permitidas por permisos y agrupadas por categoria.
+
+Aliases conservados:
+
+- `quick_links`
+- `notifications_placeholder`
+
+Estos aliases permanecen para compatibilidad con layouts antiguos, pero el layout generico debe usar los codigos nuevos.

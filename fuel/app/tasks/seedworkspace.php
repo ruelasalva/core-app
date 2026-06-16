@@ -79,6 +79,7 @@ class Seedworkspace
     {
         $manifests = (new \Service_Core_Workspace_WidgetRegistry())->manifests();
         foreach ($manifests as $code => $manifest) {
+            $dimensions = $this->widget_dimensions($code);
             $this->upsert('core_workspace_widget_catalog', 'code', $code, [
                 'code' => $code,
                 'title' => $manifest['title'],
@@ -90,8 +91,8 @@ class Seedworkspace
                 'permission_key' => $manifest['permission_key'],
                 'endpoint' => 'admin/workspace/widget/'.$code,
                 'refresh_time' => (int) $manifest['refresh_time'],
-                'default_w' => 4,
-                'default_h' => 2,
+                'default_w' => $dimensions['w'],
+                'default_h' => $dimensions['h'],
                 'min_w' => 2,
                 'min_h' => 1,
                 'max_w' => 12,
@@ -167,10 +168,23 @@ class Seedworkspace
             return;
         }
 
+        \DB::update('core_workspace_widget_instances')
+            ->set(['active' => 0, 'updated_at' => time()])
+            ->where('layout_id', '=', $layout_id)
+            ->where('widget_code', 'in', ['quick_links', 'notifications_placeholder'])
+            ->execute();
+
         $instances = [
-            ['welcome', 0, 0, 4, 2],
-            ['quick_links', 4, 0, 4, 2],
-            ['notifications_placeholder', 8, 0, 4, 2],
+            ['welcome', 0, 0, 6, 2],
+            ['quick_actions', 6, 0, 6, 3],
+            ['favorites', 0, 2, 4, 2],
+            ['notifications', 4, 2, 4, 2],
+            ['recent_activity', 8, 2, 4, 3],
+            ['pending_quotes', 0, 5, 4, 3],
+            ['orders_pending_delivery', 4, 5, 4, 3],
+            ['low_stock', 8, 5, 4, 3],
+            ['open_tickets', 0, 8, 4, 3],
+            ['recent_documents', 4, 8, 4, 3],
         ];
 
         foreach ($instances as $instance) {
@@ -217,6 +231,24 @@ class Seedworkspace
         list($id) = \DB::insert($table)->set($data)->execute();
         $this->created++;
         return $return_id ? (int) $id : 0;
+    }
+
+    protected function widget_dimensions($code)
+    {
+        $dimensions = [
+            'welcome' => ['w' => 6, 'h' => 2],
+            'quick_actions' => ['w' => 6, 'h' => 3],
+            'favorites' => ['w' => 4, 'h' => 2],
+            'notifications' => ['w' => 4, 'h' => 2],
+            'recent_activity' => ['w' => 4, 'h' => 3],
+            'pending_quotes' => ['w' => 4, 'h' => 3],
+            'orders_pending_delivery' => ['w' => 4, 'h' => 3],
+            'low_stock' => ['w' => 4, 'h' => 3],
+            'open_tickets' => ['w' => 4, 'h' => 3],
+            'recent_documents' => ['w' => 4, 'h' => 3],
+        ];
+
+        return isset($dimensions[$code]) ? $dimensions[$code] : ['w' => 4, 'h' => 2];
     }
 
     protected function permission_row($area)

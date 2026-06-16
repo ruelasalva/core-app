@@ -2,7 +2,7 @@
     <div class="modal-dialog modal-lg">
         <div class="modal-content" v-if="selectedOrder">
             <div class="modal-header bg-primary text-white">
-                <h5 class="modal-title">{{ selectedOrder.folio }}</h5>
+                <h5 class="modal-title">Partidas de {{ selectedOrder.folio }}</h5>
                 <button class="close text-white" @click="hideModal('modal-portal-order')"><span>&times;</span></button>
             </div>
             <div class="modal-body">
@@ -19,6 +19,9 @@
                             <td>{{ money(item.unit_price) }}</td>
                             <td>{{ money(item.line_total) }}</td>
                         </tr>
+                        <tr v-if="!selectedOrder.items || selectedOrder.items.length === 0">
+                            <td colspan="4" class="text-muted">Esta OC no tiene partidas visibles en el portal.</td>
+                        </tr>
                     </tbody>
                 </table>
                 <div class="supplier-row-actions mt-2">
@@ -34,7 +37,7 @@
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header bg-primary text-white">
-                <h5 class="modal-title">{{ invoiceForm.id ? 'Adjuntar XML/PDF a factura' : 'Nueva factura para revisión' }}</h5>
+                <h5 class="modal-title">{{ invoiceForm.id ? 'Adjuntar XML/PDF/evidencia' : 'Registrar factura para revisión' }}</h5>
                 <button class="close text-white" @click="hideModal('modal-portal-invoice')"><span>&times;</span></button>
             </div>
             <div class="modal-body">
@@ -48,7 +51,7 @@
                             <option value="0">Sin orden</option>
                             <option v-for="o in orders" :value="o.id">{{ o.folio }}</option>
                         </select>
-                        <small class="text-muted">Si existe OC, selecciónala para facilitar revisión.</small>
+                        <small class="text-muted">Si existe OC, selecciónala para facilitar la revisión.</small>
                     </div>
                     <div class="col-md-6"><label>UUID</label><input class="form-control" v-model="invoiceForm.uuid" placeholder="UUID del CFDI"></div>
                     <div class="col-md-4"><label>Fecha</label><input type="date" class="form-control" v-model="invoiceForm.invoice_date"></div>

@@ -31,5 +31,9 @@ class Service_Core_Workspace_Container
     {
         return new \Service_Core_Workspace_Preferences();
     }
-}
 
+    public function layout()
+    {
+        return new \Service_Core_Workspace_Layout();
+    }
+}

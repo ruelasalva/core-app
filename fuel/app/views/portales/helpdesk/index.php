@@ -1,3 +1,12 @@
+<style>
+    .portal-ticket-subject { min-width: 180px; }
+    .portal-ticket-doc { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+    @media (max-width: 767px) {
+        .portal-ticket-doc { align-items: flex-start; flex-direction: column; }
+        .portal-page-actions .btn { width: 100%; margin-bottom: 6px; }
+    }
+</style>
+
 <div id="app-portal-helpdesk">
     <div class="portal-page-hero">
         <div class="d-flex justify-content-between align-items-center flex-wrap">
@@ -60,17 +69,17 @@
                         <tr>
                             <th>Folio</th>
                             <th>Asunto</th>
-                            <th>Categoria</th>
+                            <th>Categoría</th>
                             <th>Estado</th>
                             <th>Prioridad</th>
-                            <th>Ultima actividad</th>
+                            <th>Última actualización</th>
                             <th class="text-center">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
                         <tr v-for="ticket in tickets" :key="ticket.id">
                             <td><strong>{{ ticket.folio }}</strong></td>
-                            <td>{{ ticket.subject }}</td>
+                            <td class="portal-ticket-subject">{{ ticket.subject }}</td>
                             <td>{{ label(options.categories, ticket.category_id) || '-' }}</td>
                             <td><span :class="'badge badge-' + statusColor(ticket.status_id)">{{ label(options.statuses, ticket.status_id) || '-' }}</span></td>
                             <td><span :class="'badge badge-' + priorityColor(ticket.priority)">{{ priorityLabel(ticket.priority) }}</span></td>
@@ -82,7 +91,7 @@
                             </td>
                         </tr>
                         <tr v-if="tickets.length === 0">
-                            <td colspan="7"><div class="portal-empty">Sin tickets registrados. Usa "Nuevo ticket" para crear tu primera solicitud.</div></td>
+                            <td colspan="7"><div class="portal-empty">No tienes tickets abiertos.</div></td>
                         </tr>
                     </tbody>
                 </table>
@@ -108,7 +117,7 @@
                         </div>
                         <div class="col-md-4">
                             <div class="form-group">
-                                <label>Categoria</label>
+                                <label>Categoría</label>
                                 <select class="form-control" v-model="ticketForm.category_id">
                                     <option value="0">Selecciona</option>
                                     <option v-for="option in options.categories" :key="option.value" :value="option.value">{{ option.label }}</option>
@@ -125,7 +134,7 @@
                         </div>
                         <div class="col-md-12">
                             <div class="form-group">
-                                <label>Descripcion</label>
+                                <label>Descripción</label>
                                 <textarea class="form-control" rows="5" v-model="ticketForm.description"></textarea>
                             </div>
                         </div>
@@ -168,7 +177,7 @@
                             <span class="badge badge-light">{{ ticketDocuments.length }}</span>
                         </div>
                         <div v-if="ticketDocuments.length === 0" class="text-muted small mb-2">Sin adjuntos</div>
-                        <div v-for="document in ticketDocuments" :key="document.id" class="d-flex justify-content-between align-items-center border-bottom py-2">
+                        <div v-for="document in ticketDocuments" :key="document.id" class="portal-ticket-doc border-bottom py-2">
                             <div>
                                 <a :href="document.download_url" target="_blank" rel="noopener">{{ document.original_name || document.title }}</a>
                                 <div class="text-muted small">{{ document.created_at }} · {{ document.file_extension }} · {{ formatSize(document.file_size) }}</div>
@@ -176,7 +185,7 @@
                         </div>
                         <div class="row mt-3">
                             <div class="col-md-5">
-                                <input type="text" class="form-control form-control-sm" placeholder="Titulo del adjunto" v-model="uploadForm.title">
+                                <input type="text" class="form-control form-control-sm" placeholder="Título del adjunto" v-model="uploadForm.title">
                             </div>
                             <div class="col-md-4">
                                 <input type="file" class="form-control form-control-sm" @change="setUploadFile">
@@ -187,7 +196,7 @@
                                 </button>
                             </div>
                             <div class="col-md-12">
-                                <small class="text-muted">PDF, XML, imagenes, Office, CSV o TXT. Maximo 15 MB.</small>
+                                <small class="text-muted">PDF, XML, imágenes, Office, CSV o TXT. Máximo 15 MB.</small>
                             </div>
                         </div>
                     </div>

@@ -143,10 +143,18 @@ class Controller_Proveedores extends Controller_Proveedores_Compras
      */
     public function action_index()
     {
-        $this->template->title = 'Proveedores';
-        $this->template->content = $this->portal_view('dashboard', 'portales/dashboard/index', [
-            'portal_code' => $this->portal_code,
-            'portal_label' => 'Proveedores',
+        $party_id = (int) $this->portal_link->party_id;
+        $dashboard = $this->supplier_dashboard_payload($party_id);
+
+        $this->template->title = 'Portal de proveedores';
+        $this->template->content = View::forge('proveedores/dashboard/index', [
+            'party' => $this->party,
+            'summary' => $dashboard['summary'],
+            'orders' => $dashboard['orders'],
+            'invoices' => $dashboard['invoices'],
+            'receipts' => $dashboard['receipts'],
+            'documents' => $dashboard['documents'],
+            'tickets' => $dashboard['tickets'],
         ]);
     }
 
@@ -337,6 +345,69 @@ class Controller_Proveedores extends Controller_Proveedores_Compras
             $items[] = $row;
         }
         return $items;
+    }
+
+    /**
+     * SUPPLIER DASHBOARD PAYLOAD
+     *
+     * Construye el resumen del dashboard usando lecturas existentes del portal.
+     *
+     * @access  protected
+     * @return  Array
+     */
+    protected function supplier_dashboard_payload($party_id)
+    {
+        $orders = $this->purchase_orders($party_id);
+        $invoices = $this->purchase_invoices($party_id);
+        $receipts = $this->purchase_receipts($party_id);
+        $documents = $this->purchase_documents($party_id);
+        $tickets = $this->portal_tickets();
+        $helpdesk_stats = $this->portal_helpdesk_stats();
+
+        return [
+            'summary' => $this->supplier_dashboard_summary($orders, $invoices, $receipts, $documents, $tickets, $helpdesk_stats),
+            'orders' => array_slice($orders, 0, 5),
+            'invoices' => array_slice($invoices, 0, 5),
+            'receipts' => array_slice($receipts, 0, 5),
+            'documents' => array_slice($documents, 0, 5),
+            'tickets' => array_slice($tickets, 0, 5),
+        ];
+    }
+
+    protected function supplier_dashboard_summary(array $orders, array $invoices, array $receipts, array $documents, array $tickets, array $helpdesk_stats = [])
+    {
+        $pending_invoices = 0;
+        $validated_invoices = 0;
+        foreach ($invoices as $invoice) {
+            $validation_status = strtolower((string) \Arr::get($invoice, 'validation_status', ''));
+            if (in_array($validation_status, ['pending', 'review', 'in_review', 'submitted'], true)) {
+                $pending_invoices++;
+            }
+            if (in_array($validation_status, ['validated', 'approved', 'accepted'], true)) {
+                $validated_invoices++;
+            }
+        }
+
+        $scheduled_receipts = 0;
+        foreach ($receipts as $receipt) {
+            $scheduled_payment_date = trim((string) \Arr::get($receipt, 'scheduled_payment_date', ''));
+            $status = strtolower((string) \Arr::get($receipt, 'status', ''));
+            if ($scheduled_payment_date !== '' && !in_array($status, ['cancelled', 'canceled', 'void'], true)) {
+                $scheduled_receipts++;
+            }
+        }
+
+        return [
+            'active_orders' => count($orders),
+            'sent_invoices' => count($invoices),
+            'pending_invoices' => $pending_invoices,
+            'validated_invoices' => $validated_invoices,
+            'issued_receipts' => count($receipts),
+            'scheduled_payments' => $scheduled_receipts,
+            'documents' => count($documents),
+            'open_tickets' => (int) \Arr::get($helpdesk_stats, 'open', 0),
+            'tickets' => count($tickets),
+        ];
     }
 
     /**
