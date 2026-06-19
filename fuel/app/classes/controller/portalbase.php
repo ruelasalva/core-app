@@ -512,6 +512,36 @@ class Controller_Portalbase extends Controller_Template
             # SE NOTIFICA AL EQUIPO ADMINISTRATIVO
             $this->notify_helpdesk_admins($ticket, 'helpdesk.ticket_created', 'Nuevo ticket '.$ticket->folio, $subject);
 
+            try {
+                // CORE EVENT:
+                // Event: helpdesk.ticket.created
+                // Purpose: notify communications/workspace/audit subsystems after a portal helpdesk ticket is created.
+                // Payload safety: no secrets, no physical paths, no XML/certificates/tokens.
+                Helper_Core_Event::fire('helpdesk.ticket.created', [
+                    'entity_type' => 'helpdesk_ticket',
+                    'entity_id' => (int) $ticket->id,
+                    'ticket_id' => (int) $ticket->id,
+                    'folio' => (string) $ticket->folio,
+                    'ticket_folio' => (string) $ticket->folio,
+                    'subject' => $subject,
+                    'party_id' => (int) $this->portal_link->party_id,
+                    'user_id' => (int) $this->user_id,
+                    'portal_code' => (string) $this->portal_code,
+                    'module' => 'helpdesk',
+                    'source' => 'portal',
+                    'current_date' => date('Y-m-d H:i:s'),
+                    'admin_url' => 'admin/helpdesk',
+                ], [], [
+                    'source_module' => 'portal',
+                    'source_action' => $this->portal_code.'_helpdesk_create',
+                    'triggered_by_user_id' => (int) $this->user_id,
+                    'skip_internal_notification' => 1,
+                    'dedupe_reason' => 'legacy_helpdesk_notification_preserved',
+                ]);
+            } catch (\Exception $event_error) {
+                \Log::warning('Evento helpdesk.ticket.created portal no bloqueante fallo: '.$event_error->getMessage());
+            }
+
             return $this->json_response([
                 'status' => 'ok',
                 'tickets' => $this->portal_tickets(),

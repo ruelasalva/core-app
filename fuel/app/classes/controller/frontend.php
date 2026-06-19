@@ -301,6 +301,16 @@ class Controller_Frontend extends Controller_Template
             # SE CREA NOTIFICACION PARA ADMINISTRADORES
             $recipients = $this->contact_notification_recipients();
             if (!empty($recipients) && class_exists('Helper_Core_Notification')) {
+                $contact_notification_payload = [
+                    'name' => $name,
+                    'email' => $email,
+                    'phone' => $phone,
+                    'message_summary' => function_exists('mb_substr') ? mb_substr(strip_tags($message), 0, 220) : substr(strip_tags($message), 0, 220),
+                    'origin' => $origin,
+                    'product_name' => $product_name,
+                    'product_sku' => $product_sku,
+                    'public_url' => $product_url,
+                ];
                 Helper_Core_Notification::create([
                     'event_code' => 'contact.web.message',
                     'notification_type' => 'contact',
@@ -309,12 +319,42 @@ class Controller_Frontend extends Controller_Template
                     'url' => 'admin/communications',
                     'icon' => 'bi bi-envelope',
                     'priority' => 2,
-                    'payload' => $contact_payload,
+                    'payload' => class_exists('Helper_Core_Event') ? Helper_Core_Event::safe_payload($contact_notification_payload) : $contact_notification_payload,
                     'created_by' => 0,
                 ], $recipients);
             }
 
-            $this->create_contact_prospect($contact_payload);
+            $prospect_created = $this->create_contact_prospect($contact_payload);
+
+            try {
+                // CORE EVENT:
+                // Event: contact.web.message
+                // Purpose: notify communications/workspace/audit subsystems after a public contact message.
+                // Payload safety: no secrets, no physical paths, no XML/certificates/tokens.
+                Helper_Core_Event::fire('contact.web.message', [
+                    'entity_type' => 'web_contact',
+                    'entity_id' => 0,
+                    'module' => 'contact',
+                    'name' => $name,
+                    'email' => $email,
+                    'phone' => $phone,
+                    'message_summary' => function_exists('mb_substr') ? mb_substr(strip_tags($message), 0, 220) : substr(strip_tags($message), 0, 220),
+                    'origin' => $origin,
+                    'product_name' => $product_name,
+                    'product_sku' => $product_sku,
+                    'public_url' => $product_url,
+                    'prospect_created' => (int) (bool) $prospect_created,
+                ], [], [
+                    'source_module' => 'frontend',
+                    'source_action' => 'contact_submit',
+                    'triggered_by_user_id' => 0,
+                    'ip' => \Input::real_ip(),
+                    'skip_internal_notification' => 1,
+                    'dedupe_reason' => 'legacy_contact_notification_preserved',
+                ]);
+            } catch (\Exception $event_error) {
+                \Log::warning('Evento contact.web.message no bloqueante fallo: '.$event_error->getMessage());
+            }
 
             \Session::set_flash('contact_success', 'Recibimos tu mensaje. Te contactaremos pronto.');
         } catch (\InvalidArgumentException $e) {

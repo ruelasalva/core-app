@@ -15,6 +15,7 @@
                 <li class="nav-item"><a href="#" class="nav-link" :class="{active: tab === 'opportunities'}" @click.prevent="tab = 'opportunities'">Oportunidades</a></li>
                 <li class="nav-item"><a href="#" class="nav-link" :class="{active: tab === 'prospects'}" @click.prevent="tab = 'prospects'">Prospectos DENUE</a></li>
                 <li class="nav-item"><a href="#" class="nav-link" :class="{active: tab === 'activities'}" @click.prevent="tab = 'activities'">Actividades</a></li>
+                <li class="nav-item"><a href="#" class="nav-link" :class="{active: tab === 'communications'}" @click.prevent="tab = 'communications'">Comunicaciones</a></li>
                 <li class="nav-item"><a href="#" class="nav-link" :class="{active: tab === 'tickets'}" @click.prevent="tab = 'tickets'">Tickets clientes</a></li>
                 <li class="nav-item"><a href="#" class="nav-link" :class="{active: tab === 'surveys'}" @click.prevent="tab = 'surveys'">Encuestas</a></li>
                 <li class="nav-item"><a href="#" class="nav-link" :class="{active: tab === 'cut'}" @click.prevent="tab = 'cut'">Calculadora de corte</a></li>
@@ -155,6 +156,49 @@
                 </div>
             </div>
 
+            <div v-show="tab === 'communications'">
+                <div class="d-flex justify-content-between align-items-start flex-wrap mb-3">
+                    <div>
+                        <h3 class="h6 mb-1">Comunicaciones</h3>
+                        <p class="text-muted mb-0">Consulta las conversaciones relacionadas con clientes o terceros del CRM.</p>
+                    </div>
+                </div>
+
+                <div class="card card-light card-outline mb-0">
+                    <div class="card-body">
+                        <div class="form-group">
+                            <label>Cliente / tercero</label>
+                            <select class="form-control" v-model.number="communicationsContext.party_id">
+                                <option :value="0">Selecciona un cliente o tercero</option>
+                                <option v-for="party in options.parties" :key="'communications-party-' + party.value" :value="Number(party.value)">
+                                    {{ party.label }}
+                                </option>
+                            </select>
+                            <small class="form-text text-muted">El panel usa el identificador del cliente seleccionado y solo muestra conversaciones permitidas.</small>
+                        </div>
+
+                        <div
+                            class="crm-communications-context"
+                            data-entity-type="party"
+                            :data-party-id="communicationsContext.party_id || 0">
+                            <embedded-communications-panel
+                                v-if="communicationsContext.party_id > 0"
+                                entity-type="party"
+                                :entity-id="communicationsContext.party_id"
+                                :party-id="communicationsContext.party_id"
+                                title="Comunicaciones del cliente"
+                                :limit="10">
+                            </embedded-communications-panel>
+                            <div v-else class="border rounded p-4 text-center text-muted">
+                                <i class="far fa-comments fa-2x mb-2"></i>
+                                <p class="mb-1">Selecciona un cliente para revisar sus comunicaciones.</p>
+                                <small>No hay conversaciones relacionadas todav&iacute;a.</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div v-show="tab === 'tickets'">
                 <div class="alert alert-light border">
                     Los tickets se atienden en Helpdesk; aqui se muestran como contexto del cliente para no perder la lectura comercial.
@@ -273,6 +317,15 @@
                 <div class="col-md-4 mt-2"><label>Probabilidad %</label><input type="number" min="0" max="100" class="form-control" v-model="opportunityForm.probability"></div>
                 <div class="col-md-4 mt-2"><label>Proxima accion</label><input type="datetime-local" class="form-control" v-model="opportunityForm.next_action_at_input"></div>
                 <div class="col-md-12 mt-2"><label>Descripcion</label><textarea class="form-control" rows="4" v-model="opportunityForm.description"></textarea></div>
+                <div class="col-md-12 mt-3" v-if="opportunityForm.party_id > 0">
+                    <embedded-communications-panel
+                        entity-type="party"
+                        :entity-id="opportunityForm.party_id"
+                        :party-id="opportunityForm.party_id"
+                        title="Comunicaciones del cliente"
+                        :limit="8">
+                    </embedded-communications-panel>
+                </div>
             </div></div>
             <div class="modal-footer"><button class="btn btn-secondary" @click="hideModal('modal-crm-opportunity')">Cerrar</button><button class="btn btn-primary" @click="saveOpportunity">Guardar</button></div>
         </div></div>
@@ -291,6 +344,15 @@
                 <div class="col-md-4 mt-2"><label>Responsable</label><select class="form-control" v-model="activityForm.assigned_user_id"><option value="0">Sin asignar</option><option v-for="u in options.users" :value="u.value">{{ u.label }}</option></select></div>
                 <div class="col-md-4 mt-2"><label>Fecha compromiso</label><input type="datetime-local" class="form-control" v-model="activityForm.due_at_input"></div>
                 <div class="col-md-12 mt-2"><label>Detalle</label><textarea class="form-control" rows="4" v-model="activityForm.description"></textarea></div>
+                <div class="col-md-12 mt-3" v-if="activityForm.party_id > 0">
+                    <embedded-communications-panel
+                        entity-type="party"
+                        :entity-id="activityForm.party_id"
+                        :party-id="activityForm.party_id"
+                        title="Comunicaciones del cliente"
+                        :limit="8">
+                    </embedded-communications-panel>
+                </div>
             </div></div>
             <div class="modal-footer"><button class="btn btn-secondary" @click="hideModal('modal-crm-activity')">Cerrar</button><button class="btn btn-primary" @click="saveActivity">Guardar</button></div>
         </div></div>
@@ -329,6 +391,8 @@
     </div>
 </div>
 
+<?php echo View::forge('admin/communications/_embedded_panel'); ?>
+
 <script>
 window.onload = function() {
     new Vue({
@@ -336,7 +400,7 @@ window.onload = function() {
         data: {
             tab: 'opportunities', error: '', opportunities: [], activities: [], prospects: [], prospectImports: [], customerTickets: [],
             surveys: [], surveyResponses: [], cutCalculations: [], options: { parties: [], prospects: [], users: [], surveys: [], sellers: [] },
-            stats: {}, opportunityForm: {}, activityForm: {}, surveyForm: { survey_id: 0, party_id: 0, score: 10, comments: '' },
+            stats: {}, opportunityForm: {}, activityForm: {}, communicationsContext: { party_id: 0 }, surveyForm: { survey_id: 0, party_id: 0, score: 10, comments: '' },
             prospectForm: {}, denueLoading: false, denueResults: [], selectedDenue: [],
             denueForm: { keyword: '', state_code: '14', latitude: '', longitude: '', radius: 500 },
             cutForm: { party_id: 0, material: '', sheet_width: 0, sheet_height: 0, piece_width: 0, piece_height: 0, kerf: 0, notes: '' }

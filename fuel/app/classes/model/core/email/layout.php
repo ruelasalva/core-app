@@ -1,20 +1,19 @@
 <?php
 
-class Model_Core_Email_Template extends \Orm\Model
+class Model_Core_Email_Layout extends \Orm\Model
 {
-    protected static $_table_name = 'core_email_templates';
+    protected static $_table_name = 'core_email_layouts';
     protected static $_primary_key = ['id'];
 
     protected static $_properties = [
         'id',
         'code',
         'name',
-        'email_role',
-        'subject',
-        'view_path',
-        'content',
-        'body_text',
+        'description',
+        'html_layout',
+        'text_layout',
         'active',
+        'version',
         'created_at',
         'updated_at',
     ];

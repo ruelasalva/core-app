@@ -42,6 +42,8 @@ return array(
     'admin/workspace/save_layout' => 'admin/workspace/save_layout',
     'admin/workspace/save_preferences' => 'admin/workspace/save_preferences',
     'admin/workspace/reset_layout' => 'admin/workspace/reset_layout',
+    'admin/communications/conversationlist' => 'admin/communications/conversationlist',
+    'admin/communications/conversationdetail/(:num)' => 'admin/communications/conversationdetail/$1',
     'admin/sales/create' => 'admin/sales/create',
     'admin/sales/create_quote' => 'admin/sales/create_quote',
     'admin/sales/update_status' => 'admin/sales/update_status',

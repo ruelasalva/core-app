@@ -1,35 +1,18 @@
 <?php
 
-class Model_Core_Email_Queue extends \Orm\Model
+class Model_Core_Communication_EventRecipient extends \Orm\Model
 {
-    protected static $_table_name = 'core_email_queue';
+    protected static $_table_name = 'core_communication_event_recipients';
     protected static $_primary_key = ['id'];
 
     protected static $_properties = [
         'id',
         'event_code',
-        'template_code',
-        'email_role',
-        'to_email',
-        'to_name',
-        'subject',
-        'body',
-        'status',
-        'attempts',
-        'max_attempts',
-        'last_error',
-        'scheduled_at',
-        'sent_at',
-        'provider_code',
         'channel_code',
-        'priority',
-        'locked_at',
-        'locked_by',
-        'next_retry_at',
-        'provider_message_id',
-        'payload_json',
-        'error_json',
-        'simulation_mode',
+        'recipient_type',
+        'recipient_value',
+        'mode',
+        'active',
         'created_at',
         'updated_at',
     ];

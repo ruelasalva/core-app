@@ -1,22 +1,14 @@
 <?php
 
-class Model_Core_Email_Template extends \Orm\Model
+class Model_Core_Communication_MessageAttachment extends \Orm\Model
 {
-    protected static $_table_name = 'core_email_templates';
+    protected static $_table_name = 'core_communication_message_attachments';
     protected static $_primary_key = ['id'];
 
     protected static $_properties = [
-        'id',
-        'code',
-        'name',
-        'email_role',
-        'subject',
-        'view_path',
-        'content',
-        'body_text',
-        'active',
-        'created_at',
-        'updated_at',
+        'id', 'message_id', 'filename', 'mime_type', 'size_bytes',
+        'storage_ref', 'content_hash', 'disposition', 'active',
+        'created_at', 'updated_at',
     ];
 
     protected static $_observers = [

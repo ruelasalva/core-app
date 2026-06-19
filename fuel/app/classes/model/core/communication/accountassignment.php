@@ -1,19 +1,21 @@
 <?php
 
-class Model_Core_Email_Template extends \Orm\Model
+class Model_Core_Communication_AccountAssignment extends \Orm\Model
 {
-    protected static $_table_name = 'core_email_templates';
+    protected static $_table_name = 'core_communication_account_assignments';
     protected static $_primary_key = ['id'];
 
     protected static $_properties = [
         'id',
-        'code',
-        'name',
-        'email_role',
-        'subject',
-        'view_path',
-        'content',
-        'body_text',
+        'account_id',
+        'assignment_type',
+        'assignment_value',
+        'access_level',
+        'can_send',
+        'can_receive',
+        'can_sync',
+        'can_manage',
+        'default_sender',
         'active',
         'created_at',
         'updated_at',

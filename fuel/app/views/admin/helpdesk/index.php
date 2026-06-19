@@ -268,6 +268,16 @@
                         </div>
                     </div>
 
+                    <div class="mb-3" v-if="selectedTicket">
+                        <embedded-communications-panel
+                            entity-type="helpdesk_ticket"
+                            :entity-id="selectedTicket.id"
+                            :party-id="selectedTicket.party_id || 0"
+                            title="Comunicaciones del ticket"
+                            :limit="8">
+                        </embedded-communications-panel>
+                    </div>
+
                     <div class="form-group">
                         <label>Respuesta</label>
                         <textarea class="form-control" rows="3" v-model="replyForm.message"></textarea>
@@ -288,6 +298,8 @@
         </div>
     </div>
 </div>
+
+<?php echo View::forge('admin/communications/_embedded_panel'); ?>
 
 <script>
 window.onload = function() {

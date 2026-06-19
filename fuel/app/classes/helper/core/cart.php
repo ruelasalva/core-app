@@ -331,6 +331,34 @@ class Helper_Core_Cart
         $cart->converted_at = time();
         $cart->save();
 
+        try {
+            // CORE EVENT:
+            // Event: sales.quote.created
+            // Purpose: notify communications/workspace/audit subsystems after a frontend cart quote is created.
+            // Payload safety: no secrets, no physical paths, no XML/certificates/tokens.
+            Helper_Core_Event::fire('sales.quote.created', [
+                'entity_type' => 'sales_quote',
+                'entity_id' => (int) $quote->id,
+                'quote_id' => (int) $quote->id,
+                'folio' => (string) $quote->folio,
+                'party_id' => (int) $quote->party_id,
+                'user_id' => (int) $user_id,
+                'seller_id' => (int) $seller_id,
+                'module' => 'sales',
+                'source' => 'frontend_cart',
+                'status' => (string) $quote->status,
+                'currency_code' => (string) $quote->currency_code,
+                'total' => (float) $quote->total,
+                'admin_url' => 'admin/sales?view=quotes',
+            ], [], [
+                'source_module' => 'sales',
+                'source_action' => 'frontend_cart_checkout_quote',
+                'triggered_by_user_id' => (int) $user_id,
+            ]);
+        } catch (\Exception $event_error) {
+            \Log::warning('Evento sales.quote.created frontend no bloqueante fallo: '.$event_error->getMessage());
+        }
+
         return $quote;
     }
 

@@ -1,22 +1,13 @@
 <?php
 
-class Model_Core_Email_Template extends \Orm\Model
+class Model_Core_Communication_MessageLink extends \Orm\Model
 {
-    protected static $_table_name = 'core_email_templates';
+    protected static $_table_name = 'core_communication_message_links';
     protected static $_primary_key = ['id'];
 
     protected static $_properties = [
-        'id',
-        'code',
-        'name',
-        'email_role',
-        'subject',
-        'view_path',
-        'content',
-        'body_text',
-        'active',
-        'created_at',
-        'updated_at',
+        'id', 'message_id', 'conversation_id', 'entity_type',
+        'entity_id', 'relation_type', 'active', 'created_at', 'updated_at',
     ];
 
     protected static $_observers = [

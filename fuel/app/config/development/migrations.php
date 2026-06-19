@@ -76,6 +76,12 @@ return array (
         70 => '072_make_contract_approval_fields_nullable',
         71 => '073_create_user_password_policy_phase2a',
         72 => '074_create_core_workspace_foundation',
+        73 => '075_create_communications_center_foundation',
+        74 => '076_create_core_communication_event_recipients',
+        75 => '077_extend_email_templates_for_editor',
+        76 => '078_create_core_communication_accounts',
+        77 => '079_create_core_communication_message_store',
+        78 => '080_create_core_communication_account_assignments',
       ),
     ),
     'module' => array(    
