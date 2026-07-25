@@ -11,10 +11,51 @@
  */
 class Controller_Admin_Crm extends Controller_Adminbase
 {
+    protected $customer_visibility;
+    protected $json_guard_response = null;
+
     public function before()
     {
+        if ($this->request && in_array($this->request->action, array('entityhub_context'), true)) {
+            $this->auto_render = false;
+            if (!\Auth::check()) {
+                $this->json_guard_response = $this->json_response(array(
+                    'success' => false,
+                    'message' => 'Sesion requerida.',
+                    'data' => array(),
+                    'errors' => array('auth_required'),
+                ), 401);
+                return;
+            }
+
+            $this->setup_json_context();
+            if ((new \Service_Core_Auth_PasswordPolicy())->must_change($this->user_id)) {
+                $this->json_guard_response = $this->json_response(array(
+                    'success' => false,
+                    'message' => 'Debes cambiar tu contrasena antes de continuar.',
+                    'data' => array(),
+                    'errors' => array('password_change_required'),
+                ), 403);
+                return;
+            }
+
+            if (!$this->is_super_admin && !\Auth::has_access('crm.access[view]')) {
+                $this->json_guard_response = $this->json_response(array(
+                    'success' => false,
+                    'message' => 'No tienes permiso para consultar contexto CRM.',
+                    'data' => array(),
+                    'errors' => array('permission_denied'),
+                ), 403);
+                return;
+            }
+
+            $this->customer_visibility = new Service_Core_Crm_CustomerVisibility();
+            return;
+        }
+
         parent::before();
         $this->require_access('crm.access[view]');
+        $this->customer_visibility = new Service_Core_Crm_CustomerVisibility();
     }
 
     public function action_index()
@@ -45,6 +86,61 @@ class Controller_Admin_Crm extends Controller_Adminbase
         }
     }
 
+    public function action_entityhub_context()
+    {
+        if ($this->json_guard_response) {
+            return $this->json_guard_response;
+        }
+
+        $party_id = (int) \Input::get('party_id', 0);
+        if ($party_id <= 0) {
+            return $this->json_response(array(
+                'success' => false,
+                'message' => 'Selecciona un cliente valido.',
+                'data' => array(),
+                'errors' => array('party_id_required'),
+            ), 400);
+        }
+
+        if (!$this->can_use_customer($party_id)) {
+            return $this->json_response(array(
+                'success' => false,
+                'message' => 'No tienes permiso para consultar este cliente.',
+                'data' => array(),
+                'errors' => array('permission_denied'),
+            ), 403);
+        }
+
+        try {
+            $timeline_reader = new Service_Core_EntityHub_TimelineReader();
+            $relationship_engine = new Service_Core_EntityHub_RelationshipEngine();
+            $timeline = $timeline_reader->timeline('customer', $party_id, array(), $this->user_id, 20);
+            $relationships = $relationship_engine->aggregate('customer', $party_id, array(), $this->user_id, 80);
+
+            return $this->json_response(array(
+                'success' => true,
+                'message' => 'Contexto del Hub de Entidades consultado correctamente.',
+                'data' => array(
+                    'party_id' => $party_id,
+                    'timeline' => !empty($timeline['timeline']) ? $timeline['timeline'] : array(),
+                    'timeline_counts' => !empty($timeline['counts']) ? $timeline['counts'] : array(),
+                    'timeline_hidden_count' => !empty($timeline['hidden_count']) ? (int) $timeline['hidden_count'] : 0,
+                    'relationship_counts' => !empty($relationships['counts']) ? $relationships['counts'] : array(),
+                    'relationship_hidden_count' => !empty($relationships['hidden_count']) ? (int) $relationships['hidden_count'] : 0,
+                ),
+                'errors' => array(),
+            ));
+        } catch (\Exception $e) {
+            \Log::error('CRM EntityHub context error: '.$e->getMessage());
+            return $this->json_response(array(
+                'success' => false,
+                'message' => 'No fue posible cargar el contexto del Hub de Entidades.',
+                'data' => array(),
+                'errors' => array('internal_error'),
+            ), 500);
+        }
+    }
+
     public function action_save_opportunity()
     {
         $this->require_access('crm.access[edit]');
@@ -57,8 +153,13 @@ class Controller_Admin_Crm extends Controller_Adminbase
             }
 
             $id = (int) \Arr::get($val, 'id', 0);
+            $party_id = (int) \Arr::get($val, 'party_id', 0);
+            if (!$this->can_use_customer($party_id)) {
+                return $this->json_response(['error' => 'No tienes permiso para usar este cliente.'], 403);
+            }
+
             $data = [
-                'party_id' => (int) \Arr::get($val, 'party_id', 0),
+                'party_id' => $party_id,
                 'prospect_id' => (int) \Arr::get($val, 'prospect_id', 0),
                 'owner_user_id' => (int) \Arr::get($val, 'owner_user_id', $this->user_id),
                 'department_id' => (int) \Arr::get($val, 'department_id', 0),
@@ -119,8 +220,13 @@ class Controller_Admin_Crm extends Controller_Adminbase
             }
 
             $id = (int) \Arr::get($val, 'id', 0);
+            $party_id = (int) \Arr::get($val, 'party_id', 0);
+            if (!$this->can_use_customer($party_id)) {
+                return $this->json_response(['error' => 'No tienes permiso para usar este cliente.'], 403);
+            }
+
             $data = [
-                'party_id' => (int) \Arr::get($val, 'party_id', 0),
+                'party_id' => $party_id,
                 'prospect_id' => (int) \Arr::get($val, 'prospect_id', 0),
                 'opportunity_id' => (int) \Arr::get($val, 'opportunity_id', 0),
                 'ticket_id' => (int) \Arr::get($val, 'ticket_id', 0),
@@ -175,9 +281,14 @@ class Controller_Admin_Crm extends Controller_Adminbase
                 return $this->json_response(['error' => 'Selecciona una encuesta.'], 422);
             }
 
+            $party_id = (int) \Arr::get($val, 'party_id', 0);
+            if (!$this->can_use_customer($party_id)) {
+                return $this->json_response(['error' => 'No tienes permiso para usar este cliente.'], 403);
+            }
+
             Model_Core_Crm_Survey_Response::forge([
                 'survey_id' => $survey_id,
-                'party_id' => (int) \Arr::get($val, 'party_id', 0),
+                'party_id' => $party_id,
                 'portal_code' => $this->codeify(\Arr::get($val, 'portal_code', 'admin')),
                 'score' => round((float) \Arr::get($val, 'score', 0), 2),
                 'answers_json' => json_encode((array) \Arr::get($val, 'answers', [])),
@@ -202,6 +313,10 @@ class Controller_Admin_Crm extends Controller_Adminbase
             $piece_width = (float) \Arr::get($val, 'piece_width', 0);
             $piece_height = (float) \Arr::get($val, 'piece_height', 0);
             $kerf = max(0, (float) \Arr::get($val, 'kerf', 0));
+            $party_id = (int) \Arr::get($val, 'party_id', 0);
+            if (!$this->can_use_customer($party_id)) {
+                return $this->json_response(['error' => 'No tienes permiso para usar este cliente.'], 403);
+            }
 
             if ($sheet_width <= 0 || $sheet_height <= 0 || $piece_width <= 0 || $piece_height <= 0) {
                 return $this->json_response(['error' => 'Captura medidas mayores a cero.'], 422);
@@ -216,7 +331,7 @@ class Controller_Admin_Crm extends Controller_Adminbase
 
             Model_Core_Crm_Cut_Calculation::forge([
                 'folio' => $this->next_folio('CUT', 'core_crm_cut_calculations'),
-                'party_id' => (int) \Arr::get($val, 'party_id', 0),
+                'party_id' => $party_id,
                 'user_id' => $this->user_id,
                 'material' => trim((string) \Arr::get($val, 'material', '')),
                 'sheet_width' => round($sheet_width, 2),
@@ -522,6 +637,20 @@ class Controller_Admin_Crm extends Controller_Adminbase
         ]);
     }
 
+    protected function setup_json_context()
+    {
+        $user_id_data = \Auth::get_user_id();
+        $this->user_id = isset($user_id_data[1]) ? (int) $user_id_data[1] : 0;
+
+        $groups = \Auth::get_groups();
+        if (!empty($groups)) {
+            $group_data = $groups[0][1];
+            $this->user_group = is_object($group_data) ? (int) $group_data->id : (int) $group_data;
+        }
+
+        $this->is_super_admin = ($this->user_group === 100);
+    }
+
     protected function opportunities()
     {
         $query = \DB::select(['o.id', 'id'], ['o.folio', 'folio'], ['o.party_id', 'party_id'], ['p.name', 'party_name'], ['o.prospect_id', 'prospect_id'], ['pr.name', 'prospect_name'], ['o.owner_user_id', 'owner_user_id'], ['u.username', 'owner_name'], ['o.stage', 'stage'], ['o.source', 'source'], ['o.title', 'title'], ['o.description', 'description'], ['o.estimated_amount', 'estimated_amount'], ['o.probability', 'probability'], ['o.expected_close_at', 'expected_close_at'], ['o.next_action_at', 'next_action_at'], ['o.lost_reason', 'lost_reason'], ['o.active', 'active'])
@@ -529,9 +658,10 @@ class Controller_Admin_Crm extends Controller_Adminbase
             ->join(['core_parties', 'p'], 'left')->on('o.party_id', '=', 'p.id')
             ->join(['core_crm_prospects', 'pr'], 'left')->on('o.prospect_id', '=', 'pr.id')
             ->join(['users', 'u'], 'left')->on('o.owner_user_id', '=', 'u.id')
-            ->where('o.active', '=', 1)
-            ->order_by('o.id', 'desc')
-            ->limit(200);
+            ->where('o.active', '=', 1);
+
+        $this->customer_visibility->apply_party_id_scope($query, 'o.party_id', (int) $this->user_id, true);
+        $query->order_by('o.id', 'desc')->limit(200);
 
         foreach ($query->execute() as $row) {
             $rows[] = $this->format_dates($row);
@@ -543,17 +673,17 @@ class Controller_Admin_Crm extends Controller_Adminbase
     protected function activities()
     {
         $rows = [];
-        foreach (\DB::select(['a.id', 'id'], ['a.party_id', 'party_id'], ['p.name', 'party_name'], ['a.prospect_id', 'prospect_id'], ['pr.name', 'prospect_name'], ['a.opportunity_id', 'opportunity_id'], ['o.folio', 'opportunity_folio'], ['a.ticket_id', 'ticket_id'], ['t.folio', 'ticket_folio'], ['a.activity_type', 'activity_type'], ['a.subject', 'subject'], ['a.description', 'description'], ['a.status', 'status'], ['a.priority', 'priority'], ['a.assigned_user_id', 'assigned_user_id'], ['u.username', 'assigned_name'], ['a.due_at', 'due_at'], ['a.completed_at', 'completed_at'])
+        $query = \DB::select(['a.id', 'id'], ['a.party_id', 'party_id'], ['p.name', 'party_name'], ['a.prospect_id', 'prospect_id'], ['pr.name', 'prospect_name'], ['a.opportunity_id', 'opportunity_id'], ['o.folio', 'opportunity_folio'], ['a.ticket_id', 'ticket_id'], ['t.folio', 'ticket_folio'], ['a.activity_type', 'activity_type'], ['a.subject', 'subject'], ['a.description', 'description'], ['a.status', 'status'], ['a.priority', 'priority'], ['a.assigned_user_id', 'assigned_user_id'], ['u.username', 'assigned_name'], ['a.due_at', 'due_at'], ['a.completed_at', 'completed_at'])
             ->from(['core_crm_activities', 'a'])
             ->join(['core_parties', 'p'], 'left')->on('a.party_id', '=', 'p.id')
             ->join(['core_crm_prospects', 'pr'], 'left')->on('a.prospect_id', '=', 'pr.id')
             ->join(['core_crm_opportunities', 'o'], 'left')->on('a.opportunity_id', '=', 'o.id')
             ->join(['core_helpdesk_tickets', 't'], 'left')->on('a.ticket_id', '=', 't.id')
             ->join(['users', 'u'], 'left')->on('a.assigned_user_id', '=', 'u.id')
-            ->where('a.active', '=', 1)
-            ->order_by('a.id', 'desc')
-            ->limit(200)
-            ->execute() as $row) {
+            ->where('a.active', '=', 1);
+
+        $this->customer_visibility->apply_party_id_scope($query, 'a.party_id', (int) $this->user_id, true);
+        foreach ($query->order_by('a.id', 'desc')->limit(200)->execute() as $row) {
             $rows[] = $this->format_dates($row);
         }
         return $rows;
@@ -596,12 +726,18 @@ class Controller_Admin_Crm extends Controller_Adminbase
             return [];
         }
 
-        return \DB::select(['t.id', 'id'], ['t.folio', 'folio'], ['t.subject', 'subject'], ['t.party_id', 'party_id'], ['p.name', 'party_name'], ['t.priority', 'priority'], ['s.name', 'status_name'], ['s.color', 'status_color'], ['t.created_at', 'created_at'], ['t.last_message_at', 'last_message_at'])
+        $query = \DB::select(['t.id', 'id'], ['t.folio', 'folio'], ['t.subject', 'subject'], ['t.party_id', 'party_id'], ['p.name', 'party_name'], ['t.priority', 'priority'], ['s.name', 'status_name'], ['s.color', 'status_color'], ['t.created_at', 'created_at'], ['t.last_message_at', 'last_message_at'])
             ->from(['core_helpdesk_tickets', 't'])
             ->join(['core_parties', 'p'], 'left')->on('t.party_id', '=', 'p.id')
             ->join(['core_helpdesk_statuses', 's'], 'left')->on('t.status_id', '=', 's.id')
-            ->where('t.portal_code', '=', 'clientes')
-            ->or_where('t.source', '=', 'clientes')
+            ->where_open()
+                ->where('t.portal_code', '=', 'clientes')
+                ->or_where('t.source', '=', 'clientes')
+            ->where_close();
+
+        $this->customer_visibility->apply_party_id_scope($query, 't.party_id', (int) $this->user_id, false);
+
+        return $query
             ->order_by('t.id', 'desc')
             ->limit(100)
             ->execute()
@@ -615,10 +751,14 @@ class Controller_Admin_Crm extends Controller_Adminbase
 
     protected function survey_responses()
     {
-        return \DB::select(['r.id', 'id'], ['s.name', 'survey_name'], ['r.party_id', 'party_id'], ['p.name', 'party_name'], ['r.portal_code', 'portal_code'], ['r.score', 'score'], ['r.comments', 'comments'], ['r.created_at', 'created_at'])
+        $query = \DB::select(['r.id', 'id'], ['s.name', 'survey_name'], ['r.party_id', 'party_id'], ['p.name', 'party_name'], ['r.portal_code', 'portal_code'], ['r.score', 'score'], ['r.comments', 'comments'], ['r.created_at', 'created_at'])
             ->from(['core_crm_survey_responses', 'r'])
             ->join(['core_crm_surveys', 's'], 'left')->on('r.survey_id', '=', 's.id')
-            ->join(['core_parties', 'p'], 'left')->on('r.party_id', '=', 'p.id')
+            ->join(['core_parties', 'p'], 'left')->on('r.party_id', '=', 'p.id');
+
+        $this->customer_visibility->apply_party_id_scope($query, 'r.party_id', (int) $this->user_id, true);
+
+        return $query
             ->order_by('r.id', 'desc')
             ->limit(100)
             ->execute()
@@ -627,10 +767,14 @@ class Controller_Admin_Crm extends Controller_Adminbase
 
     protected function cut_calculations()
     {
-        return \DB::select(['c.id', 'id'], ['c.folio', 'folio'], ['c.party_id', 'party_id'], ['p.name', 'party_name'], ['c.material', 'material'], ['c.sheet_width', 'sheet_width'], ['c.sheet_height', 'sheet_height'], ['c.piece_width', 'piece_width'], ['c.piece_height', 'piece_height'], ['c.kerf', 'kerf'], ['c.pieces_x', 'pieces_x'], ['c.pieces_y', 'pieces_y'], ['c.total_pieces', 'total_pieces'], ['c.waste_percent', 'waste_percent'], ['c.notes', 'notes'], ['c.created_at', 'created_at'])
+        $query = \DB::select(['c.id', 'id'], ['c.folio', 'folio'], ['c.party_id', 'party_id'], ['p.name', 'party_name'], ['c.material', 'material'], ['c.sheet_width', 'sheet_width'], ['c.sheet_height', 'sheet_height'], ['c.piece_width', 'piece_width'], ['c.piece_height', 'piece_height'], ['c.kerf', 'kerf'], ['c.pieces_x', 'pieces_x'], ['c.pieces_y', 'pieces_y'], ['c.total_pieces', 'total_pieces'], ['c.waste_percent', 'waste_percent'], ['c.notes', 'notes'], ['c.created_at', 'created_at'])
             ->from(['core_crm_cut_calculations', 'c'])
             ->join(['core_parties', 'p'], 'left')->on('c.party_id', '=', 'p.id')
-            ->where('c.active', '=', 1)
+            ->where('c.active', '=', 1);
+
+        $this->customer_visibility->apply_party_id_scope($query, 'c.party_id', (int) $this->user_id, true);
+
+        return $query
             ->order_by('c.id', 'desc')
             ->limit(100)
             ->execute()
@@ -640,7 +784,8 @@ class Controller_Admin_Crm extends Controller_Adminbase
     protected function options()
     {
         return [
-            'parties' => $this->party_options(),
+            'parties' => $this->party_options(false),
+            'email_parties' => $this->party_options(true),
             'prospects' => $this->prospect_options(),
             'users' => $this->user_options(),
             'surveys' => $this->survey_options(),
@@ -651,20 +796,60 @@ class Controller_Admin_Crm extends Controller_Adminbase
 
     protected function stats()
     {
+        $opportunity_query = \DB::select(\DB::expr('COUNT(*) AS total'))->from(['core_crm_opportunities', 'o'])->where('o.active', '=', 1);
+        $this->customer_visibility->apply_party_id_scope($opportunity_query, 'o.party_id', (int) $this->user_id, true);
+
+        $activity_query = \DB::select(\DB::expr('COUNT(*) AS total'))->from(['core_crm_activities', 'a'])->where('a.active', '=', 1)->where('a.status', '!=', 'done');
+        $this->customer_visibility->apply_party_id_scope($activity_query, 'a.party_id', (int) $this->user_id, true);
+
+        $tickets_count = 0;
+        if (\DBUtil::table_exists('core_helpdesk_tickets')) {
+            $ticket_query = \DB::select(\DB::expr('COUNT(*) AS total'))
+                ->from(['core_helpdesk_tickets', 't'])
+                ->where_open()
+                    ->where('t.portal_code', '=', 'clientes')
+                    ->or_where('t.source', '=', 'clientes')
+                ->where_close();
+            $this->customer_visibility->apply_party_id_scope($ticket_query, 't.party_id', (int) $this->user_id, false);
+            $ticket_row = $ticket_query->execute()->current();
+            $tickets_count = $ticket_row ? (int) $ticket_row['total'] : 0;
+        }
+
+        $opportunity_row = $opportunity_query->execute()->current();
+        $activity_row = $activity_query->execute()->current();
+
         return [
-            'opportunities' => (int) \DB::select()->from('core_crm_opportunities')->where('active', '=', 1)->execute()->count(),
+            'opportunities' => $opportunity_row ? (int) $opportunity_row['total'] : 0,
             'prospects' => (int) \DB::select()->from('core_crm_prospects')->where('active', '=', 1)->execute()->count(),
-            'open_activities' => (int) \DB::select()->from('core_crm_activities')->where('active', '=', 1)->where('status', '!=', 'done')->execute()->count(),
-            'customer_tickets' => \DBUtil::table_exists('core_helpdesk_tickets') ? (int) \DB::select()->from('core_helpdesk_tickets')->where('portal_code', '=', 'clientes')->execute()->count() : 0,
+            'open_activities' => $activity_row ? (int) $activity_row['total'] : 0,
+            'customer_tickets' => $tickets_count,
             'surveys' => (int) \DB::select()->from('core_crm_surveys')->where('active', '=', 1)->execute()->count(),
         ];
     }
 
-    protected function party_options()
+    protected function party_options($email_only = false)
     {
         $rows = [];
-        foreach (\DB::select('id', 'name', 'rfc', 'party_type')->from('core_parties')->where('active', '=', 1)->order_by('name', 'asc')->execute() as $row) {
-            $rows[] = ['value' => (string) $row['id'], 'label' => $row['name'].' ('.$row['party_type'].')'.($row['rfc'] ? ' - '.$row['rfc'] : '')];
+        $query = \DB::select('id', 'name', 'rfc', 'party_type', 'email')
+            ->from(['core_parties', 'p']);
+        $this->customer_visibility->apply_customer_scope($query, (int) $this->user_id, 'p');
+        if ($email_only) {
+            $this->customer_visibility->apply_email_eligible($query, 'p');
+        }
+
+        foreach ($query->order_by('name', 'asc')->execute() as $row) {
+            $row = (array) $row;
+            $has_email = $this->customer_visibility->has_valid_email($row);
+            if ($email_only && !$has_email) {
+                continue;
+            }
+            $rows[] = [
+                'value' => (string) $row['id'],
+                'label' => $row['name'].($row['rfc'] ? ' - '.$row['rfc'] : ''),
+                'email' => (string) $row['email'],
+                'has_valid_email' => $has_email ? 1 : 0,
+                'email_message' => $has_email ? '' : 'Este cliente no tiene correo valido registrado.',
+            ];
         }
         return $rows;
     }
@@ -676,6 +861,16 @@ class Controller_Admin_Crm extends Controller_Adminbase
             $rows[] = ['value' => (string) $row['id'], 'label' => (string) $row['username']];
         }
         return $rows;
+    }
+
+    protected function can_use_customer($party_id)
+    {
+        $party_id = (int) $party_id;
+        if ($party_id <= 0) {
+            return true;
+        }
+
+        return $this->customer_visibility->can_view_customer((int) $this->user_id, $party_id);
     }
 
     protected function prospect_options()

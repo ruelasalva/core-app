@@ -230,6 +230,7 @@ class Service_Core_Email_QueueProcessor
             'reply_to_email' => (string) $provider->reply_to_email,
             'cc' => $this->safe_recipients((array) \Arr::get($payload, 'cc', [])),
             'bcc' => $this->safe_recipients((array) \Arr::get($payload, 'bcc', [])),
+            'attachments' => $this->safe_attachments((array) \Arr::get($payload, 'attachments', [])),
         ];
 
         $attempt_number = (int) $row['attempts'] + 1;
@@ -401,6 +402,29 @@ class Service_Core_Email_QueueProcessor
         return $safe;
     }
 
+    protected function safe_attachments(array $items)
+    {
+        $safe = [];
+        foreach ($items as $item) {
+            $item = (array) $item;
+            $storage_ref = $this->safe_storage_ref((string) \Arr::get($item, 'storage_ref', ''));
+            if ($storage_ref === '') {
+                continue;
+            }
+
+            $safe[] = [
+                'filename' => $this->safe_text((string) \Arr::get($item, 'filename', '')),
+                'mime_type' => $this->safe_text((string) \Arr::get($item, 'mime_type', '')),
+                'size_bytes' => max(0, (int) \Arr::get($item, 'size_bytes', 0)),
+                'storage_ref' => $storage_ref,
+                'content_hash' => substr(preg_replace('/[^a-fA-F0-9]/', '', (string) \Arr::get($item, 'content_hash', '')), 0, 64),
+                'disposition' => $this->safe_text((string) \Arr::get($item, 'disposition', 'attachment')),
+            ];
+        }
+
+        return $safe;
+    }
+
     protected function safe_email($email)
     {
         $email = strtolower(trim((string) $email));
@@ -413,5 +437,15 @@ class Service_Core_Email_QueueProcessor
         $value = preg_replace('/(password|token|secret|api[_-]?key)\s*[:=]\s*\S+/i', '$1=[redacted]', $value);
         $value = preg_replace('/(file_path|storage_path)\s*[:=]\s*\S+/i', '$1=[redacted]', $value);
         return substr(trim($value), 0, 180);
+    }
+
+    protected function safe_storage_ref($value)
+    {
+        $value = trim((string) $value);
+        if ($value === '' || preg_match('/[\\\\\/:]/', $value) || preg_match('/(file_path|storage_path|DOCROOT|APPPATH)/i', $value)) {
+            return '';
+        }
+
+        return substr(preg_replace('/[^a-zA-Z0-9_\-\.]/', '', $value), 0, 180);
     }
 }

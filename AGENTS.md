@@ -738,3 +738,630 @@ Documentation must not include:
 - server secrets
 
 If the production server exposes the project root instead of only public/, docs/ must be excluded from deployment or blocked by web server rules.
+Add a mandatory section:
+
+"Documentation and Environment Safety Requirements"
+
+Include these rules:
+
+1. Help documentation requirement
+Whenever a task creates or significantly modifies a user-facing module, admin screen, portal screen, workflow, configuration area, or operational process, the implementer must evaluate whether internal Help documentation is required.
+
+If required, add or update help content using the existing Help module pattern:
+- Prefer idempotent seed tasks when the project stores help articles in DB.
+- Prefer docs/help/*.md only when no DB help pattern exists.
+- Do not hardcode long help text in controllers.
+- Include setup, usage, permissions, troubleshooting and validation.
+- Report whether help documentation was added, updated, deferred or not needed.
+
+This applies especially to:
+- Communications
+- Workspace
+- CRM
+- Helpdesk
+- Sales
+- Purchases
+- Portals
+- SAT/CFDI
+- Fiscal
+- Security/configuration screens
+
+2. Migration and seed environment safety
+Before running any migration, rollback, seed, repair task, or data-changing Oil command, the implementer must explicitly confirm the intended environment.
+
+Rules:
+- Never run `php oil refine migrate` without `FUEL_ENV`.
+- Never run data-changing Oil tasks without `FUEL_ENV`.
+- Use explicit commands:
+  - `FUEL_ENV=development php oil refine migrate`
+  - `FUEL_ENV=development php oil refine seed...`
+  - `FUEL_ENV=production php oil refine ...` only when production is explicitly approved.
+- If `FUEL_ENV` is missing, stop and report the exact command that should be used.
+- If a command accidentally attempts production/local credentials and fails, do not retry blindly.
+- Never modify `fuel/app/config/production/db.php` to make a local command work.
+- For Windows PowerShell, use:
+  - `$env:FUEL_ENV='development'; php oil refine migrate`
+  - `$env:FUEL_ENV='development'; php oil refine seed...`
+- For cmd.exe, use:
+  - `set FUEL_ENV=development && php oil refine migrate`
+
+3. Reporting requirement
+Every implementation report must include:
+- Help documentation: added / updated / deferred / not needed.
+- Environment used for migrations/seeds/tasks.
+- Exact commands run.
+- Whether any command failed due to wrong DB credentials.
+- Confirmation that no production DB/config was modified unless explicitly approved.
+
+Do not modify PHP, migrations, seeds or docs other than AGENTS.md.
+Do not commit.
+Do not push.
+
+Return:
+- AGENTS.md sections added
+- exact rules added
+- validation: not applicable or markdown-only
+
+---
+
+# API Client Standard
+
+CORE-APP uses a single API client for frontend communication.
+
+Never call:
+
+response.json()
+res.json()
+
+directly.
+
+Always use:
+
+CoreApiClient
+
+Reasons:
+
+- Detect login HTML.
+- Detect PHP fatal pages.
+- Detect HTML 404 responses.
+- Normalize JSON responses.
+- Normalize CSRF handling.
+- Normalize authentication errors.
+- Prevent infinite loading states.
+
+If CoreApiClient already solves the problem,
+reuse it.
+
+Do not duplicate JSON parsers.
+
+Do not create module-specific fetch wrappers unless explicitly approved.
+---
+
+# JSON Endpoint Standard
+
+All AJAX endpoints must always return JSON.
+
+Never return HTML.
+
+Never redirect to login.
+
+Use controlled responses.
+
+Authentication:
+
+401
+auth_required
+
+Authorization:
+
+403
+permission_denied
+
+Missing endpoint:
+
+404
+endpoint_not_found
+
+Unexpected server error:
+
+500
+internal_error
+
+Every JSON endpoint must:
+
+- validate session
+- validate permissions
+- validate CSRF when applicable
+- return the standard JSON structure
+
+Never depend on HTML redirects.
+---
+
+# Frontend Async Standard
+
+Every asynchronous operation must use:
+
+try
+
+catch
+
+finally
+
+Loading indicators must always be cleared inside finally.
+
+Never leave the interface permanently loading.
+
+Never render raw HTML returned by failed requests.
+
+Display controlled error messages.
+
+All frontend AJAX modules must use CoreApiClient.
+---
+
+# Module Architecture Standard
+
+Large modules should follow a common architecture.
+
+Prefer:
+
+Controller
+
+↓
+
+Service
+
+↓
+
+Model
+
+↓
+
+View
+
+↓
+
+CoreApiClient
+
+Do not duplicate:
+
+- AJAX helpers
+- JSON parsers
+- business logic
+- permission validation
+
+Business rules belong inside Services.
+---
+
+# Embedded Panel Standard
+
+Embedded panels are reusable read-only components.
+
+Examples:
+
+CRM
+
+Helpdesk
+
+Sales
+
+Purchases
+
+Portals
+
+Communications
+
+Embedded panels must:
+
+- reuse Services
+- reuse CoreApiClient
+- reuse permission validation
+- avoid duplicated mailbox logic
+
+Do not create independent mailbox implementations.
+
+Use:
+
+MailboxAccess
+
+ConversationManager
+
+MessageStore
+
+EmbeddedPanel
+
+Communications endpoints.
+---
+
+# Event Bus Standard
+
+Business modules must never send emails directly.
+
+Business modules must never create notifications directly.
+
+Always use:
+
+Helper_Core_Event::fire()
+
+The Event Bus decides:
+
+- notifications
+- email
+- automation
+- workflows
+- future integrations
+
+Controllers must not know how messages are delivered.
+
+Never couple ERP modules to email providers.
+---
+
+# Queue Standard
+
+Every queue processor must support:
+
+pending
+
+processing
+
+sent
+
+failed
+
+retry
+
+stale recovery
+
+diagnostics
+
+Workers must be restart-safe.
+
+Never leave processing rows permanently locked.
+
+Provide repair tasks whenever recovery may be required.
+---
+
+# Communications Standard
+
+Communications is the central messaging platform.
+
+The following modules must never implement independent email logic:
+
+CRM
+
+Helpdesk
+
+Sales
+
+Purchases
+
+Contracts
+
+Portals
+
+Password Reset
+
+Notifications
+
+Event Bus
+
+Use:
+
+Communications Manager
+
+Email Manager
+
+Notification Manager
+
+Provider Factory
+
+MailboxAccess
+
+MessageStore
+
+ConversationManager
+---
+
+# IMAP Standard
+
+IMAP is used only for:
+
+incoming messages
+
+conversation synchronization
+
+sent synchronization
+
+history
+
+message recovery
+
+Never use IMAP to send email.
+
+Outgoing email belongs to SMTP or API providers.
+
+IMAP synchronization must never block ERP operations.
+
+---
+
+# Message Store Standard
+
+Every message belongs to:
+
+Conversation
+
+↓
+
+Account
+
+↓
+
+ERP Entity (optional)
+
+Attachments must use:
+
+storage_ref
+
+Never:
+
+file_path
+
+storage_path
+
+physical paths
+
+Only metadata should be exposed.
+
+HTML must always be sanitized before rendering.
+---
+
+# Read-Only First Rule
+
+When integrating existing ERP modules:
+
+Phase 1
+
+Read-only
+
+Validation
+
+Preview
+
+Embedded panel
+
+Phase 2
+
+Compose
+
+Reply
+
+Create
+
+Automation
+
+Phase 3
+
+Workflow
+
+Synchronization
+
+Actions
+
+Never begin with destructive operations.
+---
+
+# Backward Compatibility
+
+Never replace an existing module immediately.
+
+Prefer:
+
+Adapters
+
+Wrappers
+
+New Services
+
+New Endpoints
+
+New UI
+
+Maintain legacy behavior until migration is complete.
+
+Never break production behavior during refactoring.
+---
+
+# UTF-8 Rule
+
+Views must remain UTF-8 without BOM.
+
+Before finishing any sprint verify:
+
+No mojibake.
+
+Search for:
+
+Ã
+
+Â
+
+â€
+
+Replace any corrupted encoding before considering the sprint complete.
+---
+
+# Controller Size Rule
+
+Controllers should orchestrate.
+
+Controllers should not become business engines.
+
+When a controller grows significantly or mixes multiple business processes:
+
+Move logic into Services.
+
+Prefer:
+
+Thin Controllers
+
+Rich Services
+
+Reusable Models
+---
+
+# Reuse First Rule
+
+Before creating:
+
+Service
+
+Model
+
+Migration
+
+Task
+
+Helper
+
+Endpoint
+
+Vue Component
+
+View
+
+Search the project first.
+
+If an equivalent implementation exists:
+
+Reuse it.
+
+Extend it.
+
+Document why it cannot be reused.
+
+Avoid duplicate architecture.
+---
+
+# UI Consistency Rule
+
+New modules should follow the AdminLTE visual language.
+
+Avoid oversized hero sections unless justified.
+
+Prefer:
+
+compact cards
+
+consistent spacing
+
+responsive layouts
+
+professional tables
+
+clear empty states
+
+technical inspectors hidden by default
+
+User interfaces must prioritize productivity over decoration.
+---
+
+# Help Module Rule
+
+Whenever a production feature becomes usable by end users,
+evaluate whether Help documentation should also be created.
+
+Help documentation should explain:
+
+Purpose
+
+Configuration
+
+Permissions
+
+Workflow
+
+Troubleshooting
+
+Validation
+
+Production checklist
+
+Prefer idempotent seed tasks when Help content is stored in the database.
+---
+
+# Final Validation Checklist
+
+Before considering any sprint complete verify:
+
+✓ Technical analysis completed
+
+✓ Business impact reviewed
+
+✓ Permissions validated
+
+✓ php -l executed
+
+✓ JSON responses validated
+
+✓ CoreApiClient used
+
+✓ Loading handled with finally
+
+✓ No raw HTML rendered
+
+✓ No file_path/storage_path exposed
+
+✓ UTF-8 verified
+
+✓ Documentation updated
+
+✓ Help article evaluated
+
+✓ Diagnostics task created when applicable
+
+✓ Repair task created when applicable
+
+✓ FUEL_ENV explicitly used
+
+✓ Development environment confirmed
+
+✓ Production configuration untouched unless explicitly approved
+
+✓ Security review completed
+
+✓ No duplicated code introduced
+
+✓ No automatic commit
+
+✓ No automatic push
+---
+
+# CORE-APP Engineering Principles
+
+The ERP must evolve without losing consistency.
+
+Always prefer:
+
+One source of truth.
+
+One implementation for each responsibility.
+
+Reusable Services.
+
+Reusable APIs.
+
+Reusable UI components.
+
+Event-driven architecture.
+
+Backward compatibility.
+
+Security by default.
+
+Read-only integration before write operations.
+
+Documentation before deployment.
+
+Long-term maintainability over short-term convenience.
+
+When multiple solutions are technically valid,
+choose the one that future developers will understand more easily.

@@ -48,7 +48,8 @@ class Service_Core_Admin_MenuBuilder
             $this->item('Inicio', 'bi bi-speedometer2', \Uri::create('admin'), $segment === ''),
             $this->item('Workspace', 'bi bi-grid-1x2', \Uri::create('admin/workspace'), $segment === 'workspace', $menu['workspace']),
 
-            $this->header('COMERCIAL', $menu['commerce'] || $menu['supplierimport'] || $menu['sales'] || $menu['crm'] || $menu['commissions']),
+            $this->header('COMERCIAL', $menu['business'] || $menu['customer360'] || $menu['commerce'] || $menu['supplierimport'] || $menu['sales'] || $menu['crm'] || $menu['commissions'] || $menu['commission_config']),
+            $this->item('Administraci&oacute;n Comercial', 'bi bi-kanban', \Uri::create('admin/business'), $segment === 'business', $menu['business']),
             $this->item('Productos y precios', 'bi bi-box-seam', \Uri::create('admin/commerce'), $segment === 'commerce', $menu['commerce']),
             $this->item('Importaci&oacute;n de proveedores', 'bi bi-cloud-arrow-up', \Uri::create('admin/supplierimport'), $segment === 'supplierimport', $menu['supplierimport']),
             $this->tree('Ventas', 'bi bi-receipt', $sales_open, $menu['sales'], [
@@ -57,11 +58,14 @@ class Service_Core_Admin_MenuBuilder
                 $this->item('Entregas', 'bi bi-circle', \Uri::create('admin/sales', [], ['view' => 'deliveries']), $segment === 'sales' && $sales_view === 'deliveries', $menu['sales']),
             ], false, 'bi bi-chevron-left'),
             $this->item('CRM comercial', 'bi bi-people', \Uri::create('admin/crm'), $segment === 'crm', $menu['crm']),
+            $this->item('Vista 360 de Cliente', 'bi bi-person-bounding-box', \Uri::create('admin/customer360'), $segment === 'customer360', $menu['customer360']),
             $this->item('Vendedores y comisiones', 'bi bi-cash-coin', \Uri::create('admin/commissions'), $segment === 'commissions', $menu['commissions']),
+            $this->item('Configuraci&oacute;n de Comisiones', 'bi bi-sliders2', \Uri::create('admin/commission-config'), $segment === 'commission-config', $menu['commission_config']),
 
-            $this->header('OPERACI&Oacute;N', $menu['inventory'] || $menu['purchases'] || $menu['contracts'] || $menu['documents'] || $menu['helpdesk'] || $menu['calendar']),
+            $this->header('OPERACI&Oacute;N', $menu['inventory'] || $menu['purchases'] || $menu['supplier360'] || $menu['contracts'] || $menu['documents'] || $menu['helpdesk'] || $menu['calendar']),
             $this->item('Inventario', 'bi bi-boxes', \Uri::create('admin/inventory'), $segment === 'inventory', $menu['inventory']),
             $this->item('Compras', 'bi bi-cart-check', \Uri::create('admin/purchases'), $segment === 'purchases', $menu['purchases']),
+            $this->item('Vista 360 de Proveedor', 'bi bi-truck', \Uri::create('admin/supplier360'), $segment === 'supplier360', $menu['supplier360']),
             $this->item('Contratos', 'bi bi-file-earmark-text', \Uri::create('admin/contracts'), $segment === 'contracts', $menu['contracts']),
             $this->item('Documentos', 'bi bi-folder2-open', \Uri::create('admin/documents'), $segment === 'documents', $menu['documents']),
             $this->item('Helpdesk', 'bi bi-life-preserver', \Uri::create('admin/helpdesk'), $segment === 'helpdesk', $menu['helpdesk']),
@@ -136,7 +140,7 @@ class Service_Core_Admin_MenuBuilder
     protected function normalize_menu(array $menu)
     {
         $keys = [
-            'commerce', 'supplierimport', 'sales', 'commissions', 'inventory', 'purchases', 'contracts',
+            'business', 'customer360', 'supplier360', 'commerce', 'supplierimport', 'sales', 'commissions', 'commission_config', 'inventory', 'purchases', 'contracts',
             'billing', 'billing_stamp', 'billing_cancel', 'billing_rep',
             'receivables', 'payables', 'payments', 'treasury', 'budgets',
             'accounting', 'accounting_chart', 'accounting_post', 'accounting_periods', 'hr',

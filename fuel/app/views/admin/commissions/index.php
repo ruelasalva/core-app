@@ -191,7 +191,19 @@
                 <div class="col-md-4 mt-2"><label>Empleado</label><select class="form-control" v-model="sellerForm.employee_id"><option value="0">Sin empleado</option><option v-for="e in options.employees" :value="e.value">{{ e.label }}</option></select></div>
                 <div class="col-md-4 mt-2"><label>Tercero / revendedor</label><select class="form-control" v-model="sellerForm.party_id"><option value="0">Sin tercero</option><option v-for="p in options.resellers" :value="p.value">{{ p.label }}</option></select></div>
                 <div class="col-md-4 mt-2"><label>Usuario</label><select class="form-control" v-model="sellerForm.user_id"><option value="0">Sin usuario</option><option v-for="u in options.users" :value="u.value">{{ u.label }}</option></select></div>
-                <div class="col-md-4 mt-2"><label>Plan default</label><select class="form-control" v-model="sellerForm.default_commission_plan_id"><option value="0">Sin plan</option><option v-for="p in options.plans" :value="p.value">{{ p.label }}</option></select></div>
+                <div class="col-md-4 mt-2">
+                    <label>Plan default</label>
+                    <select class="form-control" v-model="sellerForm.default_commission_plan_value">
+                        <option value="legacy:0">Sin plan legacy</option>
+                        <optgroup label="Planes legacy">
+                            <option v-for="p in planBridge('legacy')" :value="p.value">{{ p.label }}</option>
+                        </optgroup>
+                        <optgroup v-if="planBridge('config').length" label="Planes configurables publicados">
+                            <option v-for="p in planBridge('config')" :value="p.value">{{ p.label }}</option>
+                        </optgroup>
+                    </select>
+                    <small class="form-text text-muted">Los planes configurables se muestran para consulta. La asignación persistente se habilitará en la siguiente fase.</small>
+                </div>
                 <div class="col-md-2 mt-2"><label>% venta</label><input type="number" step="0.01" class="form-control" v-model.number="sellerForm.base_commission_percent"></div>
                 <div class="col-md-2 mt-2"><label>% pago</label><input type="number" step="0.01" class="form-control" v-model.number="sellerForm.payment_commission_percent"></div>
                 <div class="col-md-2 mt-2"><label>% cuota</label><input type="number" step="0.01" class="form-control" v-model.number="sellerForm.quota_commission_percent"></div>
@@ -281,6 +293,7 @@
     </div>
 </div>
 
+<script src="<?php echo \Uri::base(false); ?>assets/js/core-api-client.js"></script>
 <script>
 window.onload = function() {
     new Vue({
@@ -306,9 +319,14 @@ window.onload = function() {
         },
         mounted: function() { this.load(); },
         methods: {
-            load: function() {
-                fetch('<?php echo Uri::create('admin/commissions/data'); ?>').then(function(r) { return r.json(); }).then(data => {
-                    if (data.error) { this.error = data.error; return; }
+            load: async function() {
+                this.error = '';
+                try {
+                    var result = await CoreApiClient.get('<?php echo Uri::create('admin/commissions/data'); ?>');
+                    if (!result.ok) {
+                        throw new Error(CoreApiClient.safeMessage(result.payload, result.message || 'No se pudo cargar comisiones.'));
+                    }
+                    var data = result.payload || {};
                     this.sellers = data.sellers || [];
                     this.plans = data.plans || [];
                     this.rules = data.rules || [];
@@ -317,24 +335,41 @@ window.onload = function() {
                     this.settlements = data.settlements || [];
                     this.options = data.options || {};
                     this.stats = data.stats || {};
-                });
+                } catch (error) {
+                    this.error = CoreApiClient.safeMessage(error, 'No se pudo cargar comisiones.');
+                }
             },
-            openSeller: function(item) { this.sellerForm = Object.assign({ id: 0, code: '', name: '', seller_type: 'employee', employee_id: 0, party_id: 0, user_id: 0, default_commission_plan_id: 0, base_commission_percent: 0, payment_commission_percent: 0, quota_commission_percent: 0, active: true }, item); this.showModal('modal-seller'); },
+            openSeller: function(item) {
+                this.sellerForm = Object.assign({ id: 0, code: '', name: '', seller_type: 'employee', employee_id: 0, party_id: 0, user_id: 0, default_commission_plan_id: 0, default_commission_plan_value: 'legacy:0', base_commission_percent: 0, payment_commission_percent: 0, quota_commission_percent: 0, active: true }, item);
+                this.sellerForm.default_commission_plan_value = 'legacy:' + Number(this.sellerForm.default_commission_plan_id || 0);
+                this.showModal('modal-seller');
+            },
             openPlan: function(item) { this.planForm = Object.assign({ id: 0, code: '', name: '', applies_to: 'all', valid_from: '', valid_until: '', description: '', active: true }, item); this.showModal('modal-plan'); },
             openRule: function(item) { this.ruleForm = Object.assign({ id: 0, plan_id: 0, code: '', name: '', rule_scope: 'general', seller_id: 0, party_id: 0, product_id: 0, brand_id: 0, category_id: 0, subcategory_id: 0, trigger_event: 'sale', calculation_base: 'line_total', value_type: 'percent', value: 0, min_quantity: 0, min_amount: 0, priority: 100, stackable: true, valid_from: '', valid_until: '', active: true }, item); this.showModal('modal-rule'); },
             openQuota: function(item) { this.quotaForm = Object.assign({ id: 0, seller_id: 0, plan_id: 0, period_code: '<?php echo date('Ym'); ?>', date_from: '<?php echo date('Y-m-01'); ?>', date_to: '<?php echo date('Y-m-t'); ?>', target_amount: 0, target_quantity: 0, bonus_percent: 0, bonus_amount: 0, status: 'open', active: true }, item); this.showModal('modal-quota'); },
             openAdjustment: function(item) { this.adjustmentForm = Object.assign({ seller_id: 0, adjustment_type: 'manual', amount: 0, reason: '' }, item); this.showModal('modal-adjustment'); },
-            saveSeller: function() { this.post('save_seller', this.sellerForm, 'modal-seller'); },
+            saveSeller: function() {
+                if (this.configPlanSelected()) {
+                    this.error = 'Los planes configurables se muestran para consulta. La asignación persistente se habilitará en la siguiente fase.';
+                    return;
+                }
+                this.sellerForm.default_commission_plan_id = this.legacyPlanId(this.sellerForm.default_commission_plan_value);
+                this.post('save_seller', this.sellerForm, 'modal-seller');
+            },
             savePlan: function() { this.post('save_plan', this.planForm, 'modal-plan'); },
             saveRule: function() { this.post('save_rule', this.ruleForm, 'modal-rule'); },
             saveQuota: function() { this.post('save_quota', this.quotaForm, 'modal-quota'); },
             saveAdjustment: function() { this.post('save_adjustment', this.adjustmentForm, 'modal-adjustment'); },
             generateFromOrder: function() { this.post('generate_from_order', this.generateForm); },
             createSettlement: function() { this.post('create_settlement', this.settlementForm); },
-            post: function(action, payload, modal) {
+            post: async function(action, payload, modal) {
                 this.error = '';
-                fetch('<?php echo Uri::create('admin/commissions'); ?>/' + action, window.coreAppFetchOptions(payload)).then(window.coreAppJson).then(data => {
-                    if (data.error) { this.error = data.error; return; }
+                try {
+                    var result = await CoreApiClient.post('<?php echo Uri::create('admin/commissions'); ?>/' + action, payload || {});
+                    if (!result.ok) {
+                        throw new Error(CoreApiClient.safeMessage(result.payload, result.message || 'No se pudo guardar.'));
+                    }
+                    var data = result.payload || {};
                     if (data.sellers) this.sellers = data.sellers;
                     if (data.plans) this.plans = data.plans;
                     if (data.rules) this.rules = data.rules;
@@ -344,7 +379,23 @@ window.onload = function() {
                     if (data.options) this.options = data.options;
                     if (data.stats) this.stats = data.stats;
                     if (modal) this.hideModal(modal);
-                }).catch(err => { this.error = err && err.error ? err.error : 'No se pudo guardar la información.'; });
+                } catch (error) {
+                    this.error = CoreApiClient.safeMessage(error, 'No se pudo guardar la información.');
+                }
+            },
+            planBridge: function(source) {
+                var bridge = this.options && this.options.commission_plan_bridge ? this.options.commission_plan_bridge : {};
+                return bridge[source] || [];
+            },
+            configPlanSelected: function() {
+                return String(this.sellerForm.default_commission_plan_value || '').indexOf('config:') === 0;
+            },
+            legacyPlanId: function(value) {
+                value = String(value || 'legacy:0');
+                if (value.indexOf('legacy:') === 0) {
+                    return Number(value.substring(7)) || 0;
+                }
+                return Number(value) || 0;
             },
             ruleFilter: function(rule) { return rule.seller_name || rule.party_name || rule.product_name || rule.brand_name || rule.category_name || rule.subcategory_name || 'General'; },
             money: function(v) { return '$' + Number(v || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); },

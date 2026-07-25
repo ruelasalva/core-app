@@ -910,7 +910,11 @@ class Controller_Admin_Communications extends Controller_Adminbase
 
         try {
             $service = new Service_Core_Communications_OutgoingComposer();
-            $result = $service->compose((int) $this->user_id, (array) \Input::json());
+            $result = $service->compose(
+                (int) $this->user_id,
+                $this->message_request_payload(),
+                $this->message_request_files()
+            );
 
             return $this->json_response([
                 'success' => !empty($result['success']),
@@ -940,7 +944,11 @@ class Controller_Admin_Communications extends Controller_Adminbase
 
         try {
             $service = new Service_Core_Communications_OutgoingComposer();
-            $result = $service->reply((int) $this->user_id, (array) \Input::json());
+            $result = $service->reply(
+                (int) $this->user_id,
+                $this->message_request_payload(),
+                $this->message_request_files()
+            );
 
             return $this->json_response([
                 'success' => !empty($result['success']),
@@ -962,6 +970,27 @@ class Controller_Admin_Communications extends Controller_Adminbase
     public function action_conversation_center()
     {
         return $this->action_conversations();
+    }
+
+    protected function message_request_payload()
+    {
+        $payload = (array) \Input::json();
+        if (empty($payload)) {
+            $payload = (array) \Input::post();
+        }
+
+        unset($payload['attachments'], $payload['files']);
+
+        return $payload;
+    }
+
+    protected function message_request_files()
+    {
+        if (empty($_FILES) || !isset($_FILES['attachments'])) {
+            return [];
+        }
+
+        return (array) $_FILES['attachments'];
     }
 
     public function action_conversations()

@@ -16,12 +16,16 @@
                 <li class="nav-item"><a href="#" class="nav-link" :class="{active: tab === 'prospects'}" @click.prevent="tab = 'prospects'">Prospectos DENUE</a></li>
                 <li class="nav-item"><a href="#" class="nav-link" :class="{active: tab === 'activities'}" @click.prevent="tab = 'activities'">Actividades</a></li>
                 <li class="nav-item"><a href="#" class="nav-link" :class="{active: tab === 'communications'}" @click.prevent="tab = 'communications'">Comunicaciones</a></li>
+                <li class="nav-item"><a href="#" class="nav-link" :class="{active: tab === 'entityhub'}" @click.prevent="tab = 'entityhub'">Timeline</a></li>
                 <li class="nav-item"><a href="#" class="nav-link" :class="{active: tab === 'tickets'}" @click.prevent="tab = 'tickets'">Tickets clientes</a></li>
                 <li class="nav-item"><a href="#" class="nav-link" :class="{active: tab === 'surveys'}" @click.prevent="tab = 'surveys'">Encuestas</a></li>
                 <li class="nav-item"><a href="#" class="nav-link" :class="{active: tab === 'cut'}" @click.prevent="tab = 'cut'">Calculadora de corte</a></li>
             </ul>
         </div>
         <div class="card-body">
+            <div v-if="!error && options.parties.length === 0" class="alert alert-info">
+                No hay clientes permitidos para tu usuario.
+            </div>
             <div v-show="tab === 'opportunities'">
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h3 class="h6 mb-0">Pipeline comercial</h3>
@@ -168,13 +172,14 @@
                     <div class="card-body">
                         <div class="form-group">
                             <label>Cliente / tercero</label>
-                            <select class="form-control" v-model.number="communicationsContext.party_id">
-                                <option :value="0">Selecciona un cliente o tercero</option>
-                                <option v-for="party in options.parties" :key="'communications-party-' + party.value" :value="Number(party.value)">
-                                    {{ party.label }}
+                            <select class="form-control" v-model.number="communicationsContext.party_id" :disabled="emailPartyOptions.length === 0">
+                                <option :value="0">Selecciona un cliente con correo valido</option>
+                                <option v-for="party in emailPartyOptions" :key="'communications-party-' + party.value" :value="Number(party.value)">
+                                    {{ party.label }} - {{ party.email }}
                                 </option>
                             </select>
                             <small class="form-text text-muted">El panel usa el identificador del cliente seleccionado y solo muestra conversaciones permitidas.</small>
+                            <small v-if="emailPartyOptions.length === 0" class="form-text text-warning">No hay clientes permitidos con correo valido registrado.</small>
                         </div>
 
                         <div
@@ -193,6 +198,113 @@
                                 <i class="far fa-comments fa-2x mb-2"></i>
                                 <p class="mb-1">Selecciona un cliente para revisar sus comunicaciones.</p>
                                 <small>No hay conversaciones relacionadas todav&iacute;a.</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div v-show="tab === 'entityhub'">
+                <div class="d-flex justify-content-between align-items-start flex-wrap mb-3">
+                    <div>
+                        <h3 class="h6 mb-1">Timeline del cliente</h3>
+                        <p class="text-muted mb-0">Contexto read-only generado por el Hub de Entidades para el cliente seleccionado.</p>
+                    </div>
+                    <button class="btn btn-outline-primary btn-sm" @click="loadEntityContext" :disabled="entityContext.loading || entityContext.party_id <= 0">
+                        <span v-if="entityContext.loading" class="spinner-border spinner-border-sm mr-1"></span>
+                        Actualizar
+                    </button>
+                </div>
+
+                <div class="card card-light card-outline mb-3">
+                    <div class="card-body">
+                        <div class="form-group">
+                            <label>Cliente</label>
+                            <select class="form-control" v-model.number="entityContext.party_id" @change="loadEntityContext">
+                                <option :value="0">Selecciona un cliente</option>
+                                <option v-for="party in options.parties" :key="'entityhub-party-' + party.value" :value="Number(party.value)">
+                                    {{ party.label }}
+                                </option>
+                            </select>
+                            <small class="form-text text-muted">CRM conserva el control de permisos. El Hub de Entidades solo agrega linea de tiempo y conteos relacionados.</small>
+                        </div>
+
+                        <div v-if="entityContext.error" class="alert alert-warning mb-3">{{ entityContext.error }}</div>
+
+                        <div v-if="entityContext.party_id <= 0" class="border rounded p-4 text-center text-muted">
+                            <i class="bi bi-clock-history fa-2x mb-2"></i>
+                            <p class="mb-1">Selecciona un cliente para consultar su timeline.</p>
+                            <small>No se modifica informacion operativa.</small>
+                        </div>
+
+                        <div v-else>
+                            <div class="row mb-3">
+                                <div class="col-md-3">
+                                    <div class="small-box bg-light">
+                                        <div class="inner">
+                                            <h3>{{ entityContext.timeline.length }}</h3>
+                                            <p>Eventos visibles</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="small-box bg-light">
+                                        <div class="inner">
+                                            <h3>{{ entityContext.timeline_hidden_count || 0 }}</h3>
+                                            <p>Eventos ocultos</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="small-box bg-light">
+                                        <div class="inner">
+                                            <h3>{{ visibleRelationshipCount }}</h3>
+                                            <p>Relaciones visibles</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="small-box bg-light">
+                                        <div class="inner">
+                                            <h3>{{ entityContext.relationship_hidden_count || 0 }}</h3>
+                                            <p>Relaciones ocultas</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div v-if="entityContext.timeline.length === 0 && !entityContext.loading" class="border rounded p-4 text-center text-muted">
+                                No hay eventos visibles para este cliente.
+                            </div>
+
+                            <div v-for="entry in entityContext.timeline" :key="'entityhub-timeline-' + entry.source_module + '-' + entry.source_entity_type + '-' + entry.source_entity_id + '-' + entry.event_date" class="border-left pl-3 pb-3 mb-2">
+                                <div class="d-flex justify-content-between flex-wrap">
+                                    <strong>{{ entry.title || entry.event_label || 'Evento' }}</strong>
+                                    <small class="text-muted">{{ dateLabel(entry.event_date) }}</small>
+                                </div>
+                                <div class="small text-muted">{{ entry.source_module || '-' }} - {{ entry.event_type || '-' }}</div>
+                                <div>{{ entry.description || 'Sin descripción.' }}</div>
+                            </div>
+
+                            <div v-if="Object.keys(entityContext.relationship_counts).length" class="table-responsive mt-3">
+                                <table class="table table-sm table-bordered mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th>Categoría</th>
+                                            <th class="text-right">Visibles</th>
+                                            <th class="text-right">Ocultas</th>
+                                            <th class="text-right">Total</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr v-for="(row, category) in entityContext.relationship_counts" :key="'entityhub-count-' + category">
+                                            <td>{{ category }}</td>
+                                            <td class="text-right">{{ row.visible || 0 }}</td>
+                                            <td class="text-right">{{ row.hidden || 0 }}</td>
+                                            <td class="text-right">{{ row.total || 0 }}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
                     </div>
@@ -399,17 +511,36 @@ window.onload = function() {
         el: '#app-crm',
         data: {
             tab: 'opportunities', error: '', opportunities: [], activities: [], prospects: [], prospectImports: [], customerTickets: [],
-            surveys: [], surveyResponses: [], cutCalculations: [], options: { parties: [], prospects: [], users: [], surveys: [], sellers: [] },
+            surveys: [], surveyResponses: [], cutCalculations: [], options: { parties: [], email_parties: [], prospects: [], users: [], surveys: [], sellers: [] },
             stats: {}, opportunityForm: {}, activityForm: {}, communicationsContext: { party_id: 0 }, surveyForm: { survey_id: 0, party_id: 0, score: 10, comments: '' },
+            entityContext: { party_id: 0, loading: false, error: '', timeline: [], timeline_counts: {}, timeline_hidden_count: 0, relationship_counts: {}, relationship_hidden_count: 0 },
             prospectForm: {}, denueLoading: false, denueResults: [], selectedDenue: [],
             denueForm: { keyword: '', state_code: '14', latitude: '', longitude: '', radius: 500 },
             cutForm: { party_id: 0, material: '', sheet_width: 0, sheet_height: 0, piece_width: 0, piece_height: 0, kerf: 0, notes: '' }
         },
         mounted: function() { this.load(); },
+        computed: {
+            emailPartyOptions: function() {
+                return (this.options.email_parties || []).filter(function(party) {
+                    return Number(party.has_valid_email || 0) === 1;
+                });
+            },
+            visibleRelationshipCount: function() {
+                var total = 0;
+                Object.keys(this.entityContext.relationship_counts || {}).forEach(function(category) {
+                    total += Number((this.entityContext.relationship_counts[category] || {}).visible || 0);
+                }, this);
+                return total;
+            }
+        },
         methods: {
             load: function() {
-                fetch('<?php echo Uri::create('admin/crm/data'); ?>').then(r => r.json()).then(data => {
-                    if (data.error) { this.error = data.error; return; }
+                window.CoreApiClient.get('<?php echo Uri::create('admin/crm/data'); ?>').then((result) => {
+                    var data = result.payload || {};
+                    if (!result.ok || data.success === false || data.error) {
+                        this.error = data.message || data.error || result.message || 'No se pudo cargar CRM.';
+                        return;
+                    }
                     this.opportunities = data.opportunities || [];
                     this.activities = data.activities || [];
                     this.prospects = data.prospects || [];
@@ -420,7 +551,49 @@ window.onload = function() {
                     this.cutCalculations = data.cut_calculations || [];
                     this.options = data.options || this.options;
                     this.stats = data.stats || {};
+                }).catch((error) => {
+                    this.error = error && error.message ? error.message : 'No se pudo cargar CRM.';
                 });
+            },
+            loadEntityContext: function() {
+                var partyId = Number(this.entityContext.party_id || 0);
+                this.entityContext.error = '';
+                if (partyId <= 0) {
+                    this.entityContext.timeline = [];
+                    this.entityContext.timeline_counts = {};
+                    this.entityContext.timeline_hidden_count = 0;
+                    this.entityContext.relationship_counts = {};
+                    this.entityContext.relationship_hidden_count = 0;
+                    return;
+                }
+
+                this.entityContext.loading = true;
+                window.CoreApiClient.get('<?php echo Uri::create('admin/crm/entityhub_context'); ?>?party_id=' + encodeURIComponent(partyId))
+                    .then((result) => {
+                        var payload = result.payload || {};
+                        if (!result.ok || payload.success === false) {
+                            this.entityContext.timeline = [];
+                            this.entityContext.timeline_counts = {};
+                            this.entityContext.relationship_counts = {};
+                            this.entityContext.error = payload.message || result.message || 'No se pudo cargar el contexto del Hub de Entidades.';
+                            return;
+                        }
+                        var data = payload.data || {};
+                        this.entityContext.timeline = data.timeline || [];
+                        this.entityContext.timeline_counts = data.timeline_counts || {};
+                        this.entityContext.timeline_hidden_count = data.timeline_hidden_count || 0;
+                        this.entityContext.relationship_counts = data.relationship_counts || {};
+                        this.entityContext.relationship_hidden_count = data.relationship_hidden_count || 0;
+                    })
+                    .catch((error) => {
+                        this.entityContext.timeline = [];
+                        this.entityContext.timeline_counts = {};
+                        this.entityContext.relationship_counts = {};
+                        this.entityContext.error = error && error.message ? error.message : 'No se pudo cargar el contexto del Hub de Entidades.';
+                    })
+                    .finally(() => {
+                        this.entityContext.loading = false;
+                    });
             },
             openOpportunity: function(item) {
                 this.opportunityForm = Object.assign({ id: 0, party_id: 0, prospect_id: 0, owner_user_id: 0, source: 'manual', stage: 'new', title: '', description: '', estimated_amount: 0, probability: 0, next_action_at_input: '', lost_reason: '', active: true }, item);

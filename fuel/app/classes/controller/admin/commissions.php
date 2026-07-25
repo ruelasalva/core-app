@@ -86,6 +86,7 @@ class Controller_Admin_Commissions extends Controller_Adminbase
             }
 
             $id = (int) \Arr::get($val, 'id', 0);
+            $plan_id = $this->legacy_plan_id_from_input($val);
             $data = [
                 'code' => $this->unique_code('VEN', 'core_sales_sellers', 'code', trim((string) \Arr::get($val, 'code', '')), $id),
                 'name' => $name,
@@ -93,7 +94,7 @@ class Controller_Admin_Commissions extends Controller_Adminbase
                 'employee_id' => (int) \Arr::get($val, 'employee_id', 0),
                 'party_id' => (int) \Arr::get($val, 'party_id', 0),
                 'user_id' => (int) \Arr::get($val, 'user_id', 0),
-                'default_commission_plan_id' => (int) \Arr::get($val, 'default_commission_plan_id', 0),
+                'default_commission_plan_id' => $plan_id,
                 'base_commission_percent' => max(0, (float) \Arr::get($val, 'base_commission_percent', 0)),
                 'quota_commission_percent' => max(0, (float) \Arr::get($val, 'quota_commission_percent', 0)),
                 'payment_commission_percent' => max(0, (float) \Arr::get($val, 'payment_commission_percent', 0)),
@@ -123,6 +124,8 @@ class Controller_Admin_Commissions extends Controller_Adminbase
             $this->audit('save_seller', 'sales_seller', $seller, $old);
 
             return $this->action_data();
+        } catch (\DomainException $e) {
+            return $this->json_response(['error' => $e->getMessage()], 422);
         } catch (\Exception $e) {
             \Log::error('Error guardando vendedor: '.$e->getMessage());
             return $this->json_response(['error' => 'No se pudo guardar el vendedor.'], 400);
@@ -530,9 +533,12 @@ class Controller_Admin_Commissions extends Controller_Adminbase
 
     protected function options()
     {
+        $plan_bridge = new \Service_Core_Commissions_PlanBridge();
+
         return [
             'sellers' => $this->select_options('core_sales_sellers', 'id', 'name'),
-            'plans' => $this->select_options('core_commission_plans', 'id', 'name'),
+            'plans' => $plan_bridge->legacy_select_options(),
+            'commission_plan_bridge' => $plan_bridge->grouped_options(),
             'employees' => $this->select_options('core_employees', 'id', 'full_name'),
             'users' => $this->select_options('users', 'id', 'username', false),
             'parties' => $this->select_options('core_parties', 'id', 'name'),
@@ -544,6 +550,24 @@ class Controller_Admin_Commissions extends Controller_Adminbase
             'subcategories' => $this->select_options('core_commerce_subcategories', 'id', 'name'),
             'orders' => $this->order_options(),
         ];
+    }
+
+    protected function legacy_plan_id_from_input(array $input)
+    {
+        $token = trim((string) \Arr::get($input, 'default_commission_plan_value', ''));
+        if ($token === '') {
+            return (int) \Arr::get($input, 'default_commission_plan_id', 0);
+        }
+
+        if (strpos($token, 'config:') === 0) {
+            throw new \DomainException('Los planes configurables se muestran para consulta. La asignación persistente se habilitará en la siguiente fase.');
+        }
+
+        if (strpos($token, 'legacy:') === 0) {
+            return (int) substr($token, 7);
+        }
+
+        return (int) $token;
     }
 
     protected function stats()

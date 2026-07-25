@@ -82,6 +82,8 @@ return array (
         76 => '078_create_core_communication_accounts',
         77 => '079_create_core_communication_message_store',
         78 => '080_create_core_communication_account_assignments',
+        79 => '081_create_commission_configuration_platform',
+        80 => '082_extend_commission_entries_for_config_engine',
       ),
     ),
     'module' => array(    

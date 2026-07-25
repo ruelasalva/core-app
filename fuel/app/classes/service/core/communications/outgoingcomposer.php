@@ -13,7 +13,7 @@ class Service_Core_Communications_OutgoingComposer
         $this->email_manager = new Service_Core_Email_Manager();
     }
 
-    public function compose($user_id, array $payload)
+    public function compose($user_id, array $payload, array $files = [])
     {
         $user_id = (int) $user_id;
         $account = $this->validated_sender_account($user_id, (int) \Arr::get($payload, 'account_id', 0));
@@ -21,11 +21,13 @@ class Service_Core_Communications_OutgoingComposer
             return $account;
         }
 
-        if ($this->has_attachments($payload)) {
-            return $this->error('Los adjuntos no estan disponibles en esta fase.', ['attachments_not_supported'], 422);
-        }
         if (!$this->message_store_ready()) {
             return $this->error('Falta preparar Message Store de comunicaciones.', ['message_store_not_ready'], 500);
+        }
+
+        $attachments = $this->prepare_attachments($files);
+        if (empty($attachments['success'])) {
+            return $attachments;
         }
 
         $to = $this->normalize_recipients(\Arr::get($payload, 'to', ''));
@@ -54,6 +56,7 @@ class Service_Core_Communications_OutgoingComposer
             'related_entity_type' => $this->safe_key(\Arr::get($payload, 'related_entity_type', '')),
             'related_entity_id' => (int) \Arr::get($payload, 'related_entity_id', 0),
             'related_party_id' => (int) \Arr::get($payload, 'related_party_id', 0),
+            'attachments' => $attachments['data']['attachments'],
         ]);
 
         if (empty($queue['success'])) {
@@ -73,6 +76,7 @@ class Service_Core_Communications_OutgoingComposer
             'related_entity_id' => (int) \Arr::get($payload, 'related_entity_id', 0),
             'related_party_id' => (int) \Arr::get($payload, 'related_party_id', 0),
             'owner_user_id' => $user_id,
+            'attachments' => $attachments['data']['attachments'],
         ]);
 
         if (empty($message['success'])) {
@@ -93,12 +97,13 @@ class Service_Core_Communications_OutgoingComposer
                 'message_id' => (int) \Arr::get($stored_message, 'id', 0),
                 'queue_ids' => $queue['queue_ids'],
                 'queued' => (int) $queue['queued'],
+                'attachments' => $attachments['data']['public'],
             ],
             'errors' => [],
         ];
     }
 
-    public function reply($user_id, array $payload)
+    public function reply($user_id, array $payload, array $files = [])
     {
         $user_id = (int) $user_id;
         $conversation_id = (int) \Arr::get($payload, 'conversation_id', 0);
@@ -114,11 +119,13 @@ class Service_Core_Communications_OutgoingComposer
             return $account;
         }
 
-        if ($this->has_attachments($payload)) {
-            return $this->error('Los adjuntos no estan disponibles en esta fase.', ['attachments_not_supported'], 422);
-        }
         if (!$this->message_store_ready()) {
             return $this->error('Falta preparar Message Store de comunicaciones.', ['message_store_not_ready'], 500);
+        }
+
+        $attachments = $this->prepare_attachments($files);
+        if (empty($attachments['success'])) {
+            return $attachments;
         }
 
         $conversation = Model_Core_Communication_Conversation::find($conversation_id);
@@ -157,6 +164,7 @@ class Service_Core_Communications_OutgoingComposer
             'related_entity_type' => (string) $conversation->related_entity_type,
             'related_entity_id' => (int) $conversation->related_entity_id,
             'related_party_id' => (int) $conversation->related_party_id,
+            'attachments' => $attachments['data']['attachments'],
         ]);
 
         if (empty($queue['success'])) {
@@ -179,6 +187,7 @@ class Service_Core_Communications_OutgoingComposer
             'related_entity_id' => (int) $conversation->related_entity_id,
             'related_party_id' => (int) $conversation->related_party_id,
             'owner_user_id' => $user_id,
+            'attachments' => $attachments['data']['attachments'],
         ]);
 
         if (empty($message['success'])) {
@@ -199,6 +208,7 @@ class Service_Core_Communications_OutgoingComposer
                 'message_id' => (int) \Arr::get($stored_message, 'id', 0),
                 'queue_ids' => $queue['queue_ids'],
                 'queued' => (int) $queue['queued'],
+                'attachments' => $attachments['data']['public'],
             ],
             'errors' => [],
         ];
@@ -261,6 +271,7 @@ class Service_Core_Communications_OutgoingComposer
                     'related_party_id' => (int) \Arr::get($meta, 'related_party_id', 0),
                     'conversation_id' => (int) \Arr::get($meta, 'conversation_id', 0),
                     'in_reply_to' => (string) \Arr::get($meta, 'in_reply_to', ''),
+                    'attachments' => (int) $index === 0 ? (array) \Arr::get($meta, 'attachments', []) : [],
                 ]),
             ]);
 
@@ -298,12 +309,200 @@ class Service_Core_Communications_OutgoingComposer
             'from_name' => (string) \Arr::get($account, 'name', ''),
             'sent_at' => 0,
             'status' => 'queued',
-            'attachments' => [],
-            'has_attachments' => 0,
-            'attachment_count' => 0,
+            'attachments' => (array) \Arr::get($message, 'attachments', []),
         ]);
 
         return $this->store->store_outgoing($data);
+    }
+
+    protected function prepare_attachments(array $files)
+    {
+        $items = $this->normalize_uploaded_files($files);
+        if (empty($items)) {
+            return [
+                'success' => true,
+                'message' => '',
+                'status' => 200,
+                'data' => ['attachments' => [], 'public' => []],
+                'errors' => [],
+            ];
+        }
+
+        if (count($items) > 10) {
+            return $this->error('Solo se permiten hasta 10 adjuntos por mensaje.', ['attachments_limit_exceeded'], 422);
+        }
+
+        if (!\DBUtil::table_exists('core_communication_message_attachments')) {
+            return $this->error('Falta preparar la tabla de metadatos de adjuntos.', ['attachment_metadata_table_missing'], 500);
+        }
+
+        $attachments = [];
+        $public = [];
+        $errors = [];
+        foreach ($items as $file) {
+            $validated = $this->validate_attachment($file);
+            if (!empty($validated['errors'])) {
+                $errors = array_merge($errors, $validated['errors']);
+                continue;
+            }
+            if (empty($validated['attachment'])) {
+                continue;
+            }
+
+            $attachments[] = $validated['attachment'];
+            $public[] = [
+                'filename' => $validated['attachment']['filename'],
+                'mime_type' => $validated['attachment']['mime_type'],
+                'size_bytes' => $validated['attachment']['size_bytes'],
+                'disposition' => $validated['attachment']['disposition'],
+            ];
+        }
+
+        if (!empty($errors)) {
+            return $this->error('Revisa los adjuntos antes de enviar.', $errors, 422);
+        }
+
+        return [
+            'success' => true,
+            'message' => '',
+            'status' => 200,
+            'data' => ['attachments' => $attachments, 'public' => $public],
+            'errors' => [],
+        ];
+    }
+
+    protected function normalize_uploaded_files(array $files)
+    {
+        if (empty($files)) {
+            return [];
+        }
+
+        if (isset($files['name']) && is_array($files['name'])) {
+            $items = [];
+            foreach ($files['name'] as $index => $name) {
+                $items[] = [
+                    'name' => $name,
+                    'type' => isset($files['type'][$index]) ? $files['type'][$index] : '',
+                    'tmp_name' => isset($files['tmp_name'][$index]) ? $files['tmp_name'][$index] : '',
+                    'error' => isset($files['error'][$index]) ? $files['error'][$index] : UPLOAD_ERR_NO_FILE,
+                    'size' => isset($files['size'][$index]) ? $files['size'][$index] : 0,
+                ];
+            }
+            return $items;
+        }
+
+        if (isset($files['name'])) {
+            return [$files];
+        }
+
+        $items = [];
+        foreach ($files as $file) {
+            if (is_array($file)) {
+                $items = array_merge($items, $this->normalize_uploaded_files($file));
+            }
+        }
+
+        return $items;
+    }
+
+    protected function validate_attachment(array $file)
+    {
+        $original = trim((string) \Arr::get($file, 'name', ''));
+        $error = (int) \Arr::get($file, 'error', UPLOAD_ERR_NO_FILE);
+        if ($error === UPLOAD_ERR_NO_FILE || $original === '') {
+            return ['errors' => []];
+        }
+        if ($error !== UPLOAD_ERR_OK) {
+            return ['errors' => ['No se pudo recibir el archivo '.$this->safe_text($original, 120).'.']];
+        }
+
+        $size = (int) \Arr::get($file, 'size', 0);
+        $max_size = 5 * 1024 * 1024;
+        if ($size <= 0 || $size > $max_size) {
+            return ['errors' => ['El archivo '.$this->safe_text($original, 120).' supera el limite de 5 MB o esta vacio.']];
+        }
+
+        $tmp = (string) \Arr::get($file, 'tmp_name', '');
+        if ($tmp === '' || !is_file($tmp) || !is_readable($tmp)) {
+            return ['errors' => ['El archivo '.$this->safe_text($original, 120).' no pudo validarse.']];
+        }
+
+        $filename = $this->safe_filename($original);
+        if ($filename === '') {
+            return ['errors' => ['Nombre de archivo invalido.']];
+        }
+
+        $extension = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+        $blocked = ['php', 'phtml', 'phar', 'js', 'mjs', 'html', 'htm', 'svg', 'exe', 'bat', 'cmd', 'com', 'msi', 'sh', 'ps1', 'jar'];
+        $allowed = ['pdf', 'jpg', 'jpeg', 'png', 'webp', 'txt', 'csv', 'doc', 'docx', 'xls', 'xlsx'];
+        if (in_array($extension, $blocked, true) || !in_array($extension, $allowed, true)) {
+            return ['errors' => ['Tipo de archivo no permitido: '.$filename.'.']];
+        }
+
+        $mime = $this->detect_mime($tmp, (string) \Arr::get($file, 'type', ''));
+        $blocked_mimes = ['text/html', 'application/javascript', 'text/javascript', 'application/x-php', 'image/svg+xml', 'application/x-msdownload'];
+        if (in_array(strtolower($mime), $blocked_mimes, true)) {
+            return ['errors' => ['Contenido de archivo no permitido: '.$filename.'.']];
+        }
+
+        $allowed_mimes = [
+            'pdf' => ['application/pdf'],
+            'jpg' => ['image/jpeg'],
+            'jpeg' => ['image/jpeg'],
+            'png' => ['image/png'],
+            'webp' => ['image/webp'],
+            'txt' => ['text/plain'],
+            'csv' => ['text/plain', 'text/csv', 'application/csv', 'application/vnd.ms-excel'],
+            'doc' => ['application/msword', 'application/octet-stream'],
+            'docx' => ['application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/zip', 'application/octet-stream'],
+            'xls' => ['application/vnd.ms-excel', 'application/octet-stream'],
+            'xlsx' => ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/zip', 'application/octet-stream'],
+        ];
+        if (!in_array(strtolower($mime), (array) \Arr::get($allowed_mimes, $extension, []), true)) {
+            return ['errors' => ['El tipo MIME no coincide con la extension de '.$filename.'.']];
+        }
+
+        $hash = hash_file('sha256', $tmp);
+        $storage_ref = 'out_att_'.substr($hash, 0, 24).'_'.substr(sha1($filename.microtime(true)), 0, 10).'.'.$extension;
+
+        return [
+            'errors' => [],
+            'attachment' => [
+                'filename' => $filename,
+                'mime_type' => $mime,
+                'size_bytes' => $size,
+                'storage_ref' => $storage_ref,
+                'content_hash' => $hash,
+                'disposition' => 'attachment',
+            ],
+        ];
+    }
+
+    protected function detect_mime($tmp, $fallback)
+    {
+        $mime = '';
+        if (class_exists('finfo')) {
+            $finfo = new \finfo(FILEINFO_MIME_TYPE);
+            $mime = (string) $finfo->file($tmp);
+        }
+
+        if ($mime === '') {
+            $mime = trim((string) $fallback);
+        }
+
+        return strtolower($mime);
+    }
+
+    protected function safe_filename($filename)
+    {
+        $filename = basename((string) $filename);
+        $filename = preg_replace('/[^\w\.\-]+/u', '_', $filename);
+        $filename = trim($filename, '._- ');
+        if ($filename === '' || strpos($filename, '..') !== false || preg_match('/[\\\\\/:]/', $filename)) {
+            return '';
+        }
+
+        return substr($filename, 0, 160);
     }
 
     protected function last_incoming_message($conversation_id, $account_id)
@@ -463,11 +662,6 @@ class Service_Core_Communications_OutgoingComposer
     protected function local_message_id()
     {
         return '<core-app-'.sha1(uniqid('', true).mt_rand()).'@local>';
-    }
-
-    protected function has_attachments(array $payload)
-    {
-        return !empty($payload['attachments']) || !empty($payload['files']) || !empty($_FILES);
     }
 
     protected function message_store_ready()

@@ -10,6 +10,11 @@ class Model_Core_Commission_Entry extends \Orm\Model
         'source_module', 'source_entity_type', 'source_entity_id', 'source_item_id',
         'party_id', 'product_id', 'currency_code', 'base_amount', 'commission_percent',
         'commission_amount', 'status', 'earned_at', 'settlement_id', 'notes',
+        'config_plan_id', 'config_version_id', 'config_rule_id', 'config_rule_stage_id',
+        'config_beneficiary_id', 'beneficiary_type', 'beneficiary_id', 'release_event',
+        'calculation_base', 'calculation_rate', 'calculated_amount', 'released_amount',
+        'released_percent', 'source_hash', 'calculation_snapshot_json', 'generated_by_engine',
+        'generated_at', 'approved_by', 'approved_at', 'paid_at', 'reversed_entry_id',
         'created_by', 'active', 'created_at', 'updated_at',
     ];
 

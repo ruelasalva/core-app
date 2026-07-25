@@ -1639,7 +1639,7 @@
                     </div>
                     <div class="modal-body">
                         <div class="alert alert-info py-2">
-                            El correo se encola para envio con la cuenta asignada. Los adjuntos no estan disponibles en esta fase.
+                            El correo se encola para envio con la cuenta asignada. Los adjuntos se registran como metadatos seguros; la entrega binaria queda preparada para una fase posterior.
                         </div>
                         <div class="form-group">
                             <label>Cuenta de envio</label>
@@ -1672,6 +1672,20 @@
                             <label>Mensaje</label>
                             <textarea class="form-control" rows="7" v-model="composeForm.body_text" required></textarea>
                         </div>
+                        <div class="form-group">
+                            <label>Adjuntos</label>
+                            <input type="file" class="form-control-file" multiple @change="handleComposeAttachments">
+                            <small class="form-text text-muted">
+                                Permitidos: PDF, imagenes, TXT, CSV, Word y Excel. Maximo 5 MB por archivo. No se permiten PHP, JS, HTML ni ejecutables.
+                            </small>
+                            <div v-if="composeFiles.length" class="attachment-selection mt-2">
+                                <div v-for="(file, idx) in composeFiles" :key="'compose-file-'+idx" class="attachment-selection-item">
+                                    <i class="bi bi-paperclip mr-1"></i>
+                                    <span>{{ file.name }}</span>
+                                    <small class="text-muted ml-2">{{ formatBytes(file.size) }}</small>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-outline-secondary" @click="closeComposeModal">Cancelar</button>
@@ -1698,7 +1712,7 @@
                     </div>
                     <div class="modal-body">
                         <div class="alert alert-info py-2">
-                            La respuesta se enviara al remitente del ultimo mensaje entrante visible. No se adjuntan archivos.
+                            La respuesta se enviara al remitente del ultimo mensaje entrante visible. Los adjuntos se registran como metadatos seguros.
                         </div>
                         <div class="form-group">
                             <label>Cuenta de envio</label>
@@ -1722,6 +1736,20 @@
                         <div class="form-group">
                             <label>Mensaje</label>
                             <textarea class="form-control" rows="7" v-model="replyForm.body_text" required></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>Adjuntos</label>
+                            <input type="file" class="form-control-file" multiple @change="handleReplyAttachments">
+                            <small class="form-text text-muted">
+                                Permitidos: PDF, imagenes, TXT, CSV, Word y Excel. Maximo 5 MB por archivo. No se permiten PHP, JS, HTML ni ejecutables.
+                            </small>
+                            <div v-if="replyFiles.length" class="attachment-selection mt-2">
+                                <div v-for="(file, idx) in replyFiles" :key="'reply-file-'+idx" class="attachment-selection-item">
+                                    <i class="bi bi-paperclip mr-1"></i>
+                                    <span>{{ file.name }}</span>
+                                    <small class="text-muted ml-2">{{ formatBytes(file.size) }}</small>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     <div class="modal-footer">
@@ -1885,6 +1913,25 @@
     border-top: 1px solid #eef0f2;
     padding-top: 8px;
 }
+.attachment-selection {
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 8px 10px;
+    background: #f8f9fa;
+}
+.attachment-selection-item {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    padding: 2px 0;
+    font-size: 13px;
+}
+.attachment-selection-item span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
 .conversation-attachment {
     display: flex;
     align-items: center;
@@ -1990,6 +2037,8 @@ document.addEventListener('DOMContentLoaded', function() {
             myMailboxDetail: {},
             myMailboxMessages: [],
             sendingMessage: false,
+            composeFiles: [],
+            replyFiles: [],
             composeModal: { open: false },
             replyModal: { open: false },
             composeForm: {
@@ -2425,11 +2474,13 @@ document.addEventListener('DOMContentLoaded', function() {
                     related_entity_id: 0,
                     related_party_id: 0
                 };
+                this.composeFiles = [];
                 this.composeModal.open = true;
             },
             closeComposeModal() {
                 if (!this.sendingMessage) {
                     this.composeModal.open = false;
+                    this.composeFiles = [];
                 }
             },
             openReplyModal(conversation) {
@@ -2449,16 +2500,35 @@ document.addEventListener('DOMContentLoaded', function() {
                     body_text: '',
                     body_html: ''
                 };
+                this.replyFiles = [];
                 this.replyModal.open = true;
             },
             closeReplyModal() {
                 if (!this.sendingMessage) {
                     this.replyModal.open = false;
+                    this.replyFiles = [];
                 }
+            },
+            handleComposeAttachments(event) {
+                this.composeFiles = Array.prototype.slice.call((event.target && event.target.files) || []);
+            },
+            handleReplyAttachments(event) {
+                this.replyFiles = Array.prototype.slice.call((event.target && event.target.files) || []);
+            },
+            messageFormData(form, files) {
+                const data = new FormData();
+                Object.keys(form).forEach(key => {
+                    const value = form[key];
+                    data.append(key, value === null || typeof value === 'undefined' ? '' : value);
+                });
+                (files || []).forEach(file => {
+                    data.append('attachments[]', file, file.name);
+                });
+                return data;
             },
             sendComposeMessage() {
                 this.sendingMessage = true;
-                this.apiPost('<?php echo Uri::create('admin/communications/compose_message'); ?>', this.composeForm)
+                this.apiPost('<?php echo Uri::create('admin/communications/compose_message'); ?>', this.messageFormData(this.composeForm, this.composeFiles))
                     .then(result => {
                         const data = result.data || {};
                         if (!data.success) {
@@ -2466,6 +2536,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             return;
                         }
                         this.composeModal.open = false;
+                        this.composeFiles = [];
                         this.showStatus(true, data.message || 'Correo encolado correctamente.', []);
                         this.loadConversations();
                         this.loadMyMailbox();
@@ -2479,7 +2550,7 @@ document.addEventListener('DOMContentLoaded', function() {
             },
             sendReplyMessage() {
                 this.sendingMessage = true;
-                this.apiPost('<?php echo Uri::create('admin/communications/reply_conversation'); ?>', this.replyForm)
+                this.apiPost('<?php echo Uri::create('admin/communications/reply_conversation'); ?>', this.messageFormData(this.replyForm, this.replyFiles))
                     .then(result => {
                         const data = result.data || {};
                         if (!data.success) {
@@ -2487,6 +2558,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             return;
                         }
                         this.replyModal.open = false;
+                        this.replyFiles = [];
                         this.showStatus(true, data.message || 'Respuesta encolada correctamente.', []);
                         this.loadConversations();
                         this.loadMyMailbox();
