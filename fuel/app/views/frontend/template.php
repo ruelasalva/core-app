@@ -3,6 +3,9 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,400&family=Plus+Jakarta+Sans:wght@700;800;900&display=swap" rel="stylesheet">
     <?php
     $theme = !empty($theme) ? $theme : null;
     $theme_asset = function ($path) {
@@ -826,6 +829,28 @@
                     });
             });
         });
+    })();
+    </script>
+    <script>
+    /* Scroll reveal — entrance animations via IntersectionObserver */
+    (function() {
+        if (!window.IntersectionObserver) return;
+        document.body.classList.add('sr-ready');
+        var targets = document.querySelectorAll(
+            '.section-band, .home-commerce, .trust-badges-band, ' +
+            '.home-conversion-cta, .home-product-search, ' +
+            '.home-commerce-block, .catalog-hero'
+        );
+        targets.forEach(function(el) { el.classList.add('scroll-reveal'); });
+        var io = new IntersectionObserver(function(entries) {
+            entries.forEach(function(entry) {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('is-visible');
+                    io.unobserve(entry.target);
+                }
+            });
+        }, { threshold: 0.07, rootMargin: '0px 0px -44px 0px' });
+        targets.forEach(function(el) { io.observe(el); });
     })();
     </script>
 </body>

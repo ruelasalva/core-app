@@ -301,15 +301,24 @@ $product_contact_url = function ($product) {
         background: #fff1f2;
         color: #991b1b;
     }
-    .feature-item,
-    .download-item,
+    .feature-item {
+        border: 1px solid rgba(148,163,184,.22);
+        border-radius: 20px;
+        background: #fff;
+        padding: 30px 26px 26px;
+        overflow: visible;
+    }
+    .download-item {
+        border: 1px solid rgba(148,163,184,.22);
+        border-radius: 20px;
+        background: #fff;
+        overflow: visible;
+    }
     .brand-item {
         border: 1px solid #dde3ea;
         border-radius: 8px;
         background: #fff;
         padding: 18px;
-    }
-    .brand-item {
         min-height: 120px;
         display: flex;
         align-items: center;
@@ -323,7 +332,6 @@ $product_contact_url = function ($product) {
     .download-item strong,
     .feature-item strong {
         display: block;
-        margin-bottom: 8px;
         color: #172033;
     }
     @media (max-width: 820px) {
@@ -571,8 +579,22 @@ $product_contact_url = function ($product) {
                 <?php endif; ?>
             </div>
             <div class="feature-grid">
-                <?php foreach (array_filter(array_map('trim', explode('|', (string) $section->content))) as $feature): ?>
-                <div class="feature-item"><strong><?php echo e($feature); ?></strong></div>
+                <?php
+                $feat_icons = [
+                    'bi bi-patch-check-fill', 'bi bi-award-fill',  'bi bi-shield-fill',
+                    'bi bi-heart-fill',        'bi bi-gem',          'bi bi-stars',
+                    'bi bi-people-fill',       'bi bi-lightbulb-fill','bi bi-trophy-fill',
+                    'bi bi-graph-up-arrow',    'bi bi-infinity',     'bi bi-bullseye',
+                ];
+                $feat_i = 0;
+                foreach (array_filter(array_map('trim', explode('|', (string) $section->content))) as $feature):
+                    $feat_i++;
+                    $feat_icon = $feat_icons[($feat_i - 1) % count($feat_icons)];
+                ?>
+                <div class="feature-item" style="--i:<?php echo $feat_i; ?>">
+                    <div class="feature-icon"><i class="<?php echo e($feat_icon); ?>"></i></div>
+                    <strong><?php echo e($feature); ?></strong>
+                </div>
                 <?php endforeach; ?>
             </div>
         </div>
@@ -606,7 +628,7 @@ $product_contact_url = function ($product) {
                 <?php endif; ?>
             </div>
             <div class="download-grid">
-                <?php foreach ($downloads as $download): ?>
+                <?php $dl_i = 0; foreach ($downloads as $download): $dl_i++; ?>
                 <?php
                     $download_url = \Arr::get($download, 'url', '#');
                     $download_label = \Arr::get($download, 'label', 'Ver documento');
@@ -614,7 +636,7 @@ $product_contact_url = function ($product) {
                     $download_href = (strpos($download_url, '#') === 0) ? $download_url : $media_url($download_url);
                     $download_target = (strpos($download_url, '#') === 0 || strpos($download_url, '/') === 0) ? '' : ' target="_blank"';
                 ?>
-                <a class="download-item" href="<?php echo e($download_href); ?>"<?php echo $download_target; ?>>
+                <a class="download-item" href="<?php echo e($download_href); ?>"<?php echo $download_target; ?> style="--i:<?php echo $dl_i; ?>">
                     <strong><?php echo e(\Arr::get($download, 'title', 'Descarga')); ?></strong>
                     <span><?php echo e($download_description ?: $download_label); ?></span>
                 </a>
