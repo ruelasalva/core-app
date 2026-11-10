@@ -159,6 +159,139 @@ class Controller_Portalbase extends Controller_Template
     }
 
     /**
+     * VIATICOS
+     *
+     * MUESTRA PANEL DE VIATICOS PARA PORTALES QUE OPERAN COMO VENDEDORES.
+     *
+     * @access  public
+     * @return  Void
+     */
+    public function action_viaticos()
+    {
+        if ($this->portal_code !== 'revendedores') {
+            throw new \HttpNotFoundException;
+        }
+
+        $this->template->title = 'Viaticos';
+        $this->template->content = $this->portal_view('viaticos', 'portales/viaticos/index', [
+            'portal_code' => $this->portal_code,
+            'party' => $this->party,
+        ]);
+    }
+
+    /**
+     * VIATICOS DATA
+     *
+     * ENTREGA LISTADOS Y OPCIONES DE VIATICOS PARA EL REVENDEDOR ACTUAL.
+     *
+     * @access  public
+     * @return  Response
+     */
+    public function action_viaticos_data()
+    {
+        try {
+            if ($this->portal_code !== 'revendedores') {
+                return $this->json_response(['error' => 'Portal no habilitado para viaticos.'], 404);
+            }
+
+            $manager = new Service_Core_Viatics_Manager();
+            if (!$manager->schema_ready()) {
+                return $this->json_response(['error' => 'Viaticos requiere migraciones pendientes.'], 500);
+            }
+
+            return $this->json_response($manager->data_for_portal_reseller((int) $this->portal_link->party_id, (int) $this->user_id));
+        } catch (\Exception $e) {
+            \Log::error('Error cargando viaticos portal '.$this->portal_code.': '.$e->getMessage());
+            return $this->json_response(['error' => 'No se pudieron cargar viaticos.'], 500);
+        }
+    }
+
+    public function post_viaticos_save_trip()
+    {
+        return $this->save_portal_viatic_item('trip');
+    }
+
+    public function post_viaticos_save_advance()
+    {
+        return $this->save_portal_viatic_item('advance');
+    }
+
+    public function post_viaticos_save_expense()
+    {
+        return $this->save_portal_viatic_item('expense');
+    }
+
+    protected function save_portal_viatic_item($type)
+    {
+        try {
+            if ($this->portal_code !== 'revendedores') {
+                return $this->json_response(['error' => 'Portal no habilitado para viaticos.'], 404);
+            }
+
+            $manager = new Service_Core_Viatics_Manager();
+            if (!$manager->schema_ready()) {
+                return $this->json_response(['error' => 'Viaticos requiere migraciones pendientes.'], 500);
+            }
+
+            $val = (array) \Input::json();
+            if ($type === 'trip') {
+                $seller = \DB::select('id')
+                    ->from('core_sales_sellers')
+                    ->where('seller_type', '=', 'reseller')
+                    ->where('party_id', '=', (int) $this->portal_link->party_id)
+                    ->where('active', '=', 1)
+                    ->execute()
+                    ->current();
+                if (!$seller) {
+                    return $this->json_response(['error' => 'No tienes un vendedor revendedor activo configurado.'], 422);
+                }
+                $val['seller_id'] = (int) $seller['id'];
+                $val['user_id'] = (int) $this->user_id;
+                $manager->save_trip($val, (int) $this->user_id);
+            } elseif ($type === 'advance') {
+                $trip_id = (int) \Arr::get($val, 'trip_id', 0);
+                if (!$this->portal_can_access_viatic_trip($trip_id)) {
+                    return $this->json_response(['error' => 'No tienes permiso sobre ese viaje.'], 403);
+                }
+                $manager->save_advance($val, (int) $this->user_id);
+            } elseif ($type === 'expense') {
+                $trip_id = (int) \Arr::get($val, 'trip_id', 0);
+                if (!$this->portal_can_access_viatic_trip($trip_id)) {
+                    return $this->json_response(['error' => 'No tienes permiso sobre ese viaje.'], 403);
+                }
+                $manager->save_expense($val, (int) $this->user_id);
+            }
+
+            return $this->json_response($manager->data_for_portal_reseller((int) $this->portal_link->party_id, (int) $this->user_id));
+        } catch (\InvalidArgumentException $e) {
+            return $this->json_response(['error' => $e->getMessage()], 422);
+        } catch (\Exception $e) {
+            \Log::error('Error guardando viaticos portal '.$this->portal_code.' tipo='.$type.': '.$e->getMessage());
+            return $this->json_response(['error' => 'No se pudo guardar la informacion de viaticos.'], 500);
+        }
+    }
+
+    protected function portal_can_access_viatic_trip($trip_id)
+    {
+        if ((int) $trip_id < 1) {
+            return false;
+        }
+
+        $row = \DB::select('t.id')
+            ->from(['core_viatic_trips', 't'])
+            ->join(['core_sales_sellers', 's'], 'inner')->on('t.seller_id', '=', 's.id')
+            ->where('t.id', '=', (int) $trip_id)
+            ->where('t.active', '=', 1)
+            ->where('s.active', '=', 1)
+            ->where('s.seller_type', '=', 'reseller')
+            ->where('s.party_id', '=', (int) $this->portal_link->party_id)
+            ->execute()
+            ->current();
+
+        return (bool) $row;
+    }
+
+    /**
      * CFDI
      *
      * VISTA GENERICA DE CFDI PARA PORTALES SIN IMPLEMENTACION ESPECIFICA.

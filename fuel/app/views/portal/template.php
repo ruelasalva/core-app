@@ -144,6 +144,9 @@
                 <li class="nav-item">
                     <a class="nav-link <?php echo Uri::segment(2) == 'clientes' ? 'active' : ''; ?>" href="<?php echo Uri::create($portal_code.'/perfil#clientes'); ?>">Clientes</a>
                 </li>
+                <li class="nav-item">
+                    <a class="nav-link <?php echo Uri::segment(2) == 'viaticos' ? 'active' : ''; ?>" href="<?php echo Uri::create($portal_code.'/viaticos'); ?>">Viáticos</a>
+                </li>
                 <?php endif; ?>
                 <?php if ($portal_code === 'proveedores'): ?>
                 <li class="nav-item">

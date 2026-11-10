@@ -84,6 +84,8 @@ return array (
         78 => '080_create_core_communication_account_assignments',
         79 => '081_create_commission_configuration_platform',
         80 => '082_extend_commission_entries_for_config_engine',
+        81 => '083_create_core_software_library_tables',
+        82 => '084_create_core_viatic_tables',
       ),
     ),
     'module' => array(    

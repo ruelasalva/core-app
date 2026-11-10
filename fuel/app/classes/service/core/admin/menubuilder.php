@@ -74,13 +74,14 @@ class Service_Core_Admin_MenuBuilder
             $this->header('RECURSOS HUMANOS', $menu['hr']),
             $this->item('Empleados y n&oacute;mina', 'bi bi-person-badge', \Uri::create('admin/hr'), $segment === 'hr', $menu['hr']),
 
-            $this->header('FINANZAS', $menu['billing'] || $menu['billing_rep'] || $menu['receivables'] || $menu['payables'] || $menu['payments'] || $menu['treasury'] || $menu['budgets']),
+            $this->header('FINANZAS', $menu['billing'] || $menu['billing_rep'] || $menu['receivables'] || $menu['payables'] || $menu['payments'] || $menu['treasury'] || $menu['viatics'] || $menu['budgets']),
             $this->item('Facturaci&oacute;n CFDI', 'bi bi-receipt-cutoff', \Uri::create('admin/billing'), $segment === 'billing', $menu['billing']),
             $this->item('Complementos de pago REP', 'bi bi-cash-stack', \Uri::create('admin/billing'), $segment === 'billing' && \Input::get('view') === 'rep', $menu['billing_rep']),
             $this->item('Cuentas por cobrar', 'bi bi-wallet2', \Uri::create('admin/receivables'), $segment === 'receivables', $menu['receivables']),
             $this->item('Cuentas por pagar', 'bi bi-receipt-cutoff', \Uri::create('admin/payables'), $segment === 'payables', $menu['payables']),
             $this->item('Bancos y pagos', 'bi bi-bank', \Uri::create('admin/payments'), $segment === 'payments', $menu['payments']),
             $this->item('Tesorer&iacute;a', 'bi bi-graph-up-arrow', \Uri::create('admin/treasury'), $segment === 'treasury', $menu['treasury']),
+            $this->item('Vi&aacute;ticos', 'bi bi-airplane', \Uri::create('admin/viatics'), $segment === 'viatics', $menu['viatics']),
             $this->item('Presupuestos', 'bi bi-clipboard-data', \Uri::create('admin/budgets'), $segment === 'budgets', $menu['budgets']),
 
             $this->header('FISCAL', $menu['fiscal'] || $menu['fiscal_ledger'] || $menu['fiscal_diot'] || $menu['fiscal_iva'] || $menu['fiscal_closing'] || $menu['sat'] || $menu['sat_download'] || $menu['sat_catalog_sync'] || $menu['sat_credentials'] || $menu['cfdi'] || $menu['cfdi_audit']),
@@ -142,7 +143,7 @@ class Service_Core_Admin_MenuBuilder
         $keys = [
             'business', 'customer360', 'supplier360', 'commerce', 'supplierimport', 'sales', 'commissions', 'commission_config', 'inventory', 'purchases', 'contracts',
             'billing', 'billing_stamp', 'billing_cancel', 'billing_rep',
-            'receivables', 'payables', 'payments', 'treasury', 'budgets',
+            'receivables', 'payables', 'payments', 'treasury', 'viatics', 'budgets',
             'accounting', 'accounting_chart', 'accounting_post', 'accounting_periods', 'hr',
             'parties', 'customers', 'crm', 'portals', 'documents', 'helpdesk', 'calendar',
             'fiscal', 'fiscal_ledger', 'fiscal_diot', 'fiscal_iva', 'fiscal_closing',

@@ -130,6 +130,11 @@ class Service_Core_Communications_MessageStore
 
         $manager->update_counters((int) $conversation->id);
 
+        // Crear notificacion si es un mensaje entrante nuevo
+        if ($record->direction === 'incoming' && $record->status === 'new') {
+            $this->notify_incoming_message($record, $account_id, $conversation);
+        }
+
         return [
             'success' => true,
             'message' => 'Mensaje almacenado correctamente.',
@@ -348,5 +353,89 @@ class Service_Core_Communications_MessageStore
     protected function model_to_array($model)
     {
         return $model ? $model->to_array() : [];
+    }
+
+    protected function notify_incoming_message($message_record, $account_id, $conversation_record)
+    {
+        try {
+            $account = Model_Core_Communication_Account::find((int) $account_id);
+            if (!$account || (int) $account->active !== 1) {
+                return;
+            }
+
+            // Obtener lista de usuarios con acceso a esta cuenta
+            $user_ids = $this->get_account_users((int) $account->id);
+            if (empty($user_ids)) {
+                return;
+            }
+
+            $from_name = trim((string) $message_record->from_name) ?: (string) $message_record->from_email;
+            $subject = trim((string) $message_record->subject) ?: '(Sin asunto)';
+            $snippet = trim((string) $message_record->snippet) ?: 'Sin vista previa.';
+
+            // Crear notificacion interna
+            Helper_Core_Notification::create([
+                'event_code' => 'communications.message.received',
+                'title' => 'Nuevo correo de ' . $from_name,
+                'message' => $subject . ': ' . $snippet,
+                'url' => 'admin/communications/my_mailbox?conversation=' . $conversation_record->id,
+                'icon' => 'bi bi-envelope',
+                'priority' => 2,
+                'payload' => [
+                    'conversation_id' => (int) $conversation_record->id,
+                    'message_id' => (int) $message_record->id,
+                    'from_email' => (string) $message_record->from_email,
+                    'subject' => $subject,
+                ],
+            ], $user_ids);
+        } catch (\Exception $e) {
+            \Log::error('Error notificando mensaje recibido: ' . $e->getMessage());
+        }
+    }
+
+    protected function get_account_users($account_id)
+    {
+        $user_ids = [];
+
+        // Obtener usuarios y grupos asignados a esta cuenta
+        $assignments = \DB::select('assignment_type', 'assignment_value')
+            ->from('core_communication_account_assignments')
+            ->where('account_id', '=', (int) $account_id)
+            ->where('active', '=', 1)
+            ->execute()
+            ->as_array();
+
+        foreach ($assignments as $assignment) {
+            $type = (string) $assignment['assignment_type'];
+            $value = (int) $assignment['assignment_value'];
+
+            if ($type === 'user') {
+                $user_ids[] = $value;
+            } elseif ($type === 'group') {
+                // Obtener usuarios del grupo
+                $group_users = \DB::select('user_id')
+                    ->from('users_groupusers')
+                    ->where('group_id', '=', $value)
+                    ->execute()
+                    ->as_array();
+
+                foreach ($group_users as $gu) {
+                    $user_ids[] = (int) $gu['user_id'];
+                }
+            } elseif ($type === 'role') {
+                // Obtener usuarios con este rol
+                $role_users = \DB::select('user_id')
+                    ->from('users_roles')
+                    ->where('role', '=', $value)
+                    ->execute()
+                    ->as_array();
+
+                foreach ($role_users as $ru) {
+                    $user_ids[] = (int) $ru['user_id'];
+                }
+            }
+        }
+
+        return array_values(array_unique(array_filter(array_map('intval', $user_ids))));
     }
 }

@@ -1,7 +1,7 @@
 <?php
 namespace Fuel\Tasks;
 
-class Install
+class Coreappinstall
 {
     public function run()
     {
@@ -9,10 +9,8 @@ class Install
         \Package::load('auth');
 
         try {
-            // 1. LIMPIEZA RADICAL
-            // Desactivamos llaves foráneas para poder limpiar sin errores de relación
             \DB::query('SET FOREIGN_KEY_CHECKS = 0')->execute();
-            
+
             $tables = [
                 'users_groups',
                 'users',
@@ -27,12 +25,10 @@ class Install
                 \DB::query("TRUNCATE TABLE `$table`")->execute();
                 \DB::query("ALTER TABLE `$table` AUTO_INCREMENT = 1")->execute();
             }
-            
+
             \DB::query('SET FOREIGN_KEY_CHECKS = 1')->execute();
             echo "--- Tablas limpias y secuencias reseteadas --- \n";
 
-            // 2. CREAR GRUPOS CON 'REPLACE'
-            // Usamos REPLACE en lugar de INSERT para evitar el error de Duplicate Entry '1'
             $groups = [
                 5   => 'Consulta',
                 15  => 'Portal Externo',
@@ -47,14 +43,12 @@ class Install
             ];
 
             foreach ($groups as $id => $name) {
-                // Query cruda para asegurar que MySQL respete el ID manual
                 $sql = "REPLACE INTO `users_groups` (`id`, `name`, `user_id`, `created_at`) 
                         VALUES ($id, '$name', 0, " . time() . ")";
                 \DB::query($sql)->execute();
                 echo "Grupo forzado: [$id] $name \n";
             }
 
-            // 3. PERMISOS (ORM)
             $actions = $this->auth_permission_actions(['view', 'create', 'edit', 'delete', 'import', 'export']);
             $core_permissions = [
                 'admin_dashboard' => 'Panel de control principal',
@@ -81,7 +75,6 @@ class Install
                 $p->save();
             }
 
-            // 4. USUARIO ADMINISTRADOR
             $admin_password = getenv('COREAPP_ADMIN_PASSWORD');
             if (!$admin_password) {
                 $admin_password = bin2hex(random_bytes(8));
@@ -96,12 +89,11 @@ class Install
                 'admin',
                 $admin_password,
                 'admin@coreapp.local',
-                100, 
+                100,
                 ['full_name' => 'System Root', 'dept_id' => 1]
             );
 
             echo "\n [SUCCESS] Instalación limpia. IDs verificados. \n";
-
         } catch (\Exception $e) {
             echo "\n [ERROR] " . $e->getMessage() . "\n";
             \Log::error("Fallo en instalación: " . $e->getMessage());
@@ -121,3 +113,4 @@ class Install
         return $map;
     }
 }
+

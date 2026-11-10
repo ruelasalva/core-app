@@ -39,6 +39,22 @@
         </div>
     </div>
     <?php endif; ?>
+    <?php if ($current_portal_code === 'revendedores'): ?>
+    <div class="col-md-4">
+        <div class="card card-warning card-outline h-100">
+            <div class="card-body">
+                <div class="d-flex align-items-center mb-2">
+                    <i class="bi bi-airplane h4 mb-0 mr-2 text-warning"></i>
+                    <h2 class="h6 mb-0">Viáticos</h2>
+                </div>
+                <p class="text-muted small">Registra viajes, anticipos y gastos con un flujo guiado.</p>
+                <a href="<?php echo Uri::create($current_portal_code.'/viaticos'); ?>" class="btn btn-warning btn-sm">
+                    <i class="bi bi-arrow-right"></i> Entrar
+                </a>
+            </div>
+        </div>
+    </div>
+    <?php endif; ?>
     <div class="col-md-4">
         <div class="card card-info card-outline h-100">
             <div class="card-body">

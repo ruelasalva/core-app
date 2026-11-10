@@ -1,5 +1,5 @@
 <?php
-
+namespace Fuel\Migrations;
 class Create_core_software_library_tables
 {
     public function up()

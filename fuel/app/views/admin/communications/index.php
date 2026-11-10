@@ -2133,11 +2133,19 @@ document.addEventListener('DOMContentLoaded', function() {
                 to_email: '',
                 subject: 'Prueba del Centro de Comunicaciones',
                 message: 'Mensaje de prueba.'
-            }
+            },
+            conversationToLoad: 0
         },
         mounted() {
             this.accountForm = this.defaultAccountForm();
             this.loadData();
+            // Manejar parametro conversation desde URL
+            const params = new URLSearchParams(window.location.search);
+            const conversationId = params.get('conversation');
+            if (conversationId) {
+                // Marcar para cargar la conversacion cuando se completen los datos
+                this.conversationToLoad = parseInt(conversationId, 10);
+            }
         },
         computed: {
             sendableAccounts() {
@@ -2170,6 +2178,10 @@ document.addEventListener('DOMContentLoaded', function() {
                         this.applyPayload(data);
                         this.loadConversations();
                         this.loadMyMailbox();
+                        // Si hay una conversacion pendiente para cargar desde URL, hacerlo ahora
+                        if (this.conversationToLoad > 0) {
+                            setTimeout(() => this.loadConversationFromUrl(), 500);
+                        }
                     })
                     .catch(error => {
                         this.showStatus(false, 'No se pudo cargar comunicaciones.', [String(error)]);
@@ -2401,6 +2413,63 @@ document.addEventListener('DOMContentLoaded', function() {
                     })
                     .catch(error => {
                         this.showStatus(false, 'No se pudo cargar la conversacion.', [String(error)]);
+                    })
+                    .finally(() => {
+                        this.myMailboxDetailLoading = false;
+                    });
+            },
+            loadConversationFromUrl() {
+                // Metodo para cargar una conversacion desde URL cuando se navega desde notificaciones
+                if (this.conversationToLoad <= 0) {
+                    return;
+                }
+
+                const conversationId = this.conversationToLoad;
+                this.conversationToLoad = 0;
+
+                // Primero intentar buscar en myMailboxConversations
+                const conversation = this.myMailboxConversations.find(c => parseInt(c.id, 10) === conversationId);
+                if (conversation) {
+                    this.selectMyMailboxConversation(conversation);
+                    // Scroll hasta la seccion correcta
+                    const tabLink = document.querySelector('[href="#tab-my-mailbox"]');
+                    if (tabLink) {
+                        setTimeout(() => tabLink.click(), 100);
+                    }
+                    return;
+                }
+
+                // Si no, buscar en conversations
+                const mainConversation = this.conversations.find(c => parseInt(c.id, 10) === conversationId);
+                if (mainConversation) {
+                    this.selectConversation(mainConversation);
+                    const tabLink = document.querySelector('[href="#tab-conversations"]');
+                    if (tabLink) {
+                        setTimeout(() => tabLink.click(), 100);
+                    }
+                    return;
+                }
+
+                // Si tampoco esta disponible localmente, cargar por ID directo
+                this.myMailboxDetailLoading = true;
+                this.apiGet('<?php echo Uri::create('admin/communications/my_mailbox_detail'); ?>/' + conversationId)
+                    .then(result => {
+                        const data = result.data || {};
+                        if (!data.success) {
+                            this.showStatus(false, 'No se pudo cargar la conversacion.', data.errors || []);
+                            return;
+                        }
+                        // Seleccionar la tab de bandeja
+                        const tabLink = document.querySelector('[href="#tab-my-mailbox"]');
+                        if (tabLink) {
+                            tabLink.click();
+                        }
+                        this.myMailboxDetail = data.data || {};
+                        this.selectedMyMailboxConversation = this.myMailboxDetail.conversation || {};
+                        this.myMailboxMessages = this.myMailboxDetail.messages || [];
+                    })
+                    .catch(error => {
+                        this.showStatus(false, 'No se pudo cargar la conversacion desde notificacion.', [String(error)]);
                     })
                     .finally(() => {
                         this.myMailboxDetailLoading = false;
